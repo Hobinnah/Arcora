@@ -1,0 +1,23 @@
+
+                        bin/
+                        obj/
+                        *.user
+                        *.suo
+                        *.cache
+                        *.pdb
+                        *.mdb
+                        *.log
+                        *.vs/
+                        packages/
+                        .vscode/
+                        *.dll
+                        *.exe
+                        *.db
+                        *.DS_Store
+                        *.swp
+                        *.tmp
+                        *.bak
+                        *.ncrunch*
+                        _ReSharper*/
+                        TestResult.xml
+                    

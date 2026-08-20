@@ -1,0 +1,10 @@
+// ===================================THIS FILE WAS AUTO GENERATED===================================
+using Arcora.Api.Entities;
+
+namespace Arcora.Api.Repositories.Interfaces
+{
+    public interface IPaymentProviderEventRepository : IRepository<PaymentProviderEvent>
+    {
+        Task<bool> HasPaymentProviderEventsAsync();
+    }
+}
