@@ -16,5 +16,7 @@ namespace Arcora.Api.Accounts
         Task<Result> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken ct = default);
         Task<Result<string>> GenerateEmailConfirmationTokenAsync(string userId, CancellationToken ct = default);
         Task<Result<AuthResponse>> HandleExternalLoginAsync(string provider, CancellationToken ct = default);
+        Task<Result<RequestLoginCodeResponse>> RequestLoginCodeAsync(RequestLoginCodeRequest request, CancellationToken ct = default);
+        Task<Result<VerifyLoginCodeResponse>> VerifyLoginCodeAsync(VerifyLoginCodeRequest request, CancellationToken ct = default);
     }
 }

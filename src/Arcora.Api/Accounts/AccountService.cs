@@ -2,9 +2,12 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using Arcora.Api.Entities;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.TokenServices;
@@ -21,7 +24,15 @@ namespace Arcora.Api.Accounts
         private readonly IConfiguration _configuration;
         private readonly IPreferenceService _preferenceService;
         private readonly IHttpContextAccessor _httpContextAccessor;
-        public AccountService(UserManager<User> userManager, RoleManager<Role> roleManager, SignInManager<User> signIn, ITokenService tokenService, IOptions<IdentityOptions> identityOptions, IHttpContextAccessor httpContextAccessor, IEmailSender? email, IConfiguration configuration, IPreferenceService preferenceService)
+        private readonly IMemoryCache _cache;
+
+        // Login code (passwordless / sign-up) policy.
+        private const int LoginCodeLength = 6;
+        private const int LoginCodeExpiryMinutes = 10;
+        private const int LoginCodeMaxAttempts = 5;
+        private const string LoginCodeCachePrefix = "login-code:";
+
+        public AccountService(UserManager<User> userManager, RoleManager<Role> roleManager, SignInManager<User> signIn, ITokenService tokenService, IOptions<IdentityOptions> identityOptions, IHttpContextAccessor httpContextAccessor, IEmailSender? email, IConfiguration configuration, IPreferenceService preferenceService, IMemoryCache cache)
         {
             _userManager = userManager;
             _roleManager = roleManager;
@@ -31,6 +42,7 @@ namespace Arcora.Api.Accounts
             _configuration = configuration;
             _preferenceService = preferenceService;
             _httpContextAccessor = httpContextAccessor;
+            _cache = cache;
         }
 
         /// <inheritdoc/>
@@ -68,15 +80,18 @@ namespace Arcora.Api.Accounts
                 LastName = request.LastName,
                 UserName = request.EmailAddress,
                 Email = request.EmailAddress,
+                PhoneNumber = request.PhoneNumber,
+                DateOfBirth = request.DateOfBirth,
                 TwoFactorEnabled = false,
                 EmailConfirmed = false,
                 PhoneNumberConfirmed = false,
                 LockoutEnabled = false,
                 AccessFailedCount = 3,
                 DisplayName = $"{request.FirstName} {request.LastName}",
-                ClientName = "",
-                BranchName = ""
+                ClientName = $"{request.FirstName}-{request.LastName}",
+                BranchName = "HeadOffice"
             };
+
             if (roles is null || !roles.Any())
                 roles = new List<string>
                 {
@@ -175,6 +190,113 @@ namespace Arcora.Api.Accounts
             var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
             return Result<string>.Ok(token);
         }
+
+        /// <inheritdoc/>
+        public async Task<Result<RequestLoginCodeResponse>> RequestLoginCodeAsync(RequestLoginCodeRequest request, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(request.Email))
+                return Result<RequestLoginCodeResponse>.Fail("Email is required.");
+
+            var email = request.Email.Trim();
+
+            // First check if the email is already registered. If it is, return Ok with a message
+            // indicating the email exists so the caller can route to the login flow (no code sent).
+            var existingUser = await _userManager.FindByEmailAsync(email);
+            if (existingUser is not null)
+                return Result<RequestLoginCodeResponse>.Ok(new RequestLoginCodeResponse(
+                    EmailExists: true,
+                    Message: "An account with this email already exists. Please sign in instead.",
+                    VerificationToken: null));
+
+            // Email is not registered: generate and send a short-lived verification code.
+            var code = GenerateNumericCode(LoginCodeLength);
+            var verificationToken = GenerateVerificationToken();
+            var entry = new LoginCodeEntry(HashCode(email, code), verificationToken, DateTimeOffset.UtcNow.AddMinutes(LoginCodeExpiryMinutes), 0);
+            _cache.Set(GetLoginCodeKey(email), entry, new MemoryCacheEntryOptions
+            {
+                AbsoluteExpiration = entry.ExpiresAt
+            });
+
+            var (companyName, companyEmail) = await GetCompanyInfoAsync();
+            var brand = string.IsNullOrWhiteSpace(companyName) ? "Arcora" : companyName;
+            var htmlBody = EmailTemplates.BuildLoginCodeEmail(code, LoginCodeExpiryMinutes, brand, companyEmail);
+
+            if (_email is not null)
+                await _email.SendEmailAsync(email, $"Your {brand} verification code", htmlBody);
+
+            return Result<RequestLoginCodeResponse>.Ok(new RequestLoginCodeResponse(
+                EmailExists: false,
+                Message: "A verification code has been sent to your email address.",
+                VerificationToken: verificationToken));
+        }
+
+        /// <inheritdoc/>
+        public async Task<Result<VerifyLoginCodeResponse>> VerifyLoginCodeAsync(VerifyLoginCodeRequest request, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Code))
+                return Result<VerifyLoginCodeResponse>.Fail("Email and code are required.");
+
+            var email = request.Email.Trim();
+            var cacheKey = GetLoginCodeKey(email);
+
+            if (!_cache.TryGetValue(cacheKey, out LoginCodeEntry? entry) || entry is null)
+                return Result<VerifyLoginCodeResponse>.Fail("The code is invalid or has expired. Please request a new one.");
+
+            // When a verification token was issued at request time, ensure it matches.
+            if (!string.IsNullOrWhiteSpace(request.VerificationToken) &&
+                !FixedTimeEquals(entry.VerificationToken, request.VerificationToken.Trim()))
+                return Result<VerifyLoginCodeResponse>.Fail("The verification session is invalid. Please request a new code.");
+
+            if (entry.ExpiresAt <= DateTimeOffset.UtcNow)
+            {
+                _cache.Remove(cacheKey);
+                return Result<VerifyLoginCodeResponse>.Fail("The code has expired. Please request a new one.");
+            }
+
+            if (entry.Attempts >= LoginCodeMaxAttempts)
+            {
+                _cache.Remove(cacheKey);
+                return Result<VerifyLoginCodeResponse>.Fail("Too many invalid attempts. Please request a new code.");
+            }
+
+            if (!FixedTimeEquals(entry.CodeHash, HashCode(email, request.Code.Trim())))
+            {
+                var updated = entry with { Attempts = entry.Attempts + 1 };
+                _cache.Set(cacheKey, updated, new MemoryCacheEntryOptions { AbsoluteExpiration = entry.ExpiresAt });
+                return Result<VerifyLoginCodeResponse>.Fail("The code is incorrect. Please try again.");
+            }
+
+            // Code verified: consume it so it cannot be reused.
+            _cache.Remove(cacheKey);
+                       
+            return Result<VerifyLoginCodeResponse>.Ok(new VerifyLoginCodeResponse(IsLoginSuccessful: true));
+        }
+
+        private static string GetLoginCodeKey(string email) => $"{LoginCodeCachePrefix}{email.ToLowerInvariant()}";
+
+        private static string GenerateNumericCode(int length)
+        {
+            var max = (int)Math.Pow(10, length);
+            var value = RandomNumberGenerator.GetInt32(0, max);
+            return value.ToString().PadLeft(length, '0');
+        }
+
+        private static string HashCode(string email, string code)
+        {
+            using var sha = SHA256.Create();
+            var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes($"{email.ToLowerInvariant()}:{code}"));
+            return Convert.ToBase64String(bytes);
+        }
+
+        private static string GenerateVerificationToken()
+            => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+                .Replace('+', '-').Replace('/', '_').TrimEnd('=');
+
+        private static bool FixedTimeEquals(string a, string b)
+            => CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(a), Encoding.UTF8.GetBytes(b));
+
+        private sealed record LoginCodeEntry(string CodeHash, string VerificationToken, DateTimeOffset ExpiresAt, int Attempts);
+
 
         private async Task<(string CompanyName, string CompanyEmail)> GetCompanyInfoAsync()
         {

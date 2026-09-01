@@ -20,13 +20,13 @@ public class CreditReportingConsentAudit
     /// </summary>
     [Required]
     [MaxLength(256)]
-    public string? CreditReportingEnrollmentID { get; set; }
+    public Guid? CreditReportingEnrollmentID { get; set; }
 
     /// <summary>
     /// FK to Tenant
     /// </summary>
     [Required]
-    public bool TenantID { get; set; }
+    public Guid TenantID { get; set; }
 
     /// <summary>
     /// Audit action performed

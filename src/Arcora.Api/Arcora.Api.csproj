@@ -24,4 +24,7 @@
     <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.3.0" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.3.0" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Templates\**\*.html" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

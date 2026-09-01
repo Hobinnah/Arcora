@@ -63,6 +63,7 @@ namespace Arcora.Api.Extensions
              services.Configure<GoogleConfiguration>(configuration.GetSection(googleConfigurationKey));
              services.Configure<JwtConfiguration>(configuration.GetSection(jwtConfigurationKey));
              services.Configure<CacheConfiguration>(configuration.GetSection(cacheConfigurationKey));
+             services.Configure<EmailSettings>(configuration.GetSection("EmailSettings"));
 
             #endregion
 

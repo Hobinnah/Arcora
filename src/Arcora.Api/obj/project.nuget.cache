@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "wXF8vA2Y5NI=",
+  "dgSpecHash": "Zx2L7yZov+0=",
   "success": true,
-  "projectFilePath": "C:\\Users\\P12A03B\\Downloads\\_OnBoarding\\Projects\\repos\\IntentraAI\\GeneratedProjects\\5\\Arcora\\src\\Arcora.Api\\Arcora.Api.csproj",
+  "projectFilePath": "C:\\Users\\P12A03B\\Downloads\\_OnBoarding\\Projects\\repos\\Arcora\\src\\Arcora.Api\\Arcora.Api.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\P12A03B\\.nuget\\packages\\automapper\\15.0.1\\automapper.15.0.1.nupkg.sha512",
     "C:\\Users\\P12A03B\\.nuget\\packages\\azure.core\\1.38.0\\azure.core.1.38.0.nupkg.sha512",
@@ -114,24 +114,5 @@
     "C:\\Users\\P12A03B\\.nuget\\packages\\system.threading.channels\\6.0.0\\system.threading.channels.6.0.0.nupkg.sha512",
     "C:\\Users\\P12A03B\\.nuget\\packages\\system.threading.tasks.extensions\\4.5.4\\system.threading.tasks.extensions.4.5.4.nupkg.sha512"
   ],
-  "logs": [
-    {
-      "code": "NU1900",
-      "level": "Warning",
-      "message": "Error occurred while getting package vulnerability data: Unable to load the service index for source https://pkgs.dev.azure.com/ceridian/_packaging/dayforce/nuget/v3/index.json.",
-      "projectPath": "C:\\Users\\P12A03B\\Downloads\\_OnBoarding\\Projects\\repos\\IntentraAI\\GeneratedProjects\\5\\Arcora\\src\\Arcora.Api\\Arcora.Api.csproj",
-      "warningLevel": 1,
-      "filePath": "C:\\Users\\P12A03B\\Downloads\\_OnBoarding\\Projects\\repos\\IntentraAI\\GeneratedProjects\\5\\Arcora\\src\\Arcora.Api\\Arcora.Api.csproj",
-      "targetGraphs": []
-    },
-    {
-      "code": "NU1900",
-      "level": "Warning",
-      "message": "Error occurred while getting package vulnerability data: Unable to load the service index for source https://pkgs.dev.azure.com/ceridian/_packaging/dayforce@release/nuget/v3/index.json.",
-      "projectPath": "C:\\Users\\P12A03B\\Downloads\\_OnBoarding\\Projects\\repos\\IntentraAI\\GeneratedProjects\\5\\Arcora\\src\\Arcora.Api\\Arcora.Api.csproj",
-      "warningLevel": 1,
-      "filePath": "C:\\Users\\P12A03B\\Downloads\\_OnBoarding\\Projects\\repos\\IntentraAI\\GeneratedProjects\\5\\Arcora\\src\\Arcora.Api\\Arcora.Api.csproj",
-      "targetGraphs": []
-    }
-  ]
+  "logs": []
 }

@@ -126,6 +126,33 @@ namespace Arcora.Api
         }
 
         /// <summary>
+        /// Checks whether the supplied email is already registered. When the email is new,
+        /// a short-lived verification code is emailed to begin the sign-up workflow.
+        /// </summary>
+        [HttpPost]
+        [EnableRateLimiting("AuthPolicy")]
+        public async Task<IActionResult> RequestLoginCode([FromServices] IAccountService accountService, [FromBody] RequestLoginCodeRequest request, CancellationToken ct)
+        {
+            var result = await accountService.RequestLoginCodeAsync(request, ct);
+            if (!result.Succeeded)
+                return BadRequest(result.Errors);
+            return Ok(result.Value);
+        }
+
+        /// <summary>
+        /// Verifies the code emailed to the user and, on success, returns an authenticated token.
+        /// </summary>
+        [HttpPost]
+        [EnableRateLimiting("AuthPolicy")]
+        public async Task<IActionResult> VerifyLoginCode([FromServices] IAccountService accountService, [FromBody] VerifyLoginCodeRequest request, CancellationToken ct)
+        {
+            var result = await accountService.VerifyLoginCodeAsync(request, ct);
+            if (!result.Succeeded)
+                return Unauthorized(result.Errors);
+            return Ok(result.Value);
+        }
+
+        /// <summary>
         /// Initiates Google OAuth login flow
         /// </summary>
         [HttpGet("google-login")]

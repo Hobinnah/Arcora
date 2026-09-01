@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 3,
   "targets": {
     "net8.0": {
       "AutoMapper/15.0.1": {
@@ -5260,11 +5260,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\P12A03B\\Downloads\\_OnBoarding\\Projects\\repos\\IntentraAI\\GeneratedProjects\\5\\Arcora\\src\\Arcora.Api\\Arcora.Api.csproj",
+      "projectUniqueName": "C:\\Users\\P12A03B\\Downloads\\_OnBoarding\\Projects\\repos\\Arcora\\src\\Arcora.Api\\Arcora.Api.csproj",
       "projectName": "Arcora.Api",
-      "projectPath": "C:\\Users\\P12A03B\\Downloads\\_OnBoarding\\Projects\\repos\\IntentraAI\\GeneratedProjects\\5\\Arcora\\src\\Arcora.Api\\Arcora.Api.csproj",
+      "projectPath": "C:\\Users\\P12A03B\\Downloads\\_OnBoarding\\Projects\\repos\\Arcora\\src\\Arcora.Api\\Arcora.Api.csproj",
       "packagesPath": "C:\\Users\\P12A03B\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\P12A03B\\Downloads\\_OnBoarding\\Projects\\repos\\IntentraAI\\GeneratedProjects\\5\\Arcora\\src\\Arcora.Api\\obj\\",
+      "outputPath": "C:\\Users\\P12A03B\\Downloads\\_OnBoarding\\Projects\\repos\\Arcora\\src\\Arcora.Api\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -5287,7 +5287,6 @@
       },
       "frameworks": {
         "net8.0": {
-          "framework": "net8.0",
           "targetAlias": "net8.0",
           "projectReferences": {}
         }
@@ -5302,11 +5301,10 @@
         "auditLevel": "low",
         "auditMode": "direct"
       },
-      "SdkAnalysisLevel": "10.0.300"
+      "SdkAnalysisLevel": "9.0.300"
     },
     "frameworks": {
       "net8.0": {
-        "framework": "net8.0",
         "targetAlias": "net8.0",
         "dependencies": {
           "AutoMapper": {
@@ -5397,22 +5395,8 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.301/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.315/PortableRuntimeIdentifierGraph.json"
       }
     }
-  },
-  "logs": [
-    {
-      "code": "NU1900",
-      "level": "Warning",
-      "warningLevel": 1,
-      "message": "Error occurred while getting package vulnerability data: Unable to load the service index for source https://pkgs.dev.azure.com/ceridian/_packaging/dayforce/nuget/v3/index.json."
-    },
-    {
-      "code": "NU1900",
-      "level": "Warning",
-      "warningLevel": 1,
-      "message": "Error occurred while getting package vulnerability data: Unable to load the service index for source https://pkgs.dev.azure.com/ceridian/_packaging/dayforce@release/nuget/v3/index.json."
-    }
-  ]
+  }
 }
