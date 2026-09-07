@@ -18,6 +18,14 @@ namespace Arcora.Api.Services.Interfaces
         /// <param name = "ID"></param>
         /// <returns></returns>
         Task<TenantDto?> GetID(Guid ID);
+
+        /// <summary>
+        ///  
+        /// </summary>
+        /// <param name="userID"></param>
+        /// <returns></returns>
+        Task<TenantDto?> GetTenantByUserID(long userID);
+
         /// <summary>
         /// Creates a new tenant entry.
         /// </summary>

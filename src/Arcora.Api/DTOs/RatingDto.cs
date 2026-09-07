@@ -1,5 +1,6 @@
 // ===================================THIS FILE WAS AUTO GENERATED===================================
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using Arcora.Api.Entities;
 
 namespace Arcora.Api.DTOs;
@@ -101,9 +102,27 @@ public class RatingDto
     /// <summary>
     /// FK to Lease
     /// </summary>
+    [JsonIgnore]
     public LeaseDto? Lease { get; set; }
     /// <summary>
     /// FK to User
     /// </summary>
     public User? ReviewerUser { get; set; }
+
+    /// <summary>
+    /// Reviewer's first name, derived from the associated user. Presentation-only.
+    /// </summary>
+    public string? ReviewerFirstName { get; set; }
+
+    /// <summary>
+    /// Reviewer's location (e.g. "Seattle, WA"), derived from the lease property address.
+    /// Presentation-only.
+    /// </summary>
+    public string? ReviewerLocation { get; set; }
+
+    /// <summary>
+    /// Reviewer's profile image URL, derived from the tenant on the associated lease.
+    /// Presentation-only.
+    /// </summary>
+    public string? ReviewerPhotoUrl { get; set; }
 }

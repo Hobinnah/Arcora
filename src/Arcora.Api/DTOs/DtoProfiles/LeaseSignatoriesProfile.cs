@@ -9,7 +9,7 @@ namespace Arcora.Api.DTOs.DtoProfiles
     {
         public LeaseSignatoriesProfile()
         {
-            CreateMap<LeaseSignatories, LeaseSignatoriesDto>().ReverseMap();
+            CreateMap<LeaseSignatory, LeaseSignatoriesDto>().ReverseMap();
         }
     }
 }

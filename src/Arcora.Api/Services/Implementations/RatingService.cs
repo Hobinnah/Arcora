@@ -112,6 +112,7 @@ namespace Arcora.Api.Services.Implementations
                     rating = await ratingRepository.Create(rating) ?? new Rating();
                     await ratingRepository.Save();
                     cache.Remove(Cache.RATINGS.ToString());
+                    cache.Remove(Cache.LISTINGRATINGAGGREGATES.ToString());
                 }
             }
             catch (Exception er)
@@ -135,6 +136,7 @@ namespace Arcora.Api.Services.Implementations
                 rating = await ratingRepository.Update(rating) ?? new Rating();
                 await ratingRepository.Save();
                 cache.Remove(Cache.RATINGS.ToString());
+                cache.Remove(Cache.LISTINGRATINGAGGREGATES.ToString());
                 ratingDto = this.mapper.Map<RatingDto>(rating);
             }
             catch (Exception er)
@@ -157,6 +159,7 @@ namespace Arcora.Api.Services.Implementations
                 await ratingRepository.Delete(rating);
                 await ratingRepository.Save();
                 cache.Remove(Cache.RATINGS.ToString());
+                cache.Remove(Cache.LISTINGRATINGAGGREGATES.ToString());
             }
             catch (Exception er)
             {

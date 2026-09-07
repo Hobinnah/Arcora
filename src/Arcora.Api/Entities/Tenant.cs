@@ -26,7 +26,6 @@ public class Tenant
     /// Tenant UserID
     /// </summary>
     [Required]
-    [MaxLength(100)]
     public long UserID { get; set; }
 
     /// <summary>
@@ -61,8 +60,27 @@ public class Tenant
     /// <summary>
     /// Tenant active status
     /// </summary>
-    [MaxLength(20)]
     public bool? IsActive { get; set; }
+
+    /// <summary>
+    /// Indicates if the tenant has a registered pre-authorized debit (PAD)
+    /// </summary>
+    public bool? IsPADRegistered { get; set; }
+
+    /// <summary>
+    /// Indicates if the tenant has a registered card
+    /// </summary>
+    public bool? IsCardRegistered { get; set; }
+
+    /// <summary>
+    /// Indicates whether the lease contract has been reviewed
+    /// </summary>
+    public bool? LeaseContractReviewed { get; set; } = false;
+
+    /// <summary>
+    /// Indicates whether the applicant authorized verification
+    /// </summary>
+    public bool? VerificationAuthorization { get; set; } = false;
 
     /// <summary>
     /// Record captured by

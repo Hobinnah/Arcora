@@ -33,6 +33,19 @@ namespace Arcora.Api.Controllers
             return Ok(result);
         }
 
+        // GET api/<TenantController>/5
+        [Authorize(Roles = "Viewer, User, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [HttpGet("{userID}", Name = "GetTenantByUserID")]
+        public async Task<IActionResult> GetTenantByUserID([FromServices] ITenantService tenantService, long userID)
+        {
+            var result = await tenantService.GetTenantByUserID(userID);
+            if (result == null)
+                return NotFound(new { message = "Tenant with the specified user ID was not found." });
+            return Ok(result);
+        }
+
         // POST api/<TenantController>
         [Authorize(Roles = "User, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]

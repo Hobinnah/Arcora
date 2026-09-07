@@ -1,6 +1,7 @@
 // ===================================THIS FILE WAS AUTO GENERATED===================================
 using Microsoft.AspNetCore.Identity;
 using Arcora.Api.Entities;
+using Arcora.Api.DTOs;
 
 namespace Arcora.Api.Accounts
 {
@@ -13,7 +14,7 @@ namespace Arcora.Api.Accounts
     public record VerifyLoginCodeRequest(string Email, string Code, string? VerificationToken = null);
     public record RequestLoginCodeResponse(bool EmailExists, string Message, string? VerificationToken);
     public record VerifyLoginCodeResponse(bool IsLoginSuccessful);
-    public record AuthResponse(string AccessToken, bool IsLoginSuccessful, IEnumerable<string> Roles, User User);
+    public record AuthResponse(string AccessToken, bool IsLoginSuccessful, IEnumerable<string> Roles, User User, TenantDto? Tenant = null, IEnumerable<OrganizationMemberDto>? MemberOrganizations = null);
     // Lightweight Result helpers
     public record Result(bool Succeeded, IEnumerable<string> Errors)
     {

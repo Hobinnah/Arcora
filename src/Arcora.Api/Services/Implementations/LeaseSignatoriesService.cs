@@ -34,15 +34,15 @@ namespace Arcora.Api.Services.Implementations
         /// <inheritdoc/>
         public async Task<PagedResult<LeaseSignatoriesDto>> GetAll(Paging paging)
         {
-            IEnumerable<LeaseSignatories> entities;
+            IEnumerable<LeaseSignatory> entities;
             try
             {
-                entities = cache.Get<IEnumerable<LeaseSignatories>>(Cache.LEASESIGNATORIES.ToString()) ?? new List<LeaseSignatories>();
+                entities = cache.Get<IEnumerable<LeaseSignatory>>(Cache.LEASESIGNATORIES.ToString()) ?? new List<LeaseSignatory>();
                 if (entities == null || !entities.Any())
                 {
-                    entities = (await this.leasesignatoriesRepository.GetLeaseSignatoriesAsync())?.Where(x => x != null) ?? new List<LeaseSignatories>();
+                    entities = (await this.leasesignatoriesRepository.GetLeaseSignatoriesAsync())?.Where(x => x != null) ?? new List<LeaseSignatory>();
                     if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<LeaseSignatories>>(Cache.LEASESIGNATORIES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
+                        cache.Set<IEnumerable<LeaseSignatory>>(Cache.LEASESIGNATORIES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
                 }
 
                 if (entities is not null && paging.UserID > 0)
@@ -60,7 +60,7 @@ namespace Arcora.Api.Services.Implementations
                 };
             }
 
-            IEnumerable<LeaseSignatories> filteredEntities = entities!;
+            IEnumerable<LeaseSignatory> filteredEntities = entities!;
             if (!string.IsNullOrEmpty(paging?.Search))
             {
                 filteredEntities = entities!.Where(x => !string.IsNullOrEmpty(x.Name) && x.Name.Contains(paging.Search, StringComparison.OrdinalIgnoreCase));
@@ -81,8 +81,8 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<LeaseSignatories> entities = cache.Get<IEnumerable<LeaseSignatories>>(Cache.LEASESIGNATORIES.ToString()) ?? new List<LeaseSignatories>();
-                LeaseSignatories? match;
+                IEnumerable<LeaseSignatory> entities = cache.Get<IEnumerable<LeaseSignatory>>(Cache.LEASESIGNATORIES.ToString()) ?? new List<LeaseSignatory>();
+                LeaseSignatory? match;
                 if (entities != null && entities.Any())
                 {
                     match = entities.FirstOrDefault(x => x.LeaseSignatoryID == ID);
@@ -104,21 +104,21 @@ namespace Arcora.Api.Services.Implementations
         /// <inheritdoc/>
         public async Task<LeaseSignatoriesDto> CreateLeaseSignatories(LeaseSignatoriesDto leasesignatoriesDto)
         {
-            LeaseSignatories leaseSignatories = new LeaseSignatories();
-            IEnumerable<LeaseSignatories?> checkEntity;
+            LeaseSignatory leaseSignatories = new LeaseSignatory();
+            IEnumerable<LeaseSignatory?> checkEntity;
             try
             {
                 checkEntity = await this.leasesignatoriesRepository.Find(x => x.Name!.ToLower().Trim() == leasesignatoriesDto.Name!.ToLower().Trim());
                 if (checkEntity == null || !checkEntity.Any())
                 {
-                    leaseSignatories = this.mapper.Map<LeaseSignatories>(leasesignatoriesDto);
+                    leaseSignatories = this.mapper.Map<LeaseSignatory>(leasesignatoriesDto);
                     leaseSignatories.LeaseSignatoryID = Guid.NewGuid();
                     leaseSignatories.UserID = leasesignatoriesDto.UserID == 0 ? null : leasesignatoriesDto.UserID;
                     leaseSignatories.TenantID = leasesignatoriesDto.TenantID == Guid.Empty ? null : leasesignatoriesDto.TenantID;
                     leaseSignatories.OrganizationMemberID = leasesignatoriesDto.OrganizationMemberID == Guid.Empty ? null : leasesignatoriesDto.OrganizationMemberID;
                     leaseSignatories.ProviderSignerID = string.IsNullOrEmpty(leasesignatoriesDto.ProviderSignerID) ? null : leasesignatoriesDto.ProviderSignerID;
                     leaseSignatories.CapturedDate = DateTime.UtcNow;
-                    leaseSignatories = await leasesignatoriesRepository.Create(leaseSignatories) ?? new LeaseSignatories();
+                    leaseSignatories = await leasesignatoriesRepository.Create(leaseSignatories) ?? new LeaseSignatory();
                     await leasesignatoriesRepository.Save();
                     cache.Remove(Cache.LEASESIGNATORIES.ToString());
                 }
@@ -140,8 +140,8 @@ namespace Arcora.Api.Services.Implementations
                 var existing = await this.leasesignatoriesRepository.GetByID(id);
                 if (existing == null)
                     return null;
-                LeaseSignatories leaseSignatories = this.mapper.Map<LeaseSignatories>(leasesignatoriesDto);
-                leaseSignatories = await leasesignatoriesRepository.Update(leaseSignatories) ?? new LeaseSignatories();
+                LeaseSignatory leaseSignatories = this.mapper.Map<LeaseSignatory>(leasesignatoriesDto);
+                leaseSignatories = await leasesignatoriesRepository.Update(leaseSignatories) ?? new LeaseSignatory();
                 await leasesignatoriesRepository.Save();
                 cache.Remove(Cache.LEASESIGNATORIES.ToString());
                 leasesignatoriesDto = this.mapper.Map<LeaseSignatoriesDto>(leaseSignatories);

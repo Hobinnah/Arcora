@@ -13,9 +13,19 @@ namespace Arcora.Api.Repositories.Implementations
             this.context = context;
         }
 
-        public async Task<List<OrganizationMember>> GetOrganizationMemberAsync()
+        public async Task<List<OrganizationMember>> GetOrganizationMembersAsync()
         {
             return await this.context.OrganizationMembers.AsNoTracking().Include(x => x.Organization).Include(x => x.User).ToListAsync();
+        }
+
+        public async Task<List<OrganizationMember>> GetMemberOrganizationsAsync(long userID)
+        {
+            return await this.context.OrganizationMembers
+                .AsNoTracking()
+                .Include(x => x.Organization)
+                .Include(x => x.User)
+                .Where(x => x.UserID == userID)
+                .ToListAsync();
         }
 
         public async Task<bool> HasOrganizationMembersAsync()

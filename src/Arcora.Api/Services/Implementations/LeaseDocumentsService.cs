@@ -19,13 +19,15 @@ namespace Arcora.Api.Services.Implementations
         private readonly IMemoryCache cache;
         private readonly ILogger<LeaseDocumentsService> logger;
         private readonly ILeaseDocumentsRepository leasedocumentsRepository;
+        private readonly IFileStorageService fileStorageService;
         private readonly IOptions<CacheConfiguration> _options;
-        public LeaseDocumentsService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<LeaseDocumentsService> logger, ILeaseDocumentsRepository leasedocumentsRepository)
+        public LeaseDocumentsService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<LeaseDocumentsService> logger, ILeaseDocumentsRepository leasedocumentsRepository, IFileStorageService fileStorageService)
         {
             this.cache = cache;
             this.logger = logger;
             this.mapper = mapper;
             this.leasedocumentsRepository = leasedocumentsRepository;
+            this.fileStorageService = fileStorageService;
             this._options = options;
             if (this._options.Value.ExpirationTimeInMinutes <= 0)
                 this._options.Value.ExpirationTimeInMinutes = 15;
@@ -155,6 +157,20 @@ namespace Arcora.Api.Services.Implementations
                 var leaseDocuments = await this.leasedocumentsRepository.GetByID(ID);
                 if (leaseDocuments == null)
                     throw new KeyNotFoundException("LeaseDocuments with the specified ID was not found.");
+
+                // Remove the underlying blob so storage and metadata stay in sync.
+                if (!string.IsNullOrWhiteSpace(leaseDocuments.StorageReference))
+                {
+                    try
+                    {
+                        await fileStorageService.DeleteAsync(StorageCategory.Document, leaseDocuments.StorageReference!);
+                    }
+                    catch (Exception blobEx)
+                    {
+                        logger.LogError(blobEx, "Failed to delete blob '{Reference}' for LeaseDocument {ID}. Timestamp: {Timestamp}", leaseDocuments.StorageReference, ID, DateTime.UtcNow);
+                    }
+                }
+
                 await leasedocumentsRepository.Delete(leaseDocuments);
                 await leasedocumentsRepository.Save();
                 cache.Remove(Cache.LEASEDOCUMENTS.ToString());
@@ -162,6 +178,92 @@ namespace Arcora.Api.Services.Implementations
             catch (Exception er)
             {
                 logger.LogError(er, "An error occurred while deleting LeaseDocuments . Timestamp: {Timestamp}", DateTime.UtcNow);
+                throw;
+            }
+        }
+
+        /// <inheritdoc/>
+        public async Task<LeaseDocumentsDto> UploadLeaseDocument(LeaseDocumentUploadRequest request, CancellationToken cancellationToken = default)
+        {
+            if (request?.File == null || request.File.Length == 0)
+                throw new ArgumentException("No file was provided.");
+
+            // Enforce PDF only.
+            var isPdfContentType = string.Equals(request.File.ContentType, "application/pdf", StringComparison.OrdinalIgnoreCase);
+            var isPdfExtension = Path.GetExtension(request.File.FileName)?.Equals(".pdf", StringComparison.OrdinalIgnoreCase) ?? false;
+            if (!isPdfContentType && !isPdfExtension)
+                throw new ArgumentException("Only PDF documents are allowed for lease documents.");
+
+            try
+            {
+                BlobUploadResult uploadResult;
+                await using (var stream = request.File.OpenReadStream())
+                {
+                    uploadResult = await fileStorageService.UploadAsync(
+                        StorageCategory.Document,
+                        request.File.FileName,
+                        stream,
+                        "application/pdf",
+                        cancellationToken);
+                }
+
+                var leaseDocuments = new LeaseDocuments
+                {
+                    LeaseDocumentID = Guid.NewGuid(),
+                    LeaseID = request.LeaseID,
+                    LeaseRenewalID = request.LeaseRenewalID == Guid.Empty ? null : request.LeaseRenewalID,
+                    RentalApplicationID = request.RentalApplicationID == Guid.Empty ? null : request.RentalApplicationID,
+                    ListingID = request.ListingID == Guid.Empty ? null : request.ListingID,
+                    TenantID = request.TenantID == Guid.Empty ? null : request.TenantID,
+                    DocumentType = request.DocumentType,
+                    DocumentStatus = string.IsNullOrWhiteSpace(request.DocumentStatus) ? "DRAFT" : request.DocumentStatus,
+                    OriginalFilename = request.File.FileName,
+                    StorageProvider = "AZURE_BLOB",
+                    StorageContainer = uploadResult.Container,
+                    StorageReference = uploadResult.BlobName,
+                    Url = uploadResult.Uri,
+                    IsPrimary = request.IsPrimary,
+                    GeneratedAt = DateTime.UtcNow,
+                    CapturedBy = request.CapturedBy,
+                    CapturedDate = DateTime.UtcNow
+                };
+
+                leaseDocuments = await leasedocumentsRepository.Create(leaseDocuments) ?? new LeaseDocuments();
+                await leasedocumentsRepository.Save();
+                cache.Remove(Cache.LEASEDOCUMENTS.ToString());
+
+                return this.mapper.Map<LeaseDocumentsDto>(leaseDocuments);
+            }
+            catch (ArgumentException)
+            {
+                throw;
+            }
+            catch (Exception er)
+            {
+                logger.LogError(er, "An error occurred while uploading LeaseDocument. Timestamp: {Timestamp}", DateTime.UtcNow);
+                throw;
+            }
+        }
+
+        /// <inheritdoc/>
+        public async Task<(Stream Content, string? ContentType, string FileName)?> DownloadLeaseDocument(Guid ID, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var leaseDocuments = await this.leasedocumentsRepository.GetByID(ID);
+                if (leaseDocuments == null || string.IsNullOrWhiteSpace(leaseDocuments.StorageReference))
+                    return null;
+
+                var result = await fileStorageService.DownloadAsync(StorageCategory.Document, leaseDocuments.StorageReference!, cancellationToken);
+                if (result == null)
+                    return null;
+
+                var fileName = string.IsNullOrWhiteSpace(leaseDocuments.OriginalFilename) ? "document.pdf" : leaseDocuments.OriginalFilename!;
+                return (result.Value.Content, result.Value.ContentType ?? "application/pdf", fileName);
+            }
+            catch (Exception er)
+            {
+                logger.LogError(er, "An error occurred while downloading LeaseDocument {ID}. Timestamp: {Timestamp}", ID, DateTime.UtcNow);
                 throw;
             }
         }

@@ -19,16 +19,78 @@ namespace Arcora.Api.Services.Implementations
         private readonly IMemoryCache cache;
         private readonly ILogger<ListingService> logger;
         private readonly IListingRepository listingRepository;
+        private readonly IRatingRepository ratingRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public ListingService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<ListingService> logger, IListingRepository listingRepository)
+        public ListingService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<ListingService> logger, IListingRepository listingRepository, IRatingRepository ratingRepository)
         {
             this.cache = cache;
             this.logger = logger;
             this.mapper = mapper;
             this.listingRepository = listingRepository;
+            this.ratingRepository = ratingRepository;
             this._options = options;
             if (this._options.Value.ExpirationTimeInMinutes <= 0)
                 this._options.Value.ExpirationTimeInMinutes = 15;
+        }
+
+        /// <summary>
+        /// Populates the aggregated <see cref="ListingDto.Rating"/> and <see cref="ListingDto.Reviews"/>
+        /// values from public ratings, grouped by the listing they belong to via the lease.
+        /// The aggregate dictionary is cached so it is only recalculated when the cache expires
+        /// or is invalidated.
+        /// </summary>
+        private async Task ApplyRatingAggregatesAsync(IEnumerable<ListingDto> listings)
+        {
+            var targets = listings?.Where(x => x?.ListingID != null).ToList();
+            if (targets == null || targets.Count == 0)
+                return;
+
+            var aggregates = await this.GetRatingAggregatesAsync();
+
+            foreach (var listing in targets)
+            {
+                if (aggregates.TryGetValue(listing.ListingID!.Value, out var agg))
+                {
+                    listing.Rating = agg.Average;
+                    listing.Reviews = agg.Count;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns the per-listing rating aggregates, using a cached copy when available
+        /// and rebuilding from the Rating table only when the cache is empty.
+        /// </summary>
+        private async Task<IReadOnlyDictionary<Guid, (decimal Average, int Count)>> GetRatingAggregatesAsync()
+        {
+            var cached = cache.Get<IReadOnlyDictionary<Guid, (decimal Average, int Count)>>(Cache.LISTINGRATINGAGGREGATES.ToString());
+            if (cached != null)
+                return cached;
+
+            IEnumerable<Rating> ratings;
+            try
+            {
+                ratings = await this.ratingRepository.GetRatingAsync() ?? new List<Rating>();
+            }
+            catch (Exception er)
+            {
+                logger.LogError(er, "An error occurred while fetching Ratings for listing aggregates. Timestamp: {Timestamp}", DateTime.UtcNow);
+                return new Dictionary<Guid, (decimal Average, int Count)>();
+            }
+
+            var aggregates = ratings
+                .Where(r => r.IsPublic && r.Lease != null)
+                .GroupBy(r => r.Lease!.ListingID)
+                .ToDictionary(
+                    g => g.Key,
+                    g => (Average: Math.Round((decimal)g.Average(r => r.OverallRating), 1), Count: g.Count()));
+
+            cache.Set<IReadOnlyDictionary<Guid, (decimal Average, int Count)>>(
+                Cache.LISTINGRATINGAGGREGATES.ToString(),
+                aggregates,
+                DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
+
+            return aggregates;
         }
 
         /// <inheritdoc/>
@@ -40,7 +102,7 @@ namespace Arcora.Api.Services.Implementations
                 entities = cache.Get<IEnumerable<Listing>>(Cache.LISTINGS.ToString()) ?? new List<Listing>();
                 if (entities == null || !entities.Any())
                 {
-                    entities = (await this.listingRepository.GetListingAsync())?.Where(x => x != null) ?? new List<Listing>();
+                    entities = (await this.listingRepository.GetListingsAsync())?.Where(x => x != null) ?? new List<Listing>();
                     if (entities != null && entities.Any())
                         cache.Set<IEnumerable<Listing>>(Cache.LISTINGS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
                 }
@@ -62,8 +124,9 @@ namespace Arcora.Api.Services.Implementations
             }
 
             int totalCount = filteredEntities.Count();
-            var pagedEntities = filteredEntities.OrderByDescending(x => x.ListingID).Skip((paging!.PageNumber - 1) * paging.PageSize).Take(paging.PageSize).ToList();
-            var pagedDtos = this.mapper.Map<IEnumerable<ListingDto>>(pagedEntities);
+            var pagedEntities = filteredEntities.OrderByDescending(x => x.CapturedDate).Skip((paging!.PageNumber - 1) * paging.PageSize).Take(paging.PageSize).ToList();
+            var pagedDtos = this.mapper.Map<IEnumerable<ListingDto>>(pagedEntities).ToList();
+            await this.ApplyRatingAggregatesAsync(pagedDtos);
             return new PagedResult<ListingDto>
             {
                 Data = pagedDtos,
@@ -72,22 +135,47 @@ namespace Arcora.Api.Services.Implementations
         }
 
         /// <inheritdoc/>
+        public async Task<PagedResult<ListingDto>> SearchListings(ListingSearchCriteria criteria)
+        {
+            try
+            {
+                var (items, totalCount) = await this.listingRepository.SearchListingsAsync(criteria ?? new ListingSearchCriteria());
+                var dtos = this.mapper.Map<IEnumerable<ListingDto>>(items).ToList();
+                await this.ApplyRatingAggregatesAsync(dtos);
+                return new PagedResult<ListingDto>
+                {
+                    Data = dtos,
+                    TotalCount = totalCount
+                };
+            }
+            catch (Exception er)
+            {
+                logger.LogError(er, "An error occurred while searching Listings. Timestamp: {Timestamp}", DateTime.UtcNow);
+                return new PagedResult<ListingDto>
+                {
+                    Data = new List<ListingDto>(),
+                    TotalCount = 0
+                };
+            }
+        }
+
+        /// <inheritdoc/>
         public async Task<ListingDto?> GetID(Guid ID)
         {
             try
             {
-                IEnumerable<Listing> entities = cache.Get<IEnumerable<Listing>>(Cache.LISTINGS.ToString()) ?? new List<Listing>();
-                Listing? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.ListingID == ID);
-                }
-                else
-                {
-                    match = await this.listingRepository.GetByID(ID);
-                }
+                // The LISTINGS cache is populated by GetAll via GetListingsAsync, which only
+                // eager-loads photos for performance. The detail view needs the full child graph
+                // (amenities, rules, policies, term prices, calendar events), so always load it
+                // through GetListingAsync rather than the partially-populated list cache.
+                Listing? match = await this.listingRepository.GetListingAsync(ID);
 
-                return match == null ? null : this.mapper.Map<ListingDto>(match);
+                if (match == null)
+                    return null;
+
+                var dto = this.mapper.Map<ListingDto>(match);
+                await this.ApplyRatingAggregatesAsync(new[] { dto });
+                return dto;
             }
             catch (Exception er)
             {

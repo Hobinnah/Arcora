@@ -40,7 +40,7 @@ namespace Arcora.Api.Services.Implementations
                 entities = cache.Get<IEnumerable<OrganizationMember>>(Cache.ORGANIZATIONMEMBERS.ToString()) ?? new List<OrganizationMember>();
                 if (entities == null || !entities.Any())
                 {
-                    entities = (await this.organizationmemberRepository.GetOrganizationMemberAsync())?.Where(x => x != null) ?? new List<OrganizationMember>();
+                    entities = (await this.organizationmemberRepository.GetOrganizationMembersAsync())?.Where(x => x != null) ?? new List<OrganizationMember>();
                     if (entities != null && entities.Any())
                         cache.Set<IEnumerable<OrganizationMember>>(Cache.ORGANIZATIONMEMBERS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
                 }
@@ -93,6 +93,21 @@ namespace Arcora.Api.Services.Implementations
                 }
 
                 return match == null ? null : this.mapper.Map<OrganizationMemberDto>(match);
+            }
+            catch (Exception er)
+            {
+                logger.LogError(er, "An error occurred while fetching OrganizationMember by ID. Timestamp: {Timestamp}", DateTime.UtcNow);
+                throw;
+            }
+        }
+
+        /// <inheritdoc/>
+        public async Task<IEnumerable<OrganizationMemberDto>?> GetMemberOrganizationsAsync(long userID)
+        {
+            try
+            {
+                IEnumerable<OrganizationMember> entities = await this.organizationmemberRepository.GetMemberOrganizationsAsync(userID);
+                return entities == null ? null : this.mapper.Map<IEnumerable<OrganizationMemberDto>>(entities);
             }
             catch (Exception er)
             {

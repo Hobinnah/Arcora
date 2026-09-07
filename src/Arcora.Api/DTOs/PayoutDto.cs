@@ -26,6 +26,16 @@ public class PayoutDto
     public long OrgPayoutAccountID { get; set; }
 
     /// <summary>
+    /// Start of the payout period
+    /// </summary>
+    public DateTime? From { get; set; }
+
+    /// <summary>
+    /// End of the payout period
+    /// </summary>
+    public DateTime? To { get; set; }
+
+    /// <summary>
     /// Payout amount
     /// </summary>
     [Required]

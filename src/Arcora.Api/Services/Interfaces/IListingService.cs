@@ -13,6 +13,13 @@ namespace Arcora.Api.Services.Interfaces
         /// <returns></returns>
         Task<PagedResult<ListingDto>> GetAll(Paging paging);
         /// <summary>
+        /// Efficiently searches available listings using Airbnb-style criteria (location,
+        /// move-in date, stay/lease length, party size and optional filters).
+        /// </summary>
+        /// <param name = "criteria">The search criteria.</param>
+        /// <returns>A paged set of matching listings.</returns>
+        Task<PagedResult<ListingDto>> SearchListings(ListingSearchCriteria criteria);
+        /// <summary>
         /// Retrieves a listing by its ID.
         /// </summary>
         /// <param name = "ID"></param>

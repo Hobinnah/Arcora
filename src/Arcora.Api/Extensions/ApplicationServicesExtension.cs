@@ -25,6 +25,9 @@ using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Arcora.Api.DTOs.DtoProfiles;
 using Arcora.Api;
+using Azure.Identity;
+using Azure.Storage.Blobs;
+using Microsoft.Extensions.Azure;
 
 
 
@@ -43,6 +46,7 @@ namespace Arcora.Api.Extensions
         private const string jwtConfigurationKey = "Authentication:JwtSettings";
         private const string googleConfigurationKey = "Authentication:Google";
         private const string oidcConfigurationKey = "Authentication:OIDC";
+        private const string blobStorageConfigurationKey = "Azure:BlobStorage";
 
         /// <summary>
         /// Add application services
@@ -64,6 +68,27 @@ namespace Arcora.Api.Extensions
              services.Configure<JwtConfiguration>(configuration.GetSection(jwtConfigurationKey));
              services.Configure<CacheConfiguration>(configuration.GetSection(cacheConfigurationKey));
              services.Configure<EmailSettings>(configuration.GetSection("EmailSettings"));
+
+            #endregion
+
+            #region===========================Azure Blob Storage===========================
+             services.Configure<BlobStorageConfiguration>(configuration.GetSection(blobStorageConfigurationKey));
+             var blobConfig = configuration.GetSection(blobStorageConfigurationKey).Get<BlobStorageConfiguration>() ?? new BlobStorageConfiguration();
+             services.AddAzureClients(builder =>
+             {
+                 if (!string.IsNullOrWhiteSpace(blobConfig.ConnectionString))
+                 {
+                     // Connection string (real account) or Azurite ("UseDevelopmentStorage=true") during development.
+                     builder.AddBlobServiceClient(blobConfig.ConnectionString);
+                 }
+                 else if (!string.IsNullOrWhiteSpace(blobConfig.AccountName))
+                 {
+                     // Managed identity in production.
+                     builder.AddBlobServiceClient(new Uri($"https://{blobConfig.AccountName}.blob.core.windows.net"));
+                     builder.UseCredential(new DefaultAzureCredential());
+                 }
+             });
+             services.AddTransient<IFileStorageService, AzureBlobStorageService>();
 
             #endregion
 

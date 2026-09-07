@@ -12,7 +12,6 @@ namespace Arcora.Api.Controllers
     public class UnitTypeController : ControllerBase
     {
         // GET: api/<UnitTypeController>
-        [Authorize(Roles = "Viewer, User, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetAllUnitTypes")]
         public async Task<IActionResult> Get([FromServices] IUnitTypeService unittypeService, [FromQuery] Paging paging)
@@ -21,7 +20,6 @@ namespace Arcora.Api.Controllers
         }
 
         // GET api/<UnitTypeController>/5
-        [Authorize(Roles = "Viewer, User, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetUnitTypeByID")]

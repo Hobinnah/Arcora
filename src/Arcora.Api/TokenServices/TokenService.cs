@@ -44,7 +44,7 @@ namespace Arcora.Api.TokenServices
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(this.jwtSetting.Value.Key!));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
             var now = DateTime.UtcNow;
-            var expires = now.AddMinutes(Convert.ToDouble(this.jwtSetting.Value.Lifespan));
+            var expires = now.AddMonths(Convert.ToInt16(this.jwtSetting.Value.Lifespan));
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Audience = this.jwtSetting.Value.Audience,

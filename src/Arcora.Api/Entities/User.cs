@@ -34,5 +34,15 @@ namespace Arcora.Api.Entities
         /// Client application version.
         /// </summary>
         public string? BranchName { get; set; }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        public Guid? TenantID { get; set; }
+
+        /// <summary>
+        ///  
+        /// </summary>
+        public Guid? OrganizationID { get; set; }
     }
 }

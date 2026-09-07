@@ -42,7 +42,7 @@ namespace Arcora.Api
           public virtual DbSet<LeaseOccupants> LeaseOccupants { get; set; }
           public virtual DbSet<LeaseRenewals> LeaseRenewals { get; set; }
           public virtual DbSet<LeaseDocuments> LeaseDocuments { get; set; }
-          public virtual DbSet<LeaseSignatories> LeaseSignatories { get; set; }
+          public virtual DbSet<LeaseSignatory> LeaseSignatories { get; set; }
           public virtual DbSet<LeaseRecurringCharges> LeaseRecurringCharges { get; set; }
           public virtual DbSet<ViewingAppointments> ViewingAppointments { get; set; }
           public virtual DbSet<Fee> Fees { get; set; }
@@ -56,7 +56,7 @@ namespace Arcora.Api
           public virtual DbSet<PaymentIntent> PaymentIntents { get; set; }
           public virtual DbSet<PaymentAttempt> PaymentAttempts { get; set; }
           public virtual DbSet<Payment> Payments { get; set; }
-          public virtual DbSet<Chargeback> Chargebacks { get; set; }
+          public virtual DbSet<Chargeback> ChargeBacks { get; set; }
           public virtual DbSet<PaymentProviderEvent> PaymentProviderEvents { get; set; }
           public virtual DbSet<Refund> Refunds { get; set; }
           public virtual DbSet<OrgPayoutAccount> OrgPayoutAccounts { get; set; }
@@ -109,6 +109,32 @@ namespace Arcora.Api
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
+
+            // Use the DbSet property names (pluralized) as table names, overriding any
+            // singular [Table(...)] attributes on the entities so the schema matches the context.
+            // Only the DbSets declared on ArcoraDbContext are affected, leaving the inherited
+            // ASP.NET Identity tables (AspNetUsers, AspNetRoles, ...) untouched.
+            foreach (var property in typeof(ArcoraDbContext).GetProperties(
+                         System.Reflection.BindingFlags.Public |
+                         System.Reflection.BindingFlags.Instance |
+                         System.Reflection.BindingFlags.DeclaredOnly))
+            {
+                if (property.PropertyType.IsGenericType &&
+                    property.PropertyType.GetGenericTypeDefinition() == typeof(DbSet<>))
+                {
+                    var entityClrType = property.PropertyType.GetGenericArguments()[0];
+                    var entityType = builder.Model.FindEntityType(entityClrType);
+                    entityType?.SetTableName(property.Name);
+                }
+            }
+
+            // Disable cascade delete on all foreign keys to avoid SQL Server
+            // "multiple cascade paths" errors. Deletions are handled explicitly.
+            foreach (var relationship in builder.Model.GetEntityTypes()
+                         .SelectMany(e => e.GetForeignKeys()))
+            {
+                relationship.DeleteBehavior = DeleteBehavior.NoAction;
+            }
             // You can seed the tables in your database, after this commented line, 
         }
     }

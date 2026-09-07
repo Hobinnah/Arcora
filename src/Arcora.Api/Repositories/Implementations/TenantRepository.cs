@@ -18,6 +18,11 @@ namespace Arcora.Api.Repositories.Implementations
             return await this.context.Tenants.AsNoTracking().Include(x => x.User).ToListAsync();
         }
 
+        public async Task<Tenant?> GetTenantByUserIDAsync(long userID)
+        {
+            return await this.context.Tenants.AsNoTracking().Include(x => x.User).FirstOrDefaultAsync(x => x.UserID == userID);
+        }
+
         public async Task<bool> HasTenantsAsync()
         {
             return await this.context.Set<Tenant>().AnyAsync();

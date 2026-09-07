@@ -54,5 +54,5 @@ public class ListingAmenity
     /// FK to AmenityCatalog
     /// </summary>
     [ForeignKey(nameof(AmenityID))]
-    public AmenityCatalog? AmenityAmenityCatalog { get; set; }
+    public AmenityCatalog? AmenityCatalog { get; set; }
 }

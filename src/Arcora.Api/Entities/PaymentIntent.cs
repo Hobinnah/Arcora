@@ -19,6 +19,10 @@ public class PaymentIntent
     /// </summary>
     public Guid? InvoiceMasterID { get; set; }
     /// <summary>
+    /// FK to Lease
+    /// </summary>
+    public Guid? LeaseID { get; set; }
+    /// <summary>
     /// FK to AutopayMandate
     /// </summary>
     public Guid? AutopayMandateID { get; set; }
@@ -131,6 +135,12 @@ public class PaymentIntent
     /// </summary>
     [ForeignKey(nameof(InvoiceMasterID))]
     public InvoiceMaster? InvoiceMaster { get; set; }
+
+    /// <summary>
+    /// FK to Lease
+    /// </summary>
+    [ForeignKey(nameof(LeaseID))]
+    public Lease? Lease { get; set; }
 
     /// <summary>
     /// FK to AutopayMandate

@@ -17,6 +17,10 @@ public class PaymentIntentDto
     /// </summary>
     public Guid? InvoiceMasterID { get; set; }
     /// <summary>
+    /// FK to Lease
+    /// </summary>
+    public Guid? LeaseID { get; set; }
+    /// <summary>
     /// FK to AutopayMandate
     /// </summary>
     public Guid? AutopayMandateID { get; set; }
@@ -127,6 +131,10 @@ public class PaymentIntentDto
     /// FK to InvoiceMaster
     /// </summary>
     public InvoiceMasterDto? InvoiceMaster { get; set; }
+    /// <summary>
+    /// FK to Lease
+    /// </summary>
+    public LeaseDto? Lease { get; set; }
     /// <summary>
     /// FK to AutopayMandate
     /// </summary>

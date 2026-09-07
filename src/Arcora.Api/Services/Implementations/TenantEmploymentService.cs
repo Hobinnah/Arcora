@@ -109,6 +109,8 @@ namespace Arcora.Api.Services.Implementations
                     tenantEmployment = this.mapper.Map<TenantEmployment>(tenantemploymentDto);
                     tenantEmployment.TenantEmploymentID = Guid.NewGuid();
                     tenantEmployment.CapturedDate = DateTime.UtcNow;
+                    tenantEmployment.UpdatedBy = string.Empty;
+                    tenantEmployment.UpdatedDate = null;
                     tenantEmployment = await tenantemploymentRepository.Create(tenantEmployment) ?? new TenantEmployment();
                     await tenantemploymentRepository.Save();
                     cache.Remove(Cache.TENANTEMPLOYMENTS.ToString());

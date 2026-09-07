@@ -101,6 +101,24 @@ namespace Arcora.Api.Services.Implementations
             }
         }
 
+
+        /// <inheritdoc/>
+        public async Task<TenantDto?> GetTenantByUserID(long userID)
+        {
+            try
+            {
+                Tenant? tenant;
+                tenant = await this.tenantRepository.GetTenantByUserIDAsync(userID);
+                
+                return tenant == null ? null : this.mapper.Map<TenantDto>(tenant);
+            }
+            catch (Exception er)
+            {
+                logger.LogError(er, "An error occurred while fetching Tenant by ID. Timestamp: {Timestamp}", DateTime.UtcNow);
+                throw;
+            }
+        }
+
         /// <inheritdoc/>
         public async Task<TenantDto> CreateTenant(TenantDto tenantDto)
         {

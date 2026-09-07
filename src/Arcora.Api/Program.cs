@@ -1,6 +1,9 @@
 using Arcora.Api.Extensions;
 using Arcora.Api.TokenServices;
 using Arcora.Api.Middleware;
+using Arcora.Api;
+using Arcora.Api.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;;
 var builder = WebApplication.CreateBuilder(args);
 
@@ -73,6 +76,19 @@ if (app.Environment.IsDevelopment())
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "Arcora API v1");
         c.RoutePrefix = string.Empty; // Serve Swagger UI at root
     });
+
+    // Seed development sample data when the listing tables are empty.
+    using var scope = app.Services.CreateScope();
+    var context = scope.ServiceProvider.GetRequiredService<ArcoraDbContext>();
+    var seedLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbSeeder");
+
+    // Ensure the database exists and all migrations are applied before seeding.
+    await context.Database.MigrateAsync();
+
+    // When "SeedData:ForceReseed" is true, existing seeded rows are cleared first so the
+    // latest SeedData graph is inserted. Otherwise seeding only runs when tables are empty.
+    var forceReseed = builder.Configuration.GetValue<bool>("SeedData:ForceReseed");
+    await DbSeeder.SeedAsync(context, seedLogger, forceReseed);
 }
 
 

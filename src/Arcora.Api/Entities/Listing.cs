@@ -53,21 +53,28 @@ public class Listing
     public string? CheckInDoorCode { get; set; }
 
     /// <summary>
+    /// Indicates whether the listing is furnished 
+    /// </summary>
+    public bool IsFurnished { get; set; } = false;
+
+    /// <summary>
+    /// Indicates whether the listing is pet friendly 
+    /// </summary>
+    public bool IsPetFriendly { get; set; } = false;
+
+    /// <summary>
     /// Number of bedrooms
     /// </summary>
-    [MaxLength(3)]
     public decimal? Bedrooms { get; set; }
 
     /// <summary>
     /// Number of bathrooms
     /// </summary>
-    [MaxLength(3)]
     public decimal? Bathrooms { get; set; }
 
     /// <summary>
     /// Size in square feet
     /// </summary>
-    [MaxLength(3)]
     public decimal? SquareFeet { get; set; }
 
     /// <summary>
@@ -160,6 +167,13 @@ public class Listing
     public bool AcceptingApplications { get; set; }
 
     /// <summary>
+    /// Optional manual/editorial tag for the listing (e.g. "Great location").
+    /// Used as an override when a tag cannot be derived from listing data.
+    /// </summary>
+    [MaxLength(50)]
+    public string? Tag { get; set; }
+
+    /// <summary>
     /// User who captured the record
     /// </summary>
     [MaxLength(50)]
@@ -196,4 +210,44 @@ public class Listing
     /// </summary>
     [ForeignKey(nameof(OrganizationID))]
     public Organization? Organization { get; set; }
+
+    /// <summary>
+    /// Collection of ListingTermPrice entities associated with this listing. 
+    /// </summary>
+    public List<ListingTermPrice>? ListingTermPrices { get; set; }
+
+    /// <summary>
+    /// Collection of ListingAccessInstruction entities associated with this listing. 
+    /// </summary>
+    public List<ListingAccessInstruction>? ListingAccessInstructions { get; set; }
+    
+    /// <summary>
+    /// Collection of ListingPhoto entities associated with this listing. 
+    /// </summary>
+    public List<ListingPhoto>? ListingPhotos { get; set; }
+
+    /// <summary>
+    /// Collection of ListingAmenity entities associated with this listing. 
+    /// </summary>
+    public List<ListingAmenity>? ListingAmenities { get; set; }
+
+    /// <summary>
+    /// Collection of ListingRule entities associated with this listing. 
+    /// </summary>
+    public List<ListingRule>? ListingRules { get; set; }
+
+    /// <summary>
+    /// Collection of ListingPolicy entities associated with this listing. 
+    /// </summary>
+    public List<ListingPolicy>? ListingPolicies { get; set; }
+
+    /// <summary>
+    /// Collection of CalendarEvent entities associated with this listing. 
+    /// </summary>
+    public List<CalendarEvent>? CalendarEvents { get; set; }
+
+    /// <summary>
+    /// Collection of Lease entities associated with this listing. 
+    /// </summary>
+    public List<Lease>? Leases { get; set; }
 }

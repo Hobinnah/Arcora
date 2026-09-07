@@ -123,7 +123,6 @@ public class OrganizationDto
     /// <summary>
     /// Ranking score of the organization
     /// </summary>
-    [MaxLength(5)]
     public decimal? RankingScore { get; set; }
     /// <summary>
     /// Date when the record was captured

@@ -12,7 +12,6 @@ namespace Arcora.Api.Controllers
     public class ListingController : ControllerBase
     {
         // GET: api/<ListingController>
-        [Authorize(Roles = "Viewer, User, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetAllListings")]
         public async Task<IActionResult> Get([FromServices] IListingService listingService, [FromQuery] Paging paging)
@@ -20,8 +19,15 @@ namespace Arcora.Api.Controllers
             return Ok(await listingService.GetAll(paging));
         }
 
+        // GET: api/<ListingController>/Search
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [HttpGet(Name = "SearchListings")]
+        public async Task<IActionResult> Search([FromServices] IListingService listingService, [FromQuery] ListingSearchCriteria criteria)
+        {
+            return Ok(await listingService.SearchListings(criteria));
+        }
+
         // GET api/<ListingController>/5
-        [Authorize(Roles = "Viewer, User, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetListingByID")]

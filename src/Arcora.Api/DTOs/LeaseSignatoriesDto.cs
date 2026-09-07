@@ -32,6 +32,11 @@ public class LeaseSignatoriesDto
     public Guid? OrganizationMemberID { get; set; }
 
     /// <summary>
+    /// FK to Organization
+    /// </summary>
+    public Guid? OrganizationID { get; set; }
+
+    /// <summary>
     /// Role of the signatory
     /// </summary>
     [Required]
@@ -101,4 +106,8 @@ public class LeaseSignatoriesDto
     /// FK to OrganizationMember
     /// </summary>
     public OrganizationMemberDto? OrganizationMember { get; set; }
+    /// <summary>
+    /// FK to Organization
+    /// </summary>
+    public OrganizationDto? Organization { get; set; }
 }

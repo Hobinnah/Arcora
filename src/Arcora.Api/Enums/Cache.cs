@@ -87,5 +87,6 @@ namespace Arcora.Api.Enums
         CALENDAREVENTS,
         LISTINGTYPES,
         UNITTYPES,
+        LISTINGRATINGAGGREGATES,
     }
 }

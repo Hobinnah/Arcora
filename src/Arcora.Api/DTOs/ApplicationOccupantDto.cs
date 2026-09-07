@@ -16,8 +16,7 @@ public class ApplicationOccupantDto
     /// <summary>
     /// 
     /// </summary>
-    [Required]
-    public Guid RentalApplicationID { get; set; }
+    public Guid? RentalApplicationID { get; set; }
     /// <summary>
     /// FK to Tenant
     /// </summary>

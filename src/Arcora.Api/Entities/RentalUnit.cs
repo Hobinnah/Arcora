@@ -40,13 +40,11 @@ public class RentalUnit
     /// <summary>
     /// Number of bedrooms
     /// </summary>
-    [MaxLength(3)]
     public decimal? Bedrooms { get; set; }
 
     /// <summary>
     /// Number of bathrooms
     /// </summary>
-    [MaxLength(3)]
     public decimal? Bathrooms { get; set; }
     /// <summary>
     /// Square footage

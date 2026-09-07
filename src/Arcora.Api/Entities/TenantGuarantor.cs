@@ -21,6 +21,10 @@ public class TenantGuarantor
     [Required]
     public Guid TenantID { get; set; }
     /// <summary>
+    /// FK to RentalApplication
+    /// </summary>
+    public Guid? RentalApplicationID { get; set; }
+    /// <summary>
     /// FK to User
     /// </summary>
     public long? UserID { get; set; }

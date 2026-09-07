@@ -37,5 +37,21 @@ namespace Arcora.Api.Services.Interfaces
         /// <param name = "ID"></param>
         /// <returns></returns>
         Task DeleteLeaseDocuments(Guid ID);
+
+        /// <summary>
+        /// Uploads a PDF lease document to blob storage and persists its metadata.
+        /// </summary>
+        /// <param name = "request">The upload payload containing the PDF file and metadata.</param>
+        /// <param name = "cancellationToken"></param>
+        /// <returns>The created lease document, including its blob storage reference and URL.</returns>
+        Task<LeaseDocumentsDto> UploadLeaseDocument(LeaseDocumentUploadRequest request, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Downloads the PDF content of a lease document from blob storage.
+        /// </summary>
+        /// <param name = "ID">The lease document ID.</param>
+        /// <param name = "cancellationToken"></param>
+        /// <returns>The content stream, content type and original filename, or null when not found.</returns>
+        Task<(Stream Content, string? ContentType, string FileName)?> DownloadLeaseDocument(Guid ID, CancellationToken cancellationToken = default);
     }
 }

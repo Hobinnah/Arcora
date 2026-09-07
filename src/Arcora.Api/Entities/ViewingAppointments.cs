@@ -31,6 +31,10 @@ public class ViewingAppointments
     /// </summary>
     public Guid? TenantID { get; set; }
     /// <summary>
+    /// FK to RentalApplication
+    /// </summary>
+    public Guid? RentalApplicationID { get; set; }
+    /// <summary>
     /// FK to OrganizationMember assigned to the appointment
     /// </summary>
     public Guid? AssignedOrganizationMemberID { get; set; }

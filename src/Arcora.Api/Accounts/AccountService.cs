@@ -23,6 +23,8 @@ namespace Arcora.Api.Accounts
         private readonly IEmailSender? _email;
         private readonly IConfiguration _configuration;
         private readonly IPreferenceService _preferenceService;
+        private readonly ITenantService _tenantService;
+        private readonly IOrganizationMemberService _organizationMemberService;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IMemoryCache _cache;
 
@@ -32,7 +34,7 @@ namespace Arcora.Api.Accounts
         private const int LoginCodeMaxAttempts = 5;
         private const string LoginCodeCachePrefix = "login-code:";
 
-        public AccountService(UserManager<User> userManager, RoleManager<Role> roleManager, SignInManager<User> signIn, ITokenService tokenService, IOptions<IdentityOptions> identityOptions, IHttpContextAccessor httpContextAccessor, IEmailSender? email, IConfiguration configuration, IPreferenceService preferenceService, IMemoryCache cache)
+        public AccountService(UserManager<User> userManager, RoleManager<Role> roleManager, SignInManager<User> signIn, ITokenService tokenService, IOptions<IdentityOptions> identityOptions, IHttpContextAccessor httpContextAccessor, IEmailSender? email, IConfiguration configuration, IPreferenceService preferenceService, IMemoryCache cache, ITenantService tenantService, IOrganizationMemberService organizationMemberService)
         {
             _userManager = userManager;
             _roleManager = roleManager;
@@ -40,7 +42,9 @@ namespace Arcora.Api.Accounts
             _tokenService = tokenService;
             _email = email;
             _configuration = configuration;
+            _tenantService = tenantService;
             _preferenceService = preferenceService;
+            _organizationMemberService = organizationMemberService;
             _httpContextAccessor = httpContextAccessor;
             _cache = cache;
         }
@@ -60,7 +64,9 @@ namespace Arcora.Api.Accounts
                 return Result<AuthResponse>.Fail("Invalid credentials.");
             var roles = await _userManager.GetRolesAsync(user);
             var token = TokenService.encodeJWTToken(this._tokenService.GenerateJwtToken(user, roles.ToList()), user.Email!, user.TwoFactorEnabled, 10);
-            var resp = new AuthResponse(IsLoginSuccessful: true, AccessToken: token, Roles: roles, User: user);
+            var tenant = await this._tenantService.GetTenantByUserID(user.Id);
+            var memberOrganizations = await this._organizationMemberService.GetMemberOrganizationsAsync(user.Id);
+            var resp = new AuthResponse(IsLoginSuccessful: true, AccessToken: token, Roles: roles, User: user, Tenant: tenant, MemberOrganizations: memberOrganizations);
             return Result<AuthResponse>.Ok(resp);
         }
 

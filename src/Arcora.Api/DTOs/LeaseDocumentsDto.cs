@@ -16,16 +16,26 @@ public class LeaseDocumentsDto
     /// <summary>
     /// FK to Lease
     /// </summary>
-    [Required]
-    public Guid LeaseID { get; set; }
+    public Guid? LeaseID { get; set; }
     /// <summary>
     /// FK to LeaseRenewals
     /// </summary>
     public Guid? LeaseRenewalID { get; set; }
+    /// <summary>
+    /// FK to RentalApplication
+    /// </summary>
+    public Guid? RentalApplicationID { get; set; }
 
     /// <summary>
-    /// Type of document
+    /// FK to Listing
     /// </summary>
+    public Guid? ListingID { get; set; }
+
+    /// <summary>
+    /// FK to Tenant
+    /// </summary>
+    public Guid? TenantID { get; set; }
+
     [Required]
     [MaxLength(50)]
     public string? DocumentType { get; set; }

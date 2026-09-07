@@ -6,8 +6,8 @@ namespace Arcora.Api.Entities;
 /// <summary>
 /// Stores information about signatories of lease documents including their roles and signature status.
 /// </summary>
-[Table("LeaseSignatories")]
-public class LeaseSignatories
+[Table("LeaseSignatory")]
+public class LeaseSignatory
 {
     /// <summary>
     /// Primary key
@@ -32,6 +32,11 @@ public class LeaseSignatories
     /// FK to OrganizationMember
     /// </summary>
     public Guid? OrganizationMemberID { get; set; }
+
+    /// <summary>
+    /// FK to Organization
+    /// </summary>
+    public Guid? OrganizationID { get; set; }
 
     /// <summary>
     /// Role of the signatory
@@ -109,4 +114,10 @@ public class LeaseSignatories
     /// </summary>
     [ForeignKey(nameof(OrganizationMemberID))]
     public OrganizationMember? OrganizationMember { get; set; }
+
+    /// <summary>
+    /// FK to Organization
+    /// </summary>
+    [ForeignKey(nameof(OrganizationID))]
+    public Organization? Organization { get; set; }
 }

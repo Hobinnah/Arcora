@@ -13,6 +13,10 @@ public class TenantInvitationDto
     /// </summary>
     public Guid? TenantInvitationID { get; set; }
     /// <summary>
+    /// FK to Listing
+    /// </summary>
+    public Guid? ListingID { get; set; }
+    /// <summary>
     /// FK to Lease
     /// </summary>
     public Guid? LeaseID { get; set; }

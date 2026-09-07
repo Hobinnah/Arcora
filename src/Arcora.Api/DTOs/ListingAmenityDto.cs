@@ -1,5 +1,6 @@
 // ===================================THIS FILE WAS AUTO GENERATED===================================
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using Arcora.Api.Entities;
 
 namespace Arcora.Api.DTOs;
@@ -44,9 +45,10 @@ public class ListingAmenityDto
     /// <summary>
     /// FK to Listing
     /// </summary>
+    [JsonIgnore]
     public ListingDto? Listing { get; set; }
     /// <summary>
     /// FK to AmenityCatalog
     /// </summary>
-    public AmenityCatalogDto? AmenityAmenityCatalog { get; set; }
+    public AmenityCatalogDto? AmenityCatalog { get; set; }
 }

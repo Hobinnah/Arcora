@@ -35,6 +35,12 @@ public class RentalApplication
     public Guid TenantID { get; set; }
 
     /// <summary>
+    /// FK to Organization
+    /// </summary>
+    [Required]
+    public Guid OrganizationID { get; set; }
+
+    /// <summary>
     /// Desired move-in date
     /// </summary>
     [Required]
@@ -129,6 +135,14 @@ public class RentalApplication
     /// </summary>
     public DateTime? ExpiresAt { get; set; }
     /// <summary>
+    /// Indicates whether the lease contract has been reviewed
+    /// </summary>
+    public bool? LeaseContractReviewed { get; set; } = false;
+    /// <summary>
+    /// Indicates whether the applicant authorized verification
+    /// </summary>
+    public bool? VerificationAuthorization { get; set; } = false;
+    /// <summary>
     /// Record creation date
     /// </summary>
     public DateTime? CapturedDate { get; set; }
@@ -160,6 +174,12 @@ public class RentalApplication
     /// </summary>
     [ForeignKey(nameof(TenantID))]
     public Tenant? Tenant { get; set; }
+
+    /// <summary>
+    /// FK to Organization
+    /// </summary>
+    [ForeignKey(nameof(OrganizationID))]
+    public Organization? Organization { get; set; }
 
     /// <summary>
     /// FK to OrganizationMember who reviewed

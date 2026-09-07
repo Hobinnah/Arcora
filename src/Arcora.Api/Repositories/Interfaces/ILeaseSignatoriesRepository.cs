@@ -3,9 +3,9 @@ using Arcora.Api.Entities;
 
 namespace Arcora.Api.Repositories.Interfaces
 {
-    public interface ILeaseSignatoriesRepository : IRepository<LeaseSignatories>
+    public interface ILeaseSignatoriesRepository : IRepository<LeaseSignatory>
     {
-        Task<List<LeaseSignatories>> GetLeaseSignatoriesAsync();
+        Task<List<LeaseSignatory>> GetLeaseSignatoriesAsync();
         Task<bool> HasLeaseSignatoriesAsync();
     }
 }

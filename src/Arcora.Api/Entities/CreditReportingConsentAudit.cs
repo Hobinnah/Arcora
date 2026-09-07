@@ -19,7 +19,6 @@ public class CreditReportingConsentAudit
     /// FK to CreditReportingEnrollment
     /// </summary>
     [Required]
-    [MaxLength(256)]
     public Guid? CreditReportingEnrollmentID { get; set; }
 
     /// <summary>

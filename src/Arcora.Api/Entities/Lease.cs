@@ -206,4 +206,9 @@ public class Lease
     /// </summary>
     [ForeignKey(nameof(RentalApplicationID))]
     public RentalApplication? RentalApplication { get; set; }
+
+    /// <summary>
+    /// Collection of Rating entities associated with this lease. 
+    /// </summary>
+    public List<Rating>? Ratings { get; set; }
 }

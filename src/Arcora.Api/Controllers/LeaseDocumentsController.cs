@@ -64,7 +64,7 @@ namespace Arcora.Api.Controllers
         }
 
         // DELETE api/<LeaseDocumentsController>/5
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "User, Admin")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpDelete("{id}", Name = "DeleteLeaseDocuments")]
@@ -79,6 +79,41 @@ namespace Arcora.Api.Controllers
             {
                 return NotFound(new { message = "LeaseDocuments with the specified ID was not found." });
             }
+        }
+
+        // POST api/<LeaseDocumentsController>/Upload
+        [Authorize(Roles = "User, Admin")]
+        [ProducesResponseType(StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [HttpPost(Name = "UploadLeaseDocument")]
+        [RequestSizeLimit(52428800)] // 50 MB
+        public async Task<IActionResult> Upload([FromServices] ILeaseDocumentsService leasedocumentsService, [FromForm] LeaseDocumentUploadRequest request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var result = await leasedocumentsService.UploadLeaseDocument(request, cancellationToken);
+                if (result.LeaseDocumentID != null && result.LeaseDocumentID != Guid.Empty)
+                    return CreatedAtRoute("GetLeaseDocumentsByID", new { id = result.LeaseDocumentID }, result);
+                return BadRequest(new { message = "Failed to upload lease document." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        // GET api/<LeaseDocumentsController>/Download/5
+        [Authorize(Roles = "Viewer, User, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [HttpGet("{id}", Name = "DownloadLeaseDocument")]
+        public async Task<IActionResult> Download([FromServices] ILeaseDocumentsService leasedocumentsService, Guid id, CancellationToken cancellationToken)
+        {
+            var result = await leasedocumentsService.DownloadLeaseDocument(id, cancellationToken);
+            if (result == null)
+                return NotFound(new { message = "LeaseDocuments with the specified ID was not found." });
+
+            return File(result.Value.Content, result.Value.ContentType ?? "application/pdf", result.Value.FileName);
         }
     }
 }

@@ -20,6 +20,11 @@ public class TenantEmergencyContactDto
     public Guid TenantID { get; set; }
 
     /// <summary>
+    /// FK to RentalApplication
+    /// </summary>
+    public Guid? RentalApplicationID { get; set; }
+
+    /// <summary>
     /// Emergency contact name
     /// </summary>
     [Required]

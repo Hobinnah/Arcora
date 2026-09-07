@@ -13,6 +13,7 @@ namespace Arcora.Api.Repositories.Implementations
             this.context = context;
         }
 
+        
         public async Task<bool> HasOrganizationsAsync()
         {
             return await this.context.Set<Organization>().AnyAsync();

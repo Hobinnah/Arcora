@@ -24,6 +24,13 @@ namespace Arcora.Api.Services.Interfaces
         /// <param name = "organizationMemberDto"></param>
         /// <returns></returns>
         Task<OrganizationMemberDto> CreateOrganizationMember(OrganizationMemberDto organizationMemberDto);
+
+        /// <summary>
+        ///  
+        /// </summary>
+        /// <param name="userID"></param>
+        /// <returns></returns>
+        Task<IEnumerable<OrganizationMemberDto>?> GetMemberOrganizationsAsync(long userID);
         /// <summary>
         /// Updates an existing organization member entry by its ID.
         /// </summary>

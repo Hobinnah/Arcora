@@ -18,16 +18,26 @@ public class LeaseDocuments
     /// <summary>
     /// FK to Lease
     /// </summary>
-    [Required]
-    public Guid LeaseID { get; set; }
+    public Guid? LeaseID { get; set; }
     /// <summary>
     /// FK to LeaseRenewals
     /// </summary>
     public Guid? LeaseRenewalID { get; set; }
+    /// <summary>
+    /// FK to RentalApplication
+    /// </summary>
+    public Guid? RentalApplicationID { get; set; }
 
     /// <summary>
-    /// Type of document
+    /// FK to Listing
     /// </summary>
+    public Guid? ListingID { get; set; }
+
+    /// <summary>
+    /// FK to Tenant
+    /// </summary>
+    public Guid? TenantID { get; set; }
+
     [Required]
     [MaxLength(50)]
     public string? DocumentType { get; set; }
@@ -65,6 +75,11 @@ public class LeaseDocuments
     [Required]
     [MaxLength(500)]
     public string? StorageReference { get; set; }
+
+    /// <summary>
+    /// URL of the document
+    /// </summary>
+    public string? Url { get; set; }
 
     /// <summary>
     /// Hash of the file for integrity check
@@ -120,5 +135,5 @@ public class LeaseDocuments
     /// FK to LeaseRenewals
     /// </summary>
     [ForeignKey(nameof(LeaseRenewalID))]
-    public LeaseRenewals? LeaseRenewalLeaseRenewals { get; set; }
+    public LeaseRenewals? LeaseRenewals { get; set; }
 }

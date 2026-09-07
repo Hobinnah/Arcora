@@ -33,6 +33,12 @@ public class RentalApplicationDto
     public Guid TenantID { get; set; }
 
     /// <summary>
+    /// FK to Organization
+    /// </summary>
+    [Required]
+    public Guid OrganizationID { get; set; }
+
+    /// <summary>
     /// Desired move-in date
     /// </summary>
     [Required]
@@ -96,6 +102,16 @@ public class RentalApplicationDto
     /// </summary>
     [MaxLength(1000)]
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// Indicates whether the lease contract has been reviewed
+    /// </summary>
+    public bool? LeaseContractReviewed { get; set; } = false;
+
+    /// <summary>
+    /// Indicates whether the applicant authorized verification
+    /// </summary>
+    public bool? VerificationAuthorization { get; set; } = false;
     /// <summary>
     /// Date and time application was submitted
     /// </summary>
@@ -154,6 +170,10 @@ public class RentalApplicationDto
     /// FK to Tenant
     /// </summary>
     public TenantDto? Tenant { get; set; }
+    /// <summary>
+    /// FK to Organization
+    /// </summary>
+    public OrganizationDto? Organization { get; set; }
     /// <summary>
     /// FK to OrganizationMember who reviewed
     /// </summary>
