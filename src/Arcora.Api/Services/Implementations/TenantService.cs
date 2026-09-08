@@ -131,6 +131,7 @@ namespace Arcora.Api.Services.Implementations
                 {
                     tenant = this.mapper.Map<Tenant>(tenantDto);
                     tenant.TenantID = Guid.NewGuid();
+                    tenant.Code = await GenerateUniqueTenantCodeAsync();
                     tenant.CapturedDate = DateTime.UtcNow;
                     tenant = await tenantRepository.Create(tenant) ?? new Tenant();
                     await tenantRepository.Save();
@@ -144,6 +145,39 @@ namespace Arcora.Api.Services.Implementations
             }
 
             return this.mapper.Map<TenantDto>(tenant);
+        }
+
+        /// <summary>
+        /// Generates a random, non-sequential tenant code of the form "TEN-XXXXXXXX", where the suffix is
+        /// 8 uppercase alphanumeric characters (A-Z, 0-9). This yields roughly 36^8 (~2.8 trillion)
+        /// combinations, which comfortably supports a very large tenant base while remaining readable.
+        /// Retries until an unused code is produced.
+        /// </summary>
+        private async Task<string> GenerateUniqueTenantCodeAsync()
+        {
+            const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            const int length = 8;
+
+            for (var attempt = 0; attempt < 10; attempt++)
+            {
+                var chars = new char[length];
+                var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(length);
+                for (var i = 0; i < length; i++)
+                {
+                    chars[i] = alphabet[bytes[i] % alphabet.Length];
+                }
+
+                var code = $"TEN-{new string(chars)}";
+                var existing = await tenantRepository.Find(x => x.Code != null && x.Code == code);
+
+                if (existing == null || !existing.Any())
+                {
+                    return code;
+                }
+            }
+
+            // Extremely unlikely fallback: append a short unique suffix.
+            return $"TEN-{Guid.NewGuid():N}".Substring(0, 12).ToUpperInvariant();
         }
 
         /// <inheritdoc/>

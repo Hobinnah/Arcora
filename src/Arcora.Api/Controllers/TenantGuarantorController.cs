@@ -91,5 +91,42 @@ namespace Arcora.Api.Controllers
                 return NotFound($"TenantGuarantor with ID {id} not found.");
             return Ok(tenantguarantor);
         }
+
+        // GET: api/TenantGuarantor/InviteDetails?token={token}
+        // Public endpoint for the /guarantor-invite/:token landing page to render the invite details.
+        [AllowAnonymous]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [HttpGet(Name = "GetGuarantorInviteDetails")]
+        public async Task<IActionResult> InviteDetails([FromServices] ITenantGuarantorService tenantguarantorService, [FromQuery] string token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+                return BadRequest(new { message = "A token is required." });
+
+            var details = await tenantguarantorService.GetInviteDetailsAsync(token);
+            if (details == null)
+                return NotFound(new { message = "The guarantor request could not be found or the link is invalid or expired." });
+            return Ok(details);
+        }
+
+        // POST: api/TenantGuarantor/Respond?response={ACCEPT|DECLINE}&token={token}
+        // Public endpoint reached from the accept/decline links embedded in the guarantor invitation email.
+        // The token itself identifies the guarantor and carries its own expiry.
+        [AllowAnonymous]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [HttpPost(Name = "RespondToGuarantorInvitation")]
+        public async Task<IActionResult> Respond([FromServices] ITenantGuarantorService tenantguarantorService, [FromQuery] string response, [FromQuery] string token)
+        {
+            if (string.IsNullOrWhiteSpace(response) || string.IsNullOrWhiteSpace(token))
+                return BadRequest(new { message = "A response and token are required." });
+
+            var result = await tenantguarantorService.RespondToInvitationAsync(response, token);
+            if (result == null)
+                return NotFound(new { message = "The guarantor request could not be found or the link is invalid or expired." });
+            return Ok(new { status = result.Status, message = $"Thank you. Your response has been recorded as {result.Status}." });
+        }
     }
 }

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>You've been named as a guarantor on {{Brand}}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f1ea;font-family:Georgia,'Times New Roman',serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f1ea;padding:32px 0;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 16px rgba(15,58,52,0.08);">
+                    <!-- Header / brand -->
+                    <tr>
+                        <td style="padding:28px 40px;background-color:#0f3a34;">
+                            <table role="presentation" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="vertical-align:middle;">
+                                        <span style="display:inline-block;width:36px;height:36px;line-height:36px;text-align:center;background-color:#0d9488;color:#ffffff;border-radius:50%;font-family:Arial,sans-serif;font-weight:700;font-size:18px;">a</span>
+                                    </td>
+                                    <td style="vertical-align:middle;padding-left:12px;">
+                                        <span style="color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.5px;font-family:Arial,sans-serif;">{{Brand}}</span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Hero -->
+                    <tr>
+                        <td style="padding:40px 40px 8px;">
+                            <p style="margin:0 0 8px;font-family:Arial,sans-serif;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#0d9488;font-weight:700;">Guarantor request</p>
+                            <h1 style="margin:0 0 16px;font-size:30px;line-height:38px;color:#0f3a34;font-weight:400;">
+                                Hi {{GuarantorName}}, you've been asked to be a <span style="color:#d1483a;font-style:italic;">guarantor.</span>
+                            </h1>
+                            <p style="margin:0 0 24px;font-family:Arial,sans-serif;font-size:15px;line-height:24px;color:#4b5563;">
+                                <strong style="color:#0f3a34;">{{TenantName}}</strong> would like to name you as a guarantor for their rental application.
+                                Please review the details below and let us know whether you accept.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Listing image -->
+                    {{ListingImageBlock}}
+
+                    <!-- Applicant details -->
+                    <tr>
+                        <td style="padding:8px 40px 0;">
+                            <h2 style="margin:0 0 12px;font-size:16px;color:#0f3a34;font-family:Arial,sans-serif;font-weight:700;">Applicant</h2>
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-family:Arial,sans-serif;font-size:14px;color:#4b5563;">
+                                <tr>
+                                    <td style="padding:6px 0;color:#6b7280;width:45%;">Full name</td>
+                                    <td style="padding:6px 0;color:#0f3a34;font-weight:600;">{{TenantName}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:6px 0;color:#6b7280;">Phone number</td>
+                                    <td style="padding:6px 0;color:#0f3a34;font-weight:600;">{{TenantPhone}}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Listing details -->
+                    <tr>
+                        <td style="padding:20px 40px 0;">
+                            <h2 style="margin:0 0 12px;font-size:16px;color:#0f3a34;font-family:Arial,sans-serif;font-weight:700;">Listing</h2>
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-family:Arial,sans-serif;font-size:14px;color:#4b5563;">
+                                <tr>
+                                    <td style="padding:6px 0;color:#6b7280;width:45%;">Property</td>
+                                    <td style="padding:6px 0;color:#0f3a34;font-weight:600;">{{ListingTitle}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:6px 0;color:#6b7280;">Monthly rent</td>
+                                    <td style="padding:6px 0;color:#0f3a34;font-weight:600;">{{MonthlyRent}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:6px 0;color:#6b7280;">Security deposit</td>
+                                    <td style="padding:6px 0;color:#0f3a34;font-weight:600;">{{SecurityDeposit}}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- CTA -->
+                    <tr>
+                        <td align="center" style="padding:32px 40px 8px;">
+                            <table role="presentation" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="padding:0 8px;">
+                                        <a href="{{AcceptUrl}}" style="display:inline-block;padding:14px 32px;background-color:#0d9488;color:#ffffff;border-radius:10px;font-family:Arial,sans-serif;font-size:15px;font-weight:700;text-decoration:none;">Accept</a>
+                                    </td>
+                                    <td style="padding:0 8px;">
+                                        <a href="{{DeclineUrl}}" style="display:inline-block;padding:14px 32px;background-color:#f4f1ea;color:#d1483a;border:1px solid #e3c9c4;border-radius:10px;font-family:Arial,sans-serif;font-size:15px;font-weight:700;text-decoration:none;">Decline</a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Note -->
+                    <tr>
+                        <td style="padding:16px 40px 40px;">
+                            <p style="margin:0;font-family:Arial,sans-serif;font-size:13px;line-height:20px;color:#6b7280;">
+                                If you didn't expect this request or don't recognise {{TenantName}}, you can safely ignore this email &mdash; no action will be taken on your behalf.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding:24px 40px;background-color:#f9f8f4;border-top:1px solid #eae4d7;">
+                            {{SupportLine}}
+                            <p style="margin:0;font-family:Arial,sans-serif;font-size:12px;line-height:18px;color:#9ca3af;">&copy; {{Year}} {{Brand}}. All rights reserved.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

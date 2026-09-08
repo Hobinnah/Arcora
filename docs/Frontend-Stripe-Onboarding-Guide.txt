@@ -1,0 +1,386 @@
+==============================================================================
+ ARCORA - STRIPE PAYMENT ONBOARDING: FRONTEND INTEGRATION GUIDE
+==============================================================================
+ Purpose : Everything the frontend needs to implement tenant payment
+           onboarding (PAD primary + credit-card fallback) and rent
+           collection with Stripe.
+ Audience: Frontend / client developers
+ Golden rule: RAW bank/card details NEVER touch the Arcora API. They go
+           straight from the browser to Stripe via Stripe.js. Arcora only
+           ever receives an opaque token (pm_...).
+==============================================================================
+
+
+------------------------------------------------------------------------------
+1. HIGH-LEVEL FLOW
+------------------------------------------------------------------------------
+
+  Browser (Stripe.js)                         Arcora API
+  ---------------------                       -----------------------------
+  1. Get publishable key      <---- POST /api/PaymentOnboarding/Start
+  2. Collect bank details
+  3. Tokenize (ACSS debit)    ----> Stripe (NOT Arcora) => returns pm_xxx
+  4. Save PAD token           ----> POST /api/PaymentOnboarding/SavePaymentMethod  {PAD}
+  5. Collect card via Elements
+  6. Tokenize card            ----> Stripe (NOT Arcora) => returns pm_yyy
+  7. Save CARD token          ----> POST /api/PaymentOnboarding/SavePaymentMethod  {CARD}
+  8. Check readiness          ----> GET  /api/PaymentOnboarding/Status/{tenantId}
+
+  Onboarding is COMPLETE only when the tenant has:
+    - a verified PAD (PRIMARY) method,
+    - an ACTIVE PAD mandate, and
+    - a verified backup CREDIT card.
+
+
+------------------------------------------------------------------------------
+2. PREREQUISITES
+------------------------------------------------------------------------------
+
+  - Include Stripe.js:   <script src="https://js.stripe.com/v3/"></script>
+  - Authenticated user with a valid Arcora JWT (Bearer token).
+  - Roles required:
+      * Start / SavePaymentMethod  -> "User" or "Admin"
+      * Status                     -> "Viewer", "User" or "Admin"
+  - A tenantID (GUID) for the tenant being onboarded.
+
+
+------------------------------------------------------------------------------
+3. API ENDPOINTS
+------------------------------------------------------------------------------
+
+  Base route pattern: /api/PaymentOnboarding/[Action]
+  All requests send:  Authorization: Bearer <JWT>
+                      Content-Type: application/json
+
+  ---------------------------------------------------------------------------
+  3.1  START ONBOARDING
+  ---------------------------------------------------------------------------
+  POST /api/PaymentOnboarding/Start
+
+  Request body:
+    {
+      "tenantID": "GUID"
+    }
+
+  Response 200:
+    {
+      "tenantID": "GUID",
+      "providerCustomerID": "cus_...",   // Stripe customer id
+      "publishableKey": "pk_test_...",   // use to init Stripe.js
+      "providerName": "STRIPE"
+    }
+
+  Errors:
+    404 - Tenant not found.
+
+  ---------------------------------------------------------------------------
+  3.2  CREATE SETUP INTENT  (needed for the PAD / ACSS flow)
+  ---------------------------------------------------------------------------
+  POST /api/PaymentOnboarding/CreateSetupIntent
+
+  Creates a provider SetupIntent server-side and returns its client secret so
+  the client SDK can collect + confirm instrument details (e.g. ACSS debit)
+  directly with Stripe. Call this for PAD before confirmAcssDebitSetup().
+
+  Request body:
+    {
+      "tenantID": "GUID",
+      "methodKind": "PAD"          // or "CARD"
+    }
+
+  Response 200:
+    {
+      "tenantID": "GUID",
+      "setupIntentID": "seti_...",
+      "clientSecret": "seti_..._secret_...",   // pass to stripe.confirmAcssDebitSetup
+      "publishableKey": "pk_test_...",
+      "status": "requires_payment_method"
+    }
+
+  Errors:
+    400 - Invalid methodKind.
+    404 - Tenant not found.
+
+  ---------------------------------------------------------------------------
+  3.3  SAVE PAYMENT METHOD  (call TWICE: once PAD, once CARD)
+  ---------------------------------------------------------------------------
+  POST /api/PaymentOnboarding/SavePaymentMethod
+
+  Request body:
+    {
+      "tenantID": "GUID",
+      "providerPaymentMethodID": "pm_...",  // opaque Stripe token from Stripe.js
+      "methodKind": "PAD"                    // or "CARD"
+    }
+
+  Response 201 (Created):  PaymentMethodDto (saved method metadata)
+
+  Business rules enforced by the backend:
+    - methodKind "PAD"  -> stored as PRIMARY, creates ACSS mandate.
+    - methodKind "CARD" -> stored as BACKUP, MUST be a CREDIT card
+                            (debit cards are rejected with 400).
+
+  Errors:
+    400 - Invalid input, or backup card is not a credit card.
+    404 - Tenant not found.
+
+  ---------------------------------------------------------------------------
+  3.4  GET ONBOARDING STATUS
+  ---------------------------------------------------------------------------
+  GET /api/PaymentOnboarding/Status/{tenantId}
+
+  Response 200:
+    {
+      "tenantID": "GUID",
+      "hasVerifiedPad": true,
+      "hasVerifiedCard": true,
+      "padMandateActive": true,
+      "isReady": true            // true only when all three above are true
+    }
+
+
+------------------------------------------------------------------------------
+4. FIELD MAPPING (YOUR UI -> STRIPE)
+------------------------------------------------------------------------------
+
+  PAD / ACSS debit ("Connect your primary bank account"):
+    Account holder name  -> billing_details.name
+    Institution number   -> acss_debit.institution_number   (e.g. "000")
+    Transit number       -> acss_debit.transit_number        (e.g. "00000")
+    Account number       -> acss_debit.account_number
+
+  Credit card ("Using a credit card"):
+    Card number / Expiry / CVC  -> collected by Stripe Elements (CardElement),
+                                    NOT by your own <input> fields.
+    Name on card               -> billing_details.name
+
+  Consent checkbox:
+    "I authorize Arcora to charge my PAD/ACSS bank account first, and use my
+     card as a fallback..." = the PAD mandate consent. Do NOT submit the PAD
+     method until this box is checked. The backend records ConsentVersion
+     "1.0" and ConsentedAt when the mandate is created.
+
+
+------------------------------------------------------------------------------
+5. IMPORTANT: ACSS SETUPINTENT CLIENT SECRET
+------------------------------------------------------------------------------
+
+  Stripe's confirmAcssDebitSetup() requires a SetupIntent client_secret that
+  MUST be created server-side. This is now exposed by:
+      POST /api/PaymentOnboarding/CreateSetupIntent  (see Section 3.2)
+      -> { "clientSecret": "seti_..._secret_...", "publishableKey": "pk_..." }
+
+  Flow for PAD:
+      1. POST /Start                (once, creates the customer)
+      2. POST /CreateSetupIntent    { methodKind: "PAD" } -> clientSecret
+      3. stripe.confirmAcssDebitSetup(clientSecret, {...}) -> pm_...
+      4. POST /SavePaymentMethod    { methodKind: "PAD", providerPaymentMethodID: pm_... }
+
+
+------------------------------------------------------------------------------
+6. SAMPLE FRONTEND CODE (JavaScript)
+------------------------------------------------------------------------------
+
+  const jwt = /* current user's Arcora JWT */;
+  const tenantID = /* current tenant GUID */;
+  const authHeaders = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${jwt}`
+  };
+
+  // ---- Step 1: Start ------------------------------------------------------
+  const start = await fetch('/api/PaymentOnboarding/Start', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ tenantID })
+  }).then(r => r.json());
+
+  const stripe = Stripe(start.publishableKey);
+
+  // ---- Step 2: PAD / ACSS debit ------------------------------------------
+  // 2a. Create the SetupIntent server-side to obtain the client secret.
+  const setup = await fetch('/api/PaymentOnboarding/CreateSetupIntent', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ tenantID, methodKind: 'PAD' })
+  }).then(r => r.json());
+  const clientSecret = setup.clientSecret;
+
+  // 2b. Confirm the ACSS debit setup with Stripe.js.
+  const { setupIntent, error: padError } = await stripe.confirmAcssDebitSetup(
+    clientSecret,
+    {
+      payment_method: {
+        acss_debit: {
+          institution_number: institutionNumber, // "000"
+          transit_number: transitNumber,          // "00000"
+          account_number: accountNumber
+        },
+        billing_details: { name: accountHolderName, email: tenantEmail }
+      }
+    }
+  );
+  if (padError) throw padError;
+  const padPmId = setupIntent.payment_method;
+
+  await fetch('/api/PaymentOnboarding/SavePaymentMethod', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({
+      tenantID,
+      providerPaymentMethodID: padPmId,
+      methodKind: 'PAD'
+    })
+  });
+
+  // ---- Step 3: Credit card via Stripe Elements ---------------------------
+  const elements = stripe.elements();
+  const cardElement = elements.create('card');
+  cardElement.mount('#card-element');   // replaces raw card inputs
+
+  const { paymentMethod, error: cardError } = await stripe.createPaymentMethod({
+    type: 'card',
+    card: cardElement,
+    billing_details: { name: nameOnCard }
+  });
+  if (cardError) throw cardError;
+
+  await fetch('/api/PaymentOnboarding/SavePaymentMethod', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({
+      tenantID,
+      providerPaymentMethodID: paymentMethod.id,
+      methodKind: 'CARD'
+    })
+  });
+
+  // ---- Step 4: Confirm readiness -----------------------------------------
+  const status = await fetch(`/api/PaymentOnboarding/Status/${tenantID}`, {
+    headers: { 'Authorization': `Bearer ${jwt}` }
+  }).then(r => r.json());
+
+  if (status.isReady) {
+    // Onboarding complete - PAD + mandate + backup credit card all verified.
+  }
+
+
+------------------------------------------------------------------------------
+7. TEST DATA (Stripe TEST MODE)
+------------------------------------------------------------------------------
+
+  Use Stripe test-mode keys (pk_test_... / sk_test_...). No real money moves.
+
+  ---------------------------------------------------------------------------
+  7.1  TEST CARDS (backup card step - MUST be a CREDIT card)
+  ---------------------------------------------------------------------------
+    NUMBER                 RESULT / PURPOSE
+    ---------------------  --------------------------------------------------
+    4000 0025 0000 3155    Credit card, succeeds (recommended backup card)
+    4242 4242 4242 4242    Visa generic success
+    5555 5555 5555 4444    Mastercard credit success
+    4000 0566 5566 5556    Visa DEBIT - should be REJECTED by the "must be
+                           credit" rule (use to verify the guard)
+    4000 0000 0000 0002    Generic decline -> CARD_FAILED
+    4000 0000 0000 9995    Insufficient funds (temporary failure)
+
+    For every card:
+      Expiry : any future date (e.g. 08/28)
+      CVC    : any 3 digits (e.g. 123)
+      ZIP    : any (e.g. A1A 1A1)
+
+  ---------------------------------------------------------------------------
+  7.2  PRE-BUILT TEST PAYMENTMETHOD TOKENS (skip UI when testing the API)
+  ---------------------------------------------------------------------------
+    pm_card_visa           Ready-made Visa credit test pm_...
+    pm_card_mastercard     Ready-made Mastercard test pm_...
+    pm_card_visa_debit     Debit pm_... (use to verify rejection)
+
+    Example:
+      POST /api/PaymentOnboarding/SavePaymentMethod
+      { "tenantID": "...", "providerPaymentMethodID": "pm_card_visa",
+        "methodKind": "CARD" }
+
+  ---------------------------------------------------------------------------
+  7.3  TEST ACSS / PAD (Canada) BANK ACCOUNT (primary step)
+  ---------------------------------------------------------------------------
+    Institution number : 000
+    Transit number     : 11000
+    Account holder name: any (e.g. Obinna Eze)
+
+    ACCOUNT NUMBER       BEHAVIOR
+    -------------------  ----------------------------------------------------
+    000123456789         Setup / mandate SUCCEEDS (happy path)
+    000111111116         Payment FAILS (e.g. debit_not_authorized) ->
+                         PAD_FAILED -> triggers backup-card fallback
+    000222227777         Insufficient funds (temporary failure)
+
+    NOTE: ACSS pm_... tokens must be created client-side via
+    stripe.confirmAcssDebitSetup() using the clientSecret from
+    POST /api/PaymentOnboarding/CreateSetupIntent (Section 3.2). There is no
+    static pm_acss_... token. Exact test account numbers can change - confirm
+    at the Stripe docs link below.
+
+  ---------------------------------------------------------------------------
+  7.4  SUGGESTED END-TO-END SEQUENCE
+  ---------------------------------------------------------------------------
+    1. POST /Start                       -> publishableKey + customer
+    2. POST /CreateSetupIntent {PAD}     -> clientSecret
+    3. stripe.confirmAcssDebitSetup(...) with 000 / 11000 / 000123456789 -> pm_
+    4. POST /SavePaymentMethod {PAD}
+    5. POST /SavePaymentMethod {CARD} with pm_card_visa (or 4000 0025 0000 3155)
+    6. GET  /Status/{tenantId}           -> expect isReady: true
+    7. Trigger a collection, then simulate the async PAD result via webhook
+       (see Section 8: stripe trigger payment_intent.succeeded / _failed)
+
+  Stripe docs:
+    Test cards       : https://stripe.com/docs/testing
+    Test bank numbers: https://stripe.com/docs/testing?testing-method=bank-numbers
+    ACSS debit       : https://stripe.com/docs/payments/acss-debit
+
+
+------------------------------------------------------------------------------
+8. WEBHOOKS (INFORMATIONAL - BACKEND HANDLES THIS)
+------------------------------------------------------------------------------
+
+  Endpoint: POST /api/webhooks/stripe   (anonymous, signature-verified)
+
+  The definitive PAD/card outcome arrives asynchronously via webhook, so the
+  UI should NOT assume a payment is final immediately. Poll the status/intent
+  or listen for app notifications. Handled event types:
+      payment_intent.succeeded
+      payment_intent.payment_failed
+      charge.succeeded
+      charge.failed
+
+  For local testing (backend dev), the Stripe CLI forwards events:
+      stripe listen --forward-to https://localhost:<port>/api/webhooks/stripe
+      stripe trigger payment_intent.succeeded
+
+
+------------------------------------------------------------------------------
+9. STATE / STATUS REFERENCE
+------------------------------------------------------------------------------
+
+  PaymentMethod.MethodRole : PRIMARY (PAD) | BACKUP (CARD)
+  PaymentIntent.Status     : PROCESSING | PAID | PAD_FAILED | CARD_FAILED | OVERDUE
+  Collection logic         : PAD charged first; on definitive failure the
+                             backup credit card is charged automatically; if
+                             that also fails -> OVERDUE.
+
+
+------------------------------------------------------------------------------
+10. SECURITY NOTES
+------------------------------------------------------------------------------
+
+  - Arcora NEVER receives or stores raw card/bank numbers. Only opaque Stripe
+    tokens (pm_/cus_/pi_) and non-sensitive metadata (last4, brand, expiry,
+    bank name) are stored.
+  - Always tokenize with Stripe.js in the browser using the PUBLISHABLE key.
+  - Never send the SecretKey or WebhookSecret to the client.
+  - Show the PAD authorization/consent text and require the checkbox before
+    creating the mandate.
+
+==============================================================================
+ END OF GUIDE
+==============================================================================

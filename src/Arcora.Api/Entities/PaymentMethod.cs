@@ -99,6 +99,18 @@ public class PaymentMethod
     public bool IsDefault { get; set; }
 
     /// <summary>
+    /// Role of the payment method in the collection flow: "PRIMARY" (PAD) or "BACKUP" (credit card).
+    /// </summary>
+    [MaxLength(50)]
+    public string? MethodRole { get; set; }
+
+    /// <summary>
+    /// Card funding type ("credit"/"debit"). The backup method must be a credit card.
+    /// </summary>
+    [MaxLength(20)]
+    public string? CardFunding { get; set; }
+
+    /// <summary>
     /// Indicates if the payment method is active
     /// </summary>
     [Required]

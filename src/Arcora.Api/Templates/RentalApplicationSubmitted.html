@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>{{Subject}}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f1ea;font-family:Georgia,'Times New Roman',serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f1ea;padding:32px 0;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 16px rgba(15,58,52,0.08);">
+                    <!-- Header / brand -->
+                    <tr>
+                        <td style="padding:28px 40px;background-color:#0f3a34;">
+                            <table role="presentation" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="vertical-align:middle;">
+                                        <span style="display:inline-block;width:36px;height:36px;line-height:36px;text-align:center;background-color:#0d9488;color:#ffffff;border-radius:50% 50% 50% 0;font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:18px;font-style:italic;">a</span>
+                                    </td>
+                                    <td style="vertical-align:middle;padding-left:12px;">
+                                        <span style="color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.5px;font-family:Arial,sans-serif;">{{Brand}}</span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Hero -->
+                    <tr>
+                        <td style="padding:40px 40px 8px;">
+                            <p style="margin:0 0 8px;font-family:Arial,sans-serif;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#0d9488;font-weight:700;">{{Eyebrow}}</p>
+                            <h1 style="margin:0 0 16px;font-size:30px;line-height:38px;color:#0f3a34;font-weight:400;">
+                                {{Headline}}
+                            </h1>
+                            <p style="margin:0 0 24px;font-family:Arial,sans-serif;font-size:15px;line-height:24px;color:#4b5563;">
+                                {{Intro}}
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Listing image -->
+                    {{ListingImageBlock}}
+
+                    <!-- Listing details -->
+                    <tr>
+                        <td style="padding:20px 40px 0;">
+                            <h2 style="margin:0 0 12px;font-size:16px;color:#0f3a34;font-family:Arial,sans-serif;font-weight:700;">{{ListingTitle}}</h2>
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-family:Arial,sans-serif;font-size:14px;color:#4b5563;">
+                                <tr>
+                                    <td style="padding:6px 0;color:#6b7280;width:45%;">Application code</td>
+                                    <td style="padding:6px 0;color:#0f3a34;font-weight:600;">{{ApplicationCode}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:6px 0;color:#6b7280;">Monthly rent</td>
+                                    <td style="padding:6px 0;color:#0f3a34;font-weight:600;">{{MonthlyRent}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:6px 0;color:#6b7280;">Move-in date</td>
+                                    <td style="padding:6px 0;color:#0f3a34;font-weight:600;">{{MoveInDate}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:6px 0;color:#6b7280;">Lease term</td>
+                                    <td style="padding:6px 0;color:#0f3a34;font-weight:600;">{{LeaseTerm}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:6px 0;color:#6b7280;">Occupants</td>
+                                    <td style="padding:6px 0;color:#0f3a34;font-weight:600;">{{Occupants}}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Applicant block (host copy) -->
+                    {{ApplicantBlock}}
+
+                    <!-- CTA -->
+                    <tr>
+                        <td align="center" style="padding:32px 40px 8px;">
+                            <a href="{{ActionUrl}}" style="display:inline-block;padding:14px 36px;background-color:#0d9488;color:#ffffff;border-radius:10px;font-family:Arial,sans-serif;font-size:15px;font-weight:700;text-decoration:none;">{{ActionLabel}}</a>
+                        </td>
+                    </tr>
+
+                    <!-- Note -->
+                    <tr>
+                        <td style="padding:16px 40px 40px;">
+                            <p style="margin:0;font-family:Arial,sans-serif;font-size:13px;line-height:20px;color:#6b7280;">
+                                {{Footnote}}
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding:24px 40px;background-color:#f9f8f4;border-top:1px solid #eae4d7;">
+                            {{SupportLine}}
+                            <p style="margin:0;font-family:Arial,sans-serif;font-size:12px;line-height:18px;color:#9ca3af;">&copy; {{Year}} {{Brand}}. All rights reserved.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

@@ -4,6 +4,7 @@ using Arcora.Api;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Arcora.Api.Migrations
 {
     [DbContext(typeof(ArcoraDbContext))]
-    partial class ArcoraDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260908002025_MakeSecurityDepositLeaseIdNullable")]
+    partial class MakeSecurityDepositLeaseIdNullable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -4402,9 +4405,6 @@ namespace Arcora.Api.Migrations
 
                     b.Property<DateTime?>("ApprovedAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<bool?>("AttestationProvidedInfoIsCorrect")
-                        .HasColumnType("bit");
 
                     b.Property<string>("CapturedBy")
                         .HasMaxLength(100)

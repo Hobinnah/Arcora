@@ -30,4 +30,7 @@
   <ItemGroup>
     <Content Include="Templates\**\*.html" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Arcora.Payments\Arcora.Payments.csproj" />
+  </ItemGroup>
 </Project>

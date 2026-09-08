@@ -109,6 +109,19 @@ public class PaymentIntent
     /// </summary>
     [MaxLength(256)]
     public string? FailureReason { get; set; }
+
+    /// <summary>
+    /// Provider failure code for the latest attempt (e.g. "insufficient_funds", "account_closed").
+    /// </summary>
+    [MaxLength(100)]
+    public string? FailureCode { get; set; }
+
+    /// <summary>
+    /// Classification of the latest failure (NONE, PENDING, TEMPORARY, PERMANENT). Determines
+    /// whether the PAD is retried or the backup card is charged.
+    /// </summary>
+    [MaxLength(50)]
+    public string? FailureCategory { get; set; }
     /// <summary>
     /// Date and time record was captured
     /// </summary>

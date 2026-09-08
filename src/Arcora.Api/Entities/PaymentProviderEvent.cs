@@ -47,7 +47,7 @@ public class PaymentProviderEvent
     /// JSON payload of the event
     /// </summary>
     [Required]
-    [MaxLength(256)]
+    [Column(TypeName = "nvarchar(max)")]
     public string? Payload { get; set; }
 
     /// <summary>

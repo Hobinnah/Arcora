@@ -28,7 +28,7 @@ using Arcora.Api;
 using Azure.Identity;
 using Azure.Storage.Blobs;
 using Microsoft.Extensions.Azure;
-
+using Arcora.Payments.DependencyInjection;
 
 
 
@@ -181,6 +181,8 @@ namespace Arcora.Api.Extensions
              services.AddTransient<IPaymentAttemptRepository, PaymentAttemptRepository>();
              services.AddTransient<IPaymentIntentService, PaymentIntentService>();
              services.AddTransient<IPaymentIntentRepository, PaymentIntentRepository>();
+             services.AddTransient<IRentCollectionOrchestrator, RentCollectionOrchestrator>();
+             services.AddTransient<IPaymentOnboardingService, PaymentOnboardingService>();
              services.AddTransient<IOrganizationStatementService, OrganizationStatementService>();
              services.AddTransient<IOrganizationStatementRepository, OrganizationStatementRepository>();
              services.AddTransient<IAutopayConsentAuditService, AutopayConsentAuditService>();
@@ -598,6 +600,11 @@ namespace Arcora.Api.Extensions
              });
             #endregion
 
+
+            services.AddArcoraPayments(configuration);
+
+            services.Configure<RentCollectionOptions>(configuration.GetSection(RentCollectionOptions.SectionName));
+            services.AddHostedService<RecurringRentCollectionService>();
 
             return services;
         }

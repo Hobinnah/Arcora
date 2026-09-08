@@ -67,10 +67,69 @@ public static class DbSeeder
             // listing seed so they can still populate once the referenced users exist.
             await SeedOrganizationMembersAsync(context, logger);
             await SeedTenancyGraphAsync(context, logger);
+            await SeedPlatformFeesAsync(context, logger);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "An error occurred while seeding the database.");
+        }
+    }
+
+    /// <summary>
+    /// Seeds a global platform booking fee (5% of first month's rent) charged when a booking is made
+    /// through this platform. The fee references the identity-generated "BOOKING FEE" platform fee type
+    /// by name, so it is seeded after the fee types are persisted. Idempotent.
+    /// </summary>
+    private static async Task SeedPlatformFeesAsync(ArcoraDbContext context, ILogger logger)
+    {
+        try
+        {
+            var bookingFeeType = await context.FeeTypes
+                .FirstOrDefaultAsync(ft => ft.Name == "BOOKING FEE" && ft.IsPlatformFee == true);
+
+            if (bookingFeeType == null)
+            {
+                // The fee type may not exist yet on an already-seeded database (the core seed block is
+                // skipped once listings exist). Create it here so the platform fee can reference it.
+                bookingFeeType = new FeeType
+                {
+                    Name = "BOOKING FEE",
+                    IsPlatformFee = true,
+                    CapturedDate = DateTime.UtcNow,
+                    CapturedBy = "SYSTEM_SEED"
+                };
+                context.FeeTypes.Add(bookingFeeType);
+                await context.SaveChangesAsync();
+            }
+
+            if (await context.Fees.AnyAsync(f => f.FeeTypeID == bookingFeeType.FeeTypeID))
+            {
+                return;
+            }
+
+            context.Fees.Add(new Fee
+            {
+                FeeID = Guid.NewGuid(),
+                FeeTypeID = bookingFeeType.FeeTypeID,
+                OrganizationID = null, // Global platform fee applies to all organizations.
+                Code = "PLATFORM-BOOKING-5PCT",
+                Name = "Platform Booking Fee",
+                CalculationType = "PERCENTAGE",
+                PercentageRate = 5m,
+                Currency = "CAD",
+                IsTaxable = false,
+                EffectiveFrom = DateTime.UtcNow.AddYears(-1),
+                IsActive = true,
+                CapturedDate = DateTime.UtcNow,
+                CapturedBy = "SYSTEM_SEED"
+            });
+
+            await context.SaveChangesAsync();
+            logger.LogInformation("Seed complete: inserted platform booking fee (5%).");
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Skipped seeding platform booking fee.");
         }
     }
 
@@ -80,7 +139,6 @@ public static class DbSeeder
         {
             if (await context.OrganizationMembers.AnyAsync())
                 return;
-
             context.OrganizationMembers.AddRange(SeedData.OrganizationMembers);
             await context.SaveChangesAsync();
             logger.LogInformation("Seed complete: inserted organization members.");

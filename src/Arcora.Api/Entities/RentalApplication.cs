@@ -143,6 +143,10 @@ public class RentalApplication
     /// </summary>
     public bool? VerificationAuthorization { get; set; } = false;
     /// <summary>
+    /// Indicates whether the applicant attested that the information provided is correct
+    /// </summary>
+    public bool? AttestationProvidedInfoIsCorrect { get; set; } = false;
+    /// <summary>
     /// Record creation date
     /// </summary>
     public DateTime? CapturedDate { get; set; }

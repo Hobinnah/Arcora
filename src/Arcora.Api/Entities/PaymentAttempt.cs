@@ -28,6 +28,25 @@ public class PaymentAttempt
     public int AttemptNumber { get; set; }
 
     /// <summary>
+    /// FK to the PaymentMethod used for this attempt. Distinguishes a PAD attempt from a
+    /// card-fallback attempt on the same intent.
+    /// </summary>
+    public Guid? PaymentMethodID { get; set; }
+
+    /// <summary>
+    /// Payment rail/kind used for this attempt (e.g. "PAD" or "CARD").
+    /// </summary>
+    [MaxLength(50)]
+    public string? MethodKind { get; set; }
+
+    /// <summary>
+    /// Classification of the failure that drives the retry/fallback state machine
+    /// (NONE, PENDING, TEMPORARY, PERMANENT).
+    /// </summary>
+    [MaxLength(50)]
+    public string? FailureCategory { get; set; }
+
+    /// <summary>
     /// Amount attempted
     /// </summary>
     [Required]

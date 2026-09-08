@@ -16,10 +16,10 @@ public class SecurityDeposit
     public Guid SecurityDepositID { get; set; }
 
     /// <summary>
-    /// FK to Lease
+    /// FK to Lease. Nullable because the security deposit is recorded when the host approves the
+    /// rental application - before a specific lease exists - and is later associated with the lease.
     /// </summary>
-    [Required]
-    public Guid LeaseID { get; set; }
+    public Guid? LeaseID { get; set; }
 
     /// <summary>
     /// FK to Tenant

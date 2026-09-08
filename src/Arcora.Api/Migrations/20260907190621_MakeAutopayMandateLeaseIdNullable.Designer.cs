@@ -4,6 +4,7 @@ using Arcora.Api;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Arcora.Api.Migrations
 {
     [DbContext(typeof(ArcoraDbContext))]
-    partial class ArcoraDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260907190621_MakeAutopayMandateLeaseIdNullable")]
+    partial class MakeAutopayMandateLeaseIdNullable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -4403,9 +4406,6 @@ namespace Arcora.Api.Migrations
                     b.Property<DateTime?>("ApprovedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<bool?>("AttestationProvidedInfoIsCorrect")
-                        .HasColumnType("bit");
-
                     b.Property<string>("CapturedBy")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
@@ -4694,7 +4694,7 @@ namespace Arcora.Api.Migrations
                     b.Property<DateTime?>("HeldAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<Guid?>("LeaseID")
+                    b.Property<Guid>("LeaseID")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid>("OrganizationID")
@@ -7111,7 +7111,8 @@ namespace Arcora.Api.Migrations
                     b.HasOne("Arcora.Api.Entities.Lease", "Lease")
                         .WithMany()
                         .HasForeignKey("LeaseID")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
 
                     b.HasOne("Arcora.Api.Entities.Organization", "Organization")
                         .WithMany()

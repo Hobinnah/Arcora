@@ -16,10 +16,10 @@ public class AutopayMandate
     public Guid AutopayMandateID { get; set; }
 
     /// <summary>
-    /// FK to Lease
+    /// FK to Lease. Nullable because the Canadian PAD (ACSS) mandate is established during tenant
+    /// onboarding - before a specific lease exists - and is later associated with the lease.
     /// </summary>
-    [Required]
-    public Guid LeaseID { get; set; }
+    public Guid? LeaseID { get; set; }
     /// <summary>
     /// 
     /// </summary>

@@ -1123,7 +1123,8 @@ public static class SeedData
         new() { Name = "LATE FEE", IsPlatformFee = false, CapturedDate = Now, CapturedBy = SystemUser },
         new() { Name = "REPAIR", IsPlatformFee = false, CapturedDate = Now, CapturedBy = SystemUser },
         new() { Name = "DISCOUNT", IsPlatformFee = false, CapturedDate = Now, CapturedBy = SystemUser },
-        new() { Name = "CREDIT", IsPlatformFee = false, CapturedDate = Now, CapturedBy = SystemUser }
+        new() { Name = "CREDIT", IsPlatformFee = false, CapturedDate = Now, CapturedBy = SystemUser },
+        new() { Name = "BOOKING FEE", IsPlatformFee = true, CapturedDate = Now, CapturedBy = SystemUser }
     };
 
     /// <summary>Tax rates by province.</summary>
