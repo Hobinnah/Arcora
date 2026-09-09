@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<PaymentReminder>> GetPaymentReminderAsync()
         {
-            return await this.context.PaymentReminders.AsNoTracking().Include(x => x.InvoiceMaster).ToListAsync();
+            return await ApplyDefaultOrder(this.context.PaymentReminders.AsNoTracking().Include(x => x.InvoiceMaster)).ToListAsync();
         }
 
         public async Task<bool> HasPaymentRemindersAsync()

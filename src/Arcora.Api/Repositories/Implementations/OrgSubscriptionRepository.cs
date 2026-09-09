@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<OrgSubscription>> GetOrgSubscriptionAsync()
         {
-            return await this.context.OrgSubscriptions.AsNoTracking().Include(x => x.Organization).Include(x => x.SubscriptionPlan).ToListAsync();
+            return await ApplyDefaultOrder(this.context.OrgSubscriptions.AsNoTracking().Include(x => x.Organization).Include(x => x.SubscriptionPlan)).ToListAsync();
         }
 
         public async Task<bool> HasOrgSubscriptionsAsync()

@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<Property>> GetPropertyAsync()
         {
-            return await this.context.Properties.AsNoTracking().Include(x => x.Organization).Include(x => x.Address).ToListAsync();
+            return await ApplyDefaultOrder(this.context.Properties.AsNoTracking().Include(x => x.Organization).Include(x => x.Address)).ToListAsync();
         }
 
         public async Task<bool> HasPropertiesAsync()

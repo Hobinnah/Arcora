@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<Address>> GetAddressAsync()
         {
-            return await this.context.Addresses.AsNoTracking().Include(x => x.Organization).ToListAsync();
+            return await ApplyDefaultOrder(this.context.Addresses.AsNoTracking().Include(x => x.Organization)).ToListAsync();
         }
 
         public async Task<bool> HasAddressesAsync()

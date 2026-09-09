@@ -15,8 +15,8 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<AuditLog>> GetAuditLogAsync()
         {
-            return await this.context.AuditLogs.AsNoTracking().Include(x => x.ActorUser) // Navigation property for User entity.
-            .Include(x => x.Tenant).Include(x => x.OrganizationMember).Include(x => x.Organization).ToListAsync();
+            return await ApplyDefaultOrder(this.context.AuditLogs.AsNoTracking().Include(x => x.ActorUser) // Navigation property for User entity.
+            .Include(x => x.Tenant).Include(x => x.OrganizationMember).Include(x => x.Organization)).ToListAsync();
         }
 
         public async Task<bool> HasAuditLogsAsync()

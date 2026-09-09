@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<SecurityDepositTransaction>> GetSecurityDepositTransactionAsync()
         {
-            return await this.context.SecurityDepositTransactions.AsNoTracking().Include(x => x.SecurityDeposit).Include(x => x.Payment).Include(x => x.Refund).Include(x => x.InvoiceMaster).Include(x => x.InvoiceDetail).ToListAsync();
+            return await ApplyDefaultOrder(this.context.SecurityDepositTransactions.AsNoTracking().Include(x => x.SecurityDeposit).Include(x => x.Payment).Include(x => x.Refund).Include(x => x.InvoiceMaster).Include(x => x.InvoiceDetail)).ToListAsync();
         }
 
         public async Task<bool> HasSecurityDepositTransactionsAsync()

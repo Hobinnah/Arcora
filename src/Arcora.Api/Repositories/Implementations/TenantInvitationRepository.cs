@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<TenantInvitation>> GetTenantInvitationAsync()
         {
-            return await this.context.TenantInvitations.AsNoTracking().Include(x => x.Lease).Include(x => x.RentalApplication).ToListAsync();
+            return await ApplyDefaultOrder(this.context.TenantInvitations.AsNoTracking().Include(x => x.Lease).Include(x => x.RentalApplication)).ToListAsync();
         }
 
         public async Task<bool> HasTenantInvitationsAsync()

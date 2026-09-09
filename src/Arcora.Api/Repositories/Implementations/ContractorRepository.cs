@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<Contractor>> GetContractorAsync()
         {
-            return await this.context.Contractors.AsNoTracking().Include(x => x.Organization).ToListAsync();
+            return await ApplyDefaultOrder(this.context.Contractors.AsNoTracking().Include(x => x.Organization)).ToListAsync();
         }
 
         public async Task<bool> HasContractorsAsync()

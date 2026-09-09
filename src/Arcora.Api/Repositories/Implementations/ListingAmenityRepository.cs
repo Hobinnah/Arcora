@@ -15,8 +15,8 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<ListingAmenity>> GetListingAmenityAsync()
         {
-            return await this.context.ListingAmenities.AsNoTracking().Include(x => x.Listing).Include(x => x.AmenityCatalog) // FK to AmenityCatalog
-            .ToListAsync();
+            return await ApplyDefaultOrder(this.context.ListingAmenities.AsNoTracking().Include(x => x.Listing).Include(x => x.AmenityCatalog) // FK to AmenityCatalog
+            ).ToListAsync();
         }
 
         public async Task<bool> HasListingAmenitiesAsync()

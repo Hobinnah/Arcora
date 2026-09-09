@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<Chargeback>> GetChargebackAsync()
         {
-            return await this.context.ChargeBacks.AsNoTracking().Include(x => x.Payment).Include(x => x.Tenant).Include(x => x.Organization).ToListAsync();
+            return await ApplyDefaultOrder(this.context.ChargeBacks.AsNoTracking().Include(x => x.Payment).Include(x => x.Tenant).Include(x => x.Organization)).ToListAsync();
         }
 
         public async Task<bool> HasChargebacksAsync()

@@ -2,16 +2,56 @@
 using Arcora.Api.Repositories.Interfaces;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using System.Collections.Concurrent;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace Arcora.Api.Repositories.Implementations
 {
     public class Repository<T> : IRepository<T> where T : class
     {
+        /// <summary>
+        /// Name of the audit column used to surface the most recent record first.
+        /// </summary>
+        private const string CapturedDateProperty = "CapturedDate";
+
+        /// <summary>
+        /// Caches, per entity type, the property metadata used to order by <see cref="CapturedDateProperty"/>.
+        /// A value of <c>null</c> means the entity has no CapturedDate column, so no ordering is applied.
+        /// </summary>
+        private static readonly ConcurrentDictionary<Type, PropertyInfo?> _capturedDateProperties = new();
+
         protected ArcoraDbContext _context;
         public Repository(ArcoraDbContext context)
         {
             this._context = context;
+        }
+
+        /// <summary>
+        /// Applies a default ordering that puts the most recent record on top using the
+        /// <see cref="CapturedDateProperty"/> column, when the entity exposes it. Entities without a
+        /// CapturedDate column are returned unordered so behaviour is preserved for them.
+        /// </summary>
+        public static IQueryable<T> ApplyDefaultOrder(IQueryable<T> query)
+        {
+            var property = _capturedDateProperties.GetOrAdd(typeof(T), static entityType =>
+                entityType.GetProperty(CapturedDateProperty, BindingFlags.Public | BindingFlags.Instance));
+
+            if (property == null)
+            {
+                return query;
+            }
+
+            // Build "x => x.CapturedDate" with the property's real type so EF Core translates it to SQL.
+            var parameter = Expression.Parameter(typeof(T), "x");
+            var propertyAccess = Expression.Property(parameter, property);
+            var keySelector = Expression.Lambda(propertyAccess, parameter);
+
+            var orderByDescending = typeof(Queryable).GetMethods()
+                .First(m => m.Name == nameof(Queryable.OrderByDescending) && m.GetParameters().Length == 2)
+                .MakeGenericMethod(typeof(T), property.PropertyType);
+
+            return (IQueryable<T>)orderByDescending.Invoke(null, new object[] { query, keySelector })!;
         }
 
         public Task Save() => _context.SaveChangesAsync();
@@ -52,17 +92,17 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<T?> FirstOrDefault()
         {
-            return await _context.Set<T>().AsNoTracking().FirstOrDefaultAsync();
+            return await ApplyDefaultOrder(_context.Set<T>().AsNoTracking()).FirstOrDefaultAsync();
         }
 
         public async Task<IEnumerable<T?>> Find(Expression<Func<T, bool>> predicate)
         {
-            return await _context.Set<T>().AsNoTracking().Where(predicate).ToListAsync();
+            return await ApplyDefaultOrder(_context.Set<T>().AsNoTracking().Where(predicate)).ToListAsync();
         }
 
         public async Task<IEnumerable<T?>> FindWhere(Expression<Func<T, bool>> predicate)
         {
-            return await _context.Set<T>().AsNoTracking().Where(predicate).ToListAsync();
+            return await ApplyDefaultOrder(_context.Set<T>().AsNoTracking().Where(predicate)).ToListAsync();
         }
 
         public async Task<T?> Single(Expression<Func<T, bool>> predicate)
@@ -72,7 +112,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<IEnumerable<T?>> GetAll()
         {
-            return await _context.Set<T>().AsNoTracking().ToListAsync();
+            return await ApplyDefaultOrder(_context.Set<T>().AsNoTracking()).ToListAsync();
         }
 
         public async Task<T?> GetByID(int id)

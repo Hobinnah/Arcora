@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<ListingPolicy>> GetListingPolicyAsync()
         {
-            return await this.context.ListingPolicies.AsNoTracking().Include(x => x.Listing).ToListAsync();
+            return await ApplyDefaultOrder(this.context.ListingPolicies.AsNoTracking().Include(x => x.Listing)).ToListAsync();
         }
 
         public async Task<bool> HasListingPoliciesAsync()

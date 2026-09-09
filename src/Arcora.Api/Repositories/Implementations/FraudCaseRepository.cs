@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<FraudCase>> GetFraudCaseAsync()
         {
-            return await this.context.FraudCases.AsNoTracking().Include(x => x.Tenant).Include(x => x.Organization).Include(x => x.Lease).Include(x => x.PaymentIntent).Include(x => x.Payment).Include(x => x.Chargeback).ToListAsync();
+            return await ApplyDefaultOrder(this.context.FraudCases.AsNoTracking().Include(x => x.Tenant).Include(x => x.Organization).Include(x => x.Lease).Include(x => x.PaymentIntent).Include(x => x.Payment).Include(x => x.Chargeback)).ToListAsync();
         }
 
         public async Task<bool> HasFraudCasesAsync()

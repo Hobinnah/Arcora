@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<TenantScreeningCheck>> GetTenantScreeningCheckAsync()
         {
-            return await this.context.TenantScreeningChecks.AsNoTracking().Include(x => x.Tenant).ToListAsync();
+            return await ApplyDefaultOrder(this.context.TenantScreeningChecks.AsNoTracking().Include(x => x.Tenant)).ToListAsync();
         }
 
         public async Task<bool> HasTenantScreeningChecksAsync()

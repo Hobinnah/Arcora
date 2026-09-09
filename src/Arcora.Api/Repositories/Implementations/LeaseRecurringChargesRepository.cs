@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<LeaseRecurringCharges>> GetLeaseRecurringChargesAsync()
         {
-            return await this.context.LeaseRecurringCharges.AsNoTracking().Include(x => x.Lease).Include(x => x.Fee).ToListAsync();
+            return await ApplyDefaultOrder(this.context.LeaseRecurringCharges.AsNoTracking().Include(x => x.Lease).Include(x => x.Fee)).ToListAsync();
         }
 
         public async Task<bool> HasLeaseRecurringChargesAsync()

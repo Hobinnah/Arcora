@@ -15,8 +15,8 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<Notification>> GetNotificationAsync()
         {
-            return await this.context.Notifications.AsNoTracking().Include(x => x.RecipientUser) // FK to User
-            .Include(x => x.Tenant).Include(x => x.Organization).Include(x => x.OrganizationMember).ToListAsync();
+            return await ApplyDefaultOrder(this.context.Notifications.AsNoTracking().Include(x => x.RecipientUser) // FK to User
+            .Include(x => x.Tenant).Include(x => x.Organization).Include(x => x.OrganizationMember)).ToListAsync();
         }
 
         public async Task<bool> HasNotificationsAsync()

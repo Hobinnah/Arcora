@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<ReceiptMaster>> GetReceiptMasterAsync()
         {
-            return await this.context.ReceiptMasters.AsNoTracking().Include(x => x.Payment).Include(x => x.Tenant).ToListAsync();
+            return await ApplyDefaultOrder(this.context.ReceiptMasters.AsNoTracking().Include(x => x.Payment).Include(x => x.Tenant)).ToListAsync();
         }
 
         public async Task<bool> HasReceiptMastersAsync()

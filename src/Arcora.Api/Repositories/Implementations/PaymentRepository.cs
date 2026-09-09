@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<Payment>> GetPaymentAsync()
         {
-            return await this.context.Payments.AsNoTracking().Include(x => x.PaymentIntent).Include(x => x.Tenant).ToListAsync();
+            return await ApplyDefaultOrder(this.context.Payments.AsNoTracking().Include(x => x.PaymentIntent).Include(x => x.Tenant)).ToListAsync();
         }
 
         public async Task<bool> HasPaymentsAsync()

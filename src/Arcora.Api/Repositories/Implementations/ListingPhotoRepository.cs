@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<ListingPhoto>> GetListingPhotoAsync()
         {
-            return await this.context.ListingPhotos.AsNoTracking().Include(x => x.Listing).ToListAsync();
+            return await ApplyDefaultOrder(this.context.ListingPhotos.AsNoTracking().Include(x => x.Listing)).ToListAsync();
         }
 
         public async Task<bool> HasListingPhotosAsync()

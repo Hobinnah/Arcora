@@ -15,11 +15,11 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<ConversationMessage>> GetConversationMessageAsync()
         {
-            return await this.context.ConversationMessages.AsNoTracking().Include(x => x.Conversation).Include(x => x.SenderUser) // FK to User
+            return await ApplyDefaultOrder(this.context.ConversationMessages.AsNoTracking().Include(x => x.Conversation).Include(x => x.SenderUser) // FK to User
             .Include(x => x.SenderTenant) // FK to Tenant
             .Include(x => x.SenderOrganizationMember) // FK to OrganizationMember
             .Include(x => x.ReplyToMessageConversationMessage) // FK to ConversationMessage (reply)
-            .ToListAsync();
+            ).ToListAsync();
         }
 
         public async Task<bool> HasConversationMessagesAsync()

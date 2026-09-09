@@ -15,17 +15,17 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<OrganizationMember>> GetOrganizationMembersAsync()
         {
-            return await this.context.OrganizationMembers.AsNoTracking().Include(x => x.Organization).Include(x => x.User).ToListAsync();
+            return await ApplyDefaultOrder(this.context.OrganizationMembers.AsNoTracking().Include(x => x.Organization).Include(x => x.User)).ToListAsync();
         }
 
         public async Task<List<OrganizationMember>> GetMemberOrganizationsAsync(long userID)
         {
-            return await this.context.OrganizationMembers
+            return await ApplyDefaultOrder(this.context.OrganizationMembers
                 .AsNoTracking()
                 .Include(x => x.Organization)
                 .Include(x => x.User)
                 .Where(x => x.UserID == userID)
-                .ToListAsync();
+                ).ToListAsync();
         }
 
         public async Task<bool> HasOrganizationMembersAsync()

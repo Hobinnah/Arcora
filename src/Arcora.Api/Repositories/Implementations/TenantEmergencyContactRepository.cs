@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<TenantEmergencyContact>> GetTenantEmergencyContactAsync()
         {
-            return await this.context.TenantEmergencyContacts.AsNoTracking().Include(x => x.Tenant).ToListAsync();
+            return await ApplyDefaultOrder(this.context.TenantEmergencyContacts.AsNoTracking().Include(x => x.Tenant)).ToListAsync();
         }
 
         public async Task<bool> HasTenantEmergencyContactsAsync()

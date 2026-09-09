@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<Fee>> GetFeeAsync()
         {
-            return await this.context.Fees.AsNoTracking().Include(x => x.FeeType).Include(x => x.Organization).ToListAsync();
+            return await ApplyDefaultOrder(this.context.Fees.AsNoTracking().Include(x => x.FeeType).Include(x => x.Organization)).ToListAsync();
         }
 
         public async Task<bool> HasFeesAsync()

@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<Dispute>> GetDisputeAsync()
         {
-            return await this.context.Disputes.AsNoTracking().Include(x => x.Tenant).Include(x => x.Organization).Include(x => x.Lease).Include(x => x.InvoiceMaster).Include(x => x.Payment).Include(x => x.Chargeback).Include(x => x.MaintenanceRequest).ToListAsync();
+            return await ApplyDefaultOrder(this.context.Disputes.AsNoTracking().Include(x => x.Tenant).Include(x => x.Organization).Include(x => x.Lease).Include(x => x.InvoiceMaster).Include(x => x.Payment).Include(x => x.Chargeback).Include(x => x.MaintenanceRequest)).ToListAsync();
         }
 
         public async Task<bool> HasDisputesAsync()

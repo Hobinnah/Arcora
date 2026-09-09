@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<LedgerEntry>> GetLedgerEntryAsync()
         {
-            return await this.context.LedgerEntries.AsNoTracking().Include(x => x.LedgerTransaction).Include(x => x.LedgerAccount).ToListAsync();
+            return await ApplyDefaultOrder(this.context.LedgerEntries.AsNoTracking().Include(x => x.LedgerTransaction).Include(x => x.LedgerAccount)).ToListAsync();
         }
 
         public async Task<bool> HasLedgerEntriesAsync()

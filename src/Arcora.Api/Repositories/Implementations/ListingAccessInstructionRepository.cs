@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<ListingAccessInstruction>> GetListingAccessInstructionAsync()
         {
-            return await this.context.ListingAccessInstructions.AsNoTracking().Include(x => x.Listing).Include(x => x.Lease).ToListAsync();
+            return await ApplyDefaultOrder(this.context.ListingAccessInstructions.AsNoTracking().Include(x => x.Listing).Include(x => x.Lease)).ToListAsync();
         }
 
         public async Task<bool> HasListingAccessInstructionsAsync()

@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<CreditReportingEnrollment>> GetCreditReportingEnrollmentAsync()
         {
-            return await this.context.CreditReportingEnrollments.AsNoTracking().Include(x => x.Lease).Include(x => x.Tenant).ToListAsync();
+            return await ApplyDefaultOrder(this.context.CreditReportingEnrollments.AsNoTracking().Include(x => x.Lease).Include(x => x.Tenant)).ToListAsync();
         }
 
         public async Task<bool> HasCreditReportingEnrollmentsAsync()

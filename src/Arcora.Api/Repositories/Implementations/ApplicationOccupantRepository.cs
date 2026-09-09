@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<ApplicationOccupant>> GetApplicationOccupantAsync()
         {
-            return await this.context.ApplicationOccupants.AsNoTracking().Include(x => x.Tenant).Include(x => x.User).ToListAsync();
+            return await ApplyDefaultOrder(this.context.ApplicationOccupants.AsNoTracking().Include(x => x.Tenant).Include(x => x.User)).ToListAsync();
         }
 
         public async Task<bool> HasApplicationOccupantsAsync()

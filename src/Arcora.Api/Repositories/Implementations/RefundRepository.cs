@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<Refund>> GetRefundAsync()
         {
-            return await this.context.Refunds.AsNoTracking().Include(x => x.Payment).Include(x => x.Tenant).ToListAsync();
+            return await ApplyDefaultOrder(this.context.Refunds.AsNoTracking().Include(x => x.Payment).Include(x => x.Tenant)).ToListAsync();
         }
 
         public async Task<bool> HasRefundsAsync()

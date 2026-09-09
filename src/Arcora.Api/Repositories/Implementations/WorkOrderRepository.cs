@@ -15,8 +15,8 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<WorkOrder>> GetWorkOrderAsync()
         {
-            return await this.context.WorkOrders.AsNoTracking().Include(x => x.MaintenanceRequest).Include(x => x.Contractor).Include(x => x.AssignedOrganizationMember) // FK to OrganizationMember
-            .Include(x => x.Lease).ToListAsync();
+            return await ApplyDefaultOrder(this.context.WorkOrders.AsNoTracking().Include(x => x.MaintenanceRequest).Include(x => x.Contractor).Include(x => x.AssignedOrganizationMember) // FK to OrganizationMember
+            .Include(x => x.Lease)).ToListAsync();
         }
 
         public async Task<bool> HasWorkOrdersAsync()

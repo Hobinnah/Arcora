@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<AutopayConsentAudit>> GetAutopayConsentAuditAsync()
         {
-            return await this.context.AutopayConsentAudits.AsNoTracking().Include(x => x.AutopayMandate).Include(x => x.Tenant).ToListAsync();
+            return await ApplyDefaultOrder(this.context.AutopayConsentAudits.AsNoTracking().Include(x => x.AutopayMandate).Include(x => x.Tenant)).ToListAsync();
         }
 
         public async Task<bool> HasAutopayConsentAuditsAsync()

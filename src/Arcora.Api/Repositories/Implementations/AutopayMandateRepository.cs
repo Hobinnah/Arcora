@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<AutopayMandate>> GetAutopayMandateAsync()
         {
-            return await this.context.AutopayMandates.AsNoTracking().Include(x => x.Lease).Include(x => x.Tenant).Include(x => x.PaymentMethod).ToListAsync();
+            return await ApplyDefaultOrder(this.context.AutopayMandates.AsNoTracking().Include(x => x.Lease).Include(x => x.Tenant).Include(x => x.PaymentMethod)).ToListAsync();
         }
 
         public async Task<bool> HasAutopayMandatesAsync()

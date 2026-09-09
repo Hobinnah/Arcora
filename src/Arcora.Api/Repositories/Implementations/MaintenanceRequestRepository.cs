@@ -15,8 +15,8 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<MaintenanceRequest>> GetMaintenanceRequestAsync()
         {
-            return await this.context.MaintenanceRequests.AsNoTracking().Include(x => x.Property).Include(x => x.RentalUnit).Include(x => x.Listing).Include(x => x.Lease).Include(x => x.SubmittedByTenant) // FK to Tenant
-            .Include(x => x.Category).ToListAsync();
+            return await ApplyDefaultOrder(this.context.MaintenanceRequests.AsNoTracking().Include(x => x.Property).Include(x => x.RentalUnit).Include(x => x.Listing).Include(x => x.Lease).Include(x => x.SubmittedByTenant) // FK to Tenant
+            .Include(x => x.Category)).ToListAsync();
         }
 
         public async Task<bool> HasMaintenanceRequestsAsync()

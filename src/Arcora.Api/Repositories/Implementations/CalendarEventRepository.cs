@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<CalendarEvent>> GetCalendarEventAsync()
         {
-            return await this.context.CalendarEvents.AsNoTracking().Include(x => x.Listing).Include(x => x.Lease).Include(x => x.RentalApplication).Include(x => x.ReservationHold).Include(x => x.MaintenanceRequest).ToListAsync();
+            return await ApplyDefaultOrder(this.context.CalendarEvents.AsNoTracking().Include(x => x.Listing).Include(x => x.Lease).Include(x => x.RentalApplication).Include(x => x.ReservationHold).Include(x => x.MaintenanceRequest)).ToListAsync();
         }
 
         public async Task<bool> HasCalendarEventsAsync()

@@ -19,13 +19,13 @@ namespace Arcora.Api.Repositories.Implementations
         public async Task<List<Listing>> GetListingsAsync()
         {
             // Fetching all listings loads navigation data only, to keep the operation efficient.
-            return await this.context.Listings.AsNoTracking()
+            return await ApplyDefaultOrder(this.context.Listings.AsNoTracking()
                 .Include(x => x.RentalUnit)!.ThenInclude(u => u!.Property)!.ThenInclude(p => p!.Address)
                 .Include(x => x.RentalUnit)!.ThenInclude(u => u!.UnitType)
                 .Include(x => x.ListingType)
                 .Include(x => x.Organization)
                 .Include(x => x.ListingPhotos)
-                .ToListAsync();
+                ).ToListAsync();
         }
 
         public async Task<Listing?> GetListingAsync(Guid id)

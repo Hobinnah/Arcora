@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<InvoiceDetail>> GetInvoiceDetailAsync()
         {
-            return await this.context.InvoiceDetails.AsNoTracking().Include(x => x.InvoiceMaster).Include(x => x.Fee).ToListAsync();
+            return await ApplyDefaultOrder(this.context.InvoiceDetails.AsNoTracking().Include(x => x.InvoiceMaster).Include(x => x.Fee)).ToListAsync();
         }
 
         public async Task<bool> HasInvoiceDetailsAsync()

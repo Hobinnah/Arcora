@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<TenantEmployment>> GetTenantEmploymentAsync()
         {
-            return await this.context.TenantEmployments.AsNoTracking().Include(x => x.Tenant).ToListAsync();
+            return await ApplyDefaultOrder(this.context.TenantEmployments.AsNoTracking().Include(x => x.Tenant)).ToListAsync();
         }
 
         public async Task<bool> HasTenantEmploymentsAsync()

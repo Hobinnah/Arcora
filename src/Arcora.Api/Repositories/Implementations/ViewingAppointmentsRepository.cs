@@ -15,9 +15,9 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<ViewingAppointments>> GetViewingAppointmentsAsync()
         {
-            return await this.context.ViewingAppointments.AsNoTracking().Include(x => x.Listing).Include(x => x.RequestedByUser) // FK to User who requested the appointment
+            return await ApplyDefaultOrder(this.context.ViewingAppointments.AsNoTracking().Include(x => x.Listing).Include(x => x.RequestedByUser) // FK to User who requested the appointment
             .Include(x => x.Tenant).Include(x => x.AssignedOrganizationMember) // FK to OrganizationMember assigned to the appointment
-            .ToListAsync();
+            ).ToListAsync();
         }
 
         public async Task<bool> HasViewingAppointmentsAsync()

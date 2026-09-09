@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<OrganizationStatement>> GetOrganizationStatementAsync()
         {
-            return await this.context.OrganizationStatements.AsNoTracking().Include(x => x.Organization).ToListAsync();
+            return await ApplyDefaultOrder(this.context.OrganizationStatements.AsNoTracking().Include(x => x.Organization)).ToListAsync();
         }
 
         public async Task<bool> HasOrganizationStatementsAsync()

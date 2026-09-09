@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<ReservationHold>> GetReservationHoldAsync()
         {
-            return await this.context.ReservationHolds.AsNoTracking().Include(x => x.Listing).Include(x => x.RentalApplication).Include(x => x.Tenant).ToListAsync();
+            return await ApplyDefaultOrder(this.context.ReservationHolds.AsNoTracking().Include(x => x.Listing).Include(x => x.RentalApplication).Include(x => x.Tenant)).ToListAsync();
         }
 
         public async Task<bool> HasReservationHoldsAsync()

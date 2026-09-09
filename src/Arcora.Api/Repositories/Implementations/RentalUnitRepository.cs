@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<RentalUnit>> GetRentalUnitAsync()
         {
-            return await this.context.RentalUnits.AsNoTracking().Include(x => x.Property).Include(x => x.UnitType).ToListAsync();
+            return await ApplyDefaultOrder(this.context.RentalUnits.AsNoTracking().Include(x => x.Property).Include(x => x.UnitType)).ToListAsync();
         }
 
         public async Task<bool> HasRentalUnitsAsync()

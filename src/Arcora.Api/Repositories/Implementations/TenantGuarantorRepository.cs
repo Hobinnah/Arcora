@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<TenantGuarantor>> GetTenantGuarantorAsync()
         {
-            return await this.context.TenantGuarantors.AsNoTracking().Include(x => x.Tenant).Include(x => x.User).ToListAsync();
+            return await ApplyDefaultOrder(this.context.TenantGuarantors.AsNoTracking().Include(x => x.Tenant).Include(x => x.User)).ToListAsync();
         }
 
         public async Task<bool> HasTenantGuarantorsAsync()

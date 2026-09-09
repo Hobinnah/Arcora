@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<ListingTermPrice>> GetListingTermPriceAsync()
         {
-            return await this.context.ListingTermPrices.AsNoTracking().Include(x => x.Listing).ToListAsync();
+            return await ApplyDefaultOrder(this.context.ListingTermPrices.AsNoTracking().Include(x => x.Listing)).ToListAsync();
         }
 
         public async Task<bool> HasListingTermPricesAsync()

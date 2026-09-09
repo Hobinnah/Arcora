@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<LeaseRenewals>> GetLeaseRenewalsAsync()
         {
-            return await this.context.LeaseRenewals.AsNoTracking().Include(x => x.Lease).ToListAsync();
+            return await ApplyDefaultOrder(this.context.LeaseRenewals.AsNoTracking().Include(x => x.Lease)).ToListAsync();
         }
 
         public async Task<bool> HasLeaseRenewalsAsync()

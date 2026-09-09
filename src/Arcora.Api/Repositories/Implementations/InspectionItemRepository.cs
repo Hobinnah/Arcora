@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<InspectionItem>> GetInspectionItemAsync()
         {
-            return await this.context.InspectionItems.AsNoTracking().Include(x => x.Inspection).ToListAsync();
+            return await ApplyDefaultOrder(this.context.InspectionItems.AsNoTracking().Include(x => x.Inspection)).ToListAsync();
         }
 
         public async Task<bool> HasInspectionItemsAsync()

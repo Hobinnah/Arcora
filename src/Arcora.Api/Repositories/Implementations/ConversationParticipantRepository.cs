@@ -15,7 +15,7 @@ namespace Arcora.Api.Repositories.Implementations
 
         public async Task<List<ConversationParticipant>> GetConversationParticipantAsync()
         {
-            return await this.context.ConversationParticipants.AsNoTracking().Include(x => x.Conversation).Include(x => x.User).Include(x => x.Tenant).Include(x => x.OrganizationMember).ToListAsync();
+            return await ApplyDefaultOrder(this.context.ConversationParticipants.AsNoTracking().Include(x => x.Conversation).Include(x => x.User).Include(x => x.Tenant).Include(x => x.OrganizationMember)).ToListAsync();
         }
 
         public async Task<bool> HasConversationParticipantsAsync()
