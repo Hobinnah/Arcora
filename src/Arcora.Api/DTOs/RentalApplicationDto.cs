@@ -182,4 +182,59 @@ public class RentalApplicationDto
     /// FK to OrganizationMember who reviewed
     /// </summary>
     public OrganizationMemberDto? ReviewedByOrganizationMember { get; set; }
+
+    /// <summary>
+    /// Occupants declared on this application.
+    /// </summary>
+    public ICollection<ApplicationOccupantDto>? ApplicationOccupants { get; set; }
+
+    /// <summary>
+    /// Documents uploaded/attached to this application.
+    /// </summary>
+    public ICollection<LeaseDocumentsDto>? LeaseDocuments { get; set; }
+
+    /// <summary>
+    /// Guarantors named on this application.
+    /// </summary>
+    public ICollection<TenantGuarantorDto>? TenantGuarantors { get; set; }
+
+    /// <summary>
+    /// Emergency contacts captured for this application.
+    /// </summary>
+    public ICollection<TenantEmergencyContactDto>? TenantEmergencyContacts { get; set; }
+
+    /// <summary>
+    /// Employment records captured for this application.
+    /// </summary>
+    public ICollection<TenantEmploymentDto>? TenantEmployments { get; set; }
+
+    /// <summary>
+    /// Screening checks associated with this application.
+    /// </summary>
+    public ICollection<TenantScreeningCheckDto>? TenantScreeningChecks { get; set; }
+
+    /// <summary>
+    /// Invitations related to this application.
+    /// </summary>
+    public ICollection<TenantInvitationDto>? TenantInvitations { get; set; }
+
+    /// <summary>
+    /// Reservation holds related to this application.
+    /// </summary>
+    public ICollection<ReservationHoldDto>? ReservationHolds { get; set; }
+
+    /// <summary>
+    /// Viewing appointments related to this application.
+    /// </summary>
+    public ICollection<ViewingAppointmentsDto>? ViewingAppointments { get; set; }
+
+    /// <summary>
+    /// Calendar events related to this application.
+    /// </summary>
+    public ICollection<CalendarEventDto>? CalendarEvents { get; set; }
+
+    /// <summary>
+    /// Leases created from this application.
+    /// </summary>
+    public ICollection<LeaseDto>? Leases { get; set; }
 }

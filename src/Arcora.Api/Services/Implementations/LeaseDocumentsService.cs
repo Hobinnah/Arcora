@@ -65,7 +65,12 @@ namespace Arcora.Api.Services.Implementations
 
             int totalCount = filteredEntities.Count();
             var pagedEntities = filteredEntities.OrderByDescending(x => x.LeaseDocumentID).Skip((paging!.PageNumber - 1) * paging.PageSize).Take(paging.PageSize).ToList();
-            var pagedDtos = this.mapper.Map<IEnumerable<LeaseDocumentsDto>>(pagedEntities);
+            var pagedDtos = this.mapper.Map<IEnumerable<LeaseDocumentsDto>>(pagedEntities).ToList();
+            foreach (var dto in pagedDtos)
+            {
+                await PopulateReadUrlAsync(dto);
+            }
+
             return new PagedResult<LeaseDocumentsDto>
             {
                 Data = pagedDtos,
@@ -89,7 +94,12 @@ namespace Arcora.Api.Services.Implementations
                     match = await this.leasedocumentsRepository.GetByID(ID);
                 }
 
-                return match == null ? null : this.mapper.Map<LeaseDocumentsDto>(match);
+                if (match == null)
+                    return null;
+
+                var dto = this.mapper.Map<LeaseDocumentsDto>(match);
+                await PopulateReadUrlAsync(dto);
+                return dto;
             }
             catch (Exception er)
             {
@@ -232,7 +242,9 @@ namespace Arcora.Api.Services.Implementations
                 await leasedocumentsRepository.Save();
                 cache.Remove(Cache.LEASEDOCUMENTS.ToString());
 
-                return this.mapper.Map<LeaseDocumentsDto>(leaseDocuments);
+                var dto = this.mapper.Map<LeaseDocumentsDto>(leaseDocuments);
+                await PopulateReadUrlAsync(dto);
+                return dto;
             }
             catch (ArgumentException)
             {
@@ -265,6 +277,26 @@ namespace Arcora.Api.Services.Implementations
             {
                 logger.LogError(er, "An error occurred while downloading LeaseDocument {ID}. Timestamp: {Timestamp}", ID, DateTime.UtcNow);
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// Populates the DTO's <see cref="LeaseDocumentsDto.Url"/> with a freshly generated, short-lived
+        /// read-only SAS URL. The persisted blob URL is private and cannot be opened directly, so a SAS
+        /// URL is generated on every read. Failures are logged but never block the response.
+        /// </summary>
+        private async Task PopulateReadUrlAsync(LeaseDocumentsDto? dto)
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.StorageReference))
+                return;
+
+            try
+            {
+                dto.Url = await fileStorageService.GetReadSasUrlAsync(StorageCategory.Document, dto.StorageReference!);
+            }
+            catch (Exception er)
+            {
+                logger.LogError(er, "Failed to generate read SAS URL for LeaseDocument {ID}. Timestamp: {Timestamp}", dto.LeaseDocumentID, DateTime.UtcNow);
             }
         }
     }

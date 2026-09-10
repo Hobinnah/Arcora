@@ -190,4 +190,59 @@ public class RentalApplication
     /// </summary>
     [ForeignKey(nameof(ReviewedByOrganizationMemberID))]
     public OrganizationMember? ReviewedByOrganizationMember { get; set; }
+
+    /// <summary>
+    /// Occupants declared on this application.
+    /// </summary>
+    public ICollection<ApplicationOccupant>? ApplicationOccupants { get; set; }
+
+    /// <summary>
+    /// Documents uploaded/attached to this application.
+    /// </summary>
+    public ICollection<LeaseDocuments>? LeaseDocuments { get; set; }
+
+    /// <summary>
+    /// Guarantors named on this application.
+    /// </summary>
+    public ICollection<TenantGuarantor>? TenantGuarantors { get; set; }
+
+    /// <summary>
+    /// Emergency contacts captured for this application.
+    /// </summary>
+    public ICollection<TenantEmergencyContact>? TenantEmergencyContacts { get; set; }
+
+    /// <summary>
+    /// Employment records captured for this application.
+    /// </summary>
+    public ICollection<TenantEmployment>? TenantEmployments { get; set; }
+
+    /// <summary>
+    /// Screening checks associated with this application.
+    /// </summary>
+    public ICollection<TenantScreeningCheck>? TenantScreeningChecks { get; set; }
+
+    /// <summary>
+    /// Invitations related to this application.
+    /// </summary>
+    public ICollection<TenantInvitation>? TenantInvitations { get; set; }
+
+    /// <summary>
+    /// Reservation holds related to this application.
+    /// </summary>
+    public ICollection<ReservationHold>? ReservationHolds { get; set; }
+
+    /// <summary>
+    /// Viewing appointments related to this application.
+    /// </summary>
+    public ICollection<ViewingAppointments>? ViewingAppointments { get; set; }
+
+    /// <summary>
+    /// Calendar events related to this application.
+    /// </summary>
+    public ICollection<CalendarEvent>? CalendarEvents { get; set; }
+
+    /// <summary>
+    /// Leases created from this application.
+    /// </summary>
+    public ICollection<Lease>? Leases { get; set; }
 }

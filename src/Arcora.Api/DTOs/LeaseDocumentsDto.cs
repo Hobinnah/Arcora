@@ -117,6 +117,13 @@ public class LeaseDocumentsDto
     /// </summary>
     [MaxLength(100)]
     public string? UpdatedBy { get; set; }
+
+    /// <summary>
+    /// A short-lived, read-only URL (SAS) for accessing the stored document. This is generated on read
+    /// and is not persisted; it may be null if the underlying blob no longer exists.
+    /// </summary>
+    public string? Url { get; set; }
+
     /// <summary>
     /// FK to Lease
     /// </summary>

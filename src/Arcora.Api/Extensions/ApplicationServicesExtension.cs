@@ -261,6 +261,8 @@ namespace Arcora.Api.Extensions
              services.AddTransient<IPreferenceRepository, PreferenceRepository>();
 
                   services.AddTransient<IEmailSender, EmailSender>();
+                  services.AddSingleton<Arcora.Api.Email.IEmailQueue, Arcora.Api.Email.EmailQueue>();
+                  services.AddHostedService<Arcora.Api.Email.EmailQueueBackgroundService>();
             #endregion
 
             #region===========================Auto Mapper Configurations===========================

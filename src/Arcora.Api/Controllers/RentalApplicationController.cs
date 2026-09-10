@@ -91,5 +91,14 @@ namespace Arcora.Api.Controllers
                 return NotFound($"RentalApplication with ID {id} not found.");
             return Ok(rentalapplication);
         }
+
+        // GET: api/RentalApplication/GetApplicationStages
+        [AllowAnonymous]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [HttpGet(Name = "GetApplicationStages")]
+        public ActionResult<IReadOnlyList<RentalApplicationStageDto>> GetApplicationStages([FromServices] IRentalApplicationService rentalapplicationService)
+        {
+            return Ok(rentalapplicationService.GetApplicationStages());
+        }
     }
 }

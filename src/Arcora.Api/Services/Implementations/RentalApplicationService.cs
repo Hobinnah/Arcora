@@ -36,8 +36,9 @@ namespace Arcora.Api.Services.Implementations
         private readonly IPreferenceService preferenceService;
         private readonly IConfiguration configuration;
         private readonly IEmailSender? emailSender;
+        private readonly Arcora.Api.Email.IEmailQueue? emailQueue;
         private readonly IOptions<CacheConfiguration> _options;
-        public RentalApplicationService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<RentalApplicationService> logger, IRentalApplicationRepository rentalapplicationRepository, IRentCollectionOrchestrator rentCollectionOrchestrator, IListingRepository listingRepository, IFeeRepository feeRepository, ISecurityDepositRepository securityDepositRepository, ILeaseRepository leaseRepository, ITenancyTypeRepository tenancyTypeRepository, IApplicationOccupantRepository applicationOccupantRepository, ILeaseDocumentsRepository leaseDocumentsRepository, ITenantGuarantorService tenantGuarantorService, ITenantRepository tenantRepository, IListingPhotoRepository listingPhotoRepository, IOrganizationMemberRepository organizationMemberRepository, IPreferenceService preferenceService, IConfiguration configuration, IEmailSender? emailSender = null)
+        public RentalApplicationService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<RentalApplicationService> logger, IRentalApplicationRepository rentalapplicationRepository, IRentCollectionOrchestrator rentCollectionOrchestrator, IListingRepository listingRepository, IFeeRepository feeRepository, ISecurityDepositRepository securityDepositRepository, ILeaseRepository leaseRepository, ITenancyTypeRepository tenancyTypeRepository, IApplicationOccupantRepository applicationOccupantRepository, ILeaseDocumentsRepository leaseDocumentsRepository, ITenantGuarantorService tenantGuarantorService, ITenantRepository tenantRepository, IListingPhotoRepository listingPhotoRepository, IOrganizationMemberRepository organizationMemberRepository, IPreferenceService preferenceService, IConfiguration configuration, IEmailSender? emailSender = null, Arcora.Api.Email.IEmailQueue? emailQueue = null)
         {
             this.cache = cache;
             this.logger = logger;
@@ -58,6 +59,7 @@ namespace Arcora.Api.Services.Implementations
             this.preferenceService = preferenceService;
             this.configuration = configuration;
             this.emailSender = emailSender;
+            this.emailQueue = emailQueue;
             this._options = options;
             if (this._options.Value.ExpirationTimeInMinutes <= 0)
                 this._options.Value.ExpirationTimeInMinutes = 15;
@@ -116,7 +118,16 @@ namespace Arcora.Api.Services.Implementations
                 }
                 else
                 {
-                    match = await this.rentalapplicationRepository.GetByID(ID);
+                    // Load the full graph (listing, tenant, occupants, documents, guarantors, etc.) so a
+                    // single fetch returns the application with all its associated objects. GetByID alone
+                    // would return a bare entity without navigations.
+                    var all = await this.rentalapplicationRepository.GetRentalApplicationAsync();
+                    if (all != null && all.Any())
+                    {
+                        cache.Set<IEnumerable<RentalApplication>>(Cache.RENTALAPPLICATIONS.ToString(), all, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
+                    }
+
+                    match = all?.FirstOrDefault(x => x != null && x.RentalApplicationID == ID);
                 }
 
                 return match == null ? null : this.mapper.Map<RentalApplicationDto>(match);
@@ -214,11 +225,13 @@ namespace Arcora.Api.Services.Implementations
                 {
                     occupant!.RentalApplicationID = application.RentalApplicationID;
                     await applicationOccupantRepository.Update(occupant);
+                    // Save per iteration: the base Update clears the change tracker on each call, so a
+                    // single Save at the end would only persist the last updated record.
+                    await applicationOccupantRepository.Save();
                 }
 
                 if (occupantList.Any())
                 {
-                    await applicationOccupantRepository.Save();
                     cache.Remove(Cache.APPLICATIONOCCUPANTS.ToString());
                 }
 
@@ -244,15 +257,19 @@ namespace Arcora.Api.Services.Implementations
                     x.TenantID == application.TenantID &&
                     x.ListingID == application.ListingID);
 
-                foreach (var document in documents.Where(d => d != null)!)
+                var documentList = documents?.Where(d => d != null).ToList() ?? new List<LeaseDocuments?>();
+
+                foreach (var document in documentList)
                 {
                     document!.RentalApplicationID = application.RentalApplicationID;
                     await leaseDocumentsRepository.Update(document);
+                    // Save per iteration: the base Update clears the change tracker on each call, so a
+                    // single Save at the end would only persist the last updated record.
+                    await leaseDocumentsRepository.Save();
                 }
 
-                if (documents != null && documents.Any(d => d != null))
+                if (documentList.Any())
                 {
-                    await leaseDocumentsRepository.Save();
                     cache.Remove(Cache.LEASEDOCUMENTS.ToString());
                 }
 
@@ -279,7 +296,7 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                if (emailSender is null)
+                if (emailSender is null && emailQueue is null)
                 {
                     return;
                 }
@@ -342,7 +359,7 @@ namespace Arcora.Api.Services.Implementations
                         companyName: brand,
                         supportEmail: companyEmail);
 
-                    await emailSender.SendEmailAsync(tenantEmail, $"Your application for {listingTitle} — {brand}", tenantHtml);
+                    await DispatchEmailAsync(tenantEmail, $"Your application for {listingTitle} — {brand}", tenantHtml);
                 }
 
                 // ----- Host / landlord notification -----
@@ -374,12 +391,31 @@ namespace Arcora.Api.Services.Implementations
                         companyName: brand,
                         supportEmail: companyEmail);
 
-                    await emailSender.SendEmailAsync(hostEmail, $"New application for {listingTitle} — {brand}", hostHtml);
+                    await DispatchEmailAsync(hostEmail, $"New application for {listingTitle} — {brand}", hostHtml);
                 }
             }
             catch (Exception er)
             {
                 logger.LogError(er, "Failed to send application submitted emails for application {AppId}. Timestamp: {Timestamp}", application.RentalApplicationID, DateTime.UtcNow);
+            }
+        }
+
+        /// <summary>
+        /// Dispatches an email without blocking the request: when a background <see cref="Arcora.Api.Email.IEmailQueue"/>
+        /// is available the message is queued for out-of-band delivery, otherwise it falls back to sending
+        /// inline via <see cref="IEmailSender"/> (e.g. in tests where no queue is registered).
+        /// </summary>
+        private async Task DispatchEmailAsync(string to, string subject, string htmlBody)
+        {
+            if (emailQueue is not null)
+            {
+                await emailQueue.EnqueueAsync(new Arcora.Api.Email.EmailMessage(to, subject, htmlBody));
+                return;
+            }
+
+            if (emailSender is not null)
+            {
+                await emailSender.SendEmailAsync(to, subject, htmlBody);
             }
         }
 
@@ -486,6 +522,30 @@ namespace Arcora.Api.Services.Implementations
             }
 
             return this.mapper.Map<RentalApplicationDto>(rentalApplication);
+        }
+
+        /// <inheritdoc/>
+        public IReadOnlyList<RentalApplicationStageDto> GetApplicationStages()
+        {
+            return Enum.GetValues<RentalApplicationStage>()
+                .Select(stage =>
+                {
+                    var member = typeof(RentalApplicationStage).GetMember(stage.ToString()).FirstOrDefault();
+                    var display = member?
+                        .GetCustomAttributes(typeof(System.ComponentModel.DataAnnotations.DisplayAttribute), false)
+                        .Cast<System.ComponentModel.DataAnnotations.DisplayAttribute>()
+                        .FirstOrDefault();
+
+                    return new RentalApplicationStageDto
+                    {
+                        Value = stage.ToString(),
+                        Name = display?.Name ?? stage.ToString(),
+                        Description = display?.Description ?? string.Empty,
+                        Order = (int)stage
+                    };
+                })
+                .OrderBy(s => s.Order)
+                .ToList();
         }
 
         /// <summary>

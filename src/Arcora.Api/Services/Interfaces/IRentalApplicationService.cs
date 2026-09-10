@@ -46,5 +46,12 @@ namespace Arcora.Api.Services.Interfaces
         /// Returns <see cref = "RentalApplicationDto"/> with the updated rentalapplication if successful, or null if not found.
         /// </returns>
         Task<RentalApplicationDto?> UpdateRentalApplicationStatus(Guid id, string status);
+
+        /// <summary>
+        /// Returns the full set of rental application stages (status values) so the frontend can stay
+        /// in sync with the backend enum.
+        /// </summary>
+        /// <returns>An ordered collection of <see cref="RentalApplicationStageDto"/>.</returns>
+        IReadOnlyList<RentalApplicationStageDto> GetApplicationStages();
     }
 }
