@@ -33,5 +33,14 @@ namespace Arcora.Api.Services.Interfaces
         /// Returns the tenant's onboarding readiness snapshot.
         /// </summary>
         Task<PaymentOnboardingStatusResponse> GetStatusAsync(Guid tenantId, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Applies a provider verification outcome (from a SetupIntent/mandate webhook) to the stored
+        /// payment method, transitioning its <c>VerificationStatus</c> to VERIFIED/PENDING/FAILED and,
+        /// for PAD, activating the associated autopay mandate. Idempotent and safe to call repeatedly.
+        /// </summary>
+        /// <param name="providerPaymentMethodId">The provider payment method id (e.g. Stripe "pm_...").</param>
+        /// <param name="providerStatus">The provider SetupIntent/mandate status (e.g. "succeeded", "active").</param>
+        Task UpdateVerificationStatusAsync(string? providerPaymentMethodId, string? providerStatus, CancellationToken cancellationToken = default);
     }
 }

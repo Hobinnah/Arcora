@@ -102,35 +102,87 @@ public static class DbSeeder
                 await context.SaveChangesAsync();
             }
 
-            if (await context.Fees.AnyAsync(f => f.FeeTypeID == bookingFeeType.FeeTypeID))
+            if (!await context.Fees.AnyAsync(f => f.FeeTypeID == bookingFeeType.FeeTypeID))
             {
-                return;
+                context.Fees.Add(new Fee
+                {
+                    FeeID = Guid.NewGuid(),
+                    FeeTypeID = bookingFeeType.FeeTypeID,
+                    OrganizationID = null, // Global platform fee applies to all organizations.
+                    Code = "PLATFORM-BOOKING-5PCT",
+                    Name = "Platform Booking Fee",
+                    CalculationType = "PERCENTAGE",
+                    PercentageRate = 5m,
+                    Currency = "CAD",
+                    IsTaxable = false,
+                    EffectiveFrom = DateTime.UtcNow.AddYears(-1),
+                    IsActive = true,
+                    CapturedDate = DateTime.UtcNow,
+                    CapturedBy = "SYSTEM_SEED"
+                });
+
+                await context.SaveChangesAsync();
+                logger.LogInformation("Seed complete: inserted platform booking fee (5%).");
             }
 
-            context.Fees.Add(new Fee
-            {
-                FeeID = Guid.NewGuid(),
-                FeeTypeID = bookingFeeType.FeeTypeID,
-                OrganizationID = null, // Global platform fee applies to all organizations.
-                Code = "PLATFORM-BOOKING-5PCT",
-                Name = "Platform Booking Fee",
-                CalculationType = "PERCENTAGE",
-                PercentageRate = 5m,
-                Currency = "CAD",
-                IsTaxable = false,
-                EffectiveFrom = DateTime.UtcNow.AddYears(-1),
-                IsActive = true,
-                CapturedDate = DateTime.UtcNow,
-                CapturedBy = "SYSTEM_SEED"
-            });
-
-            await context.SaveChangesAsync();
-            logger.LogInformation("Seed complete: inserted platform booking fee (5%).");
+            // Fixed-amount platform fees (tenant/host placement and host unit subscription).
+            await SeedFixedPlatformFeeAsync(context, logger, "Tenant Placement Fee", "PLATFORM-TENANT-PLACEMENT", 49.99m);
+            await SeedFixedPlatformFeeAsync(context, logger, "Host Placement Fee", "PLATFORM-HOST-PLACEMENT", 99.99m);
+            await SeedFixedPlatformFeeAsync(context, logger, "Host Active Unit Subscription Fee", "PLATFORM-HOST-UNIT-SUBSCRIPTION", 24.99m);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Skipped seeding platform booking fee.");
         }
+    }
+
+    /// <summary>
+    /// Seeds a single global, fixed-amount platform fee linked to the fee type with the given name.
+    /// The fee type is created if it does not already exist, and the fee is inserted only once.
+    /// </summary>
+    private static async Task SeedFixedPlatformFeeAsync(
+        ArcoraDbContext context, ILogger logger, string feeTypeName, string code, decimal amount)
+    {
+        var feeType = await context.FeeTypes
+            .FirstOrDefaultAsync(ft => ft.Name == feeTypeName && ft.IsPlatformFee == true);
+
+        if (feeType == null)
+        {
+            feeType = new FeeType
+            {
+                Name = feeTypeName,
+                IsPlatformFee = true,
+                CapturedDate = DateTime.UtcNow,
+                CapturedBy = "SYSTEM_SEED"
+            };
+            context.FeeTypes.Add(feeType);
+            await context.SaveChangesAsync();
+        }
+
+        if (await context.Fees.AnyAsync(f => f.FeeTypeID == feeType.FeeTypeID))
+        {
+            return;
+        }
+
+        context.Fees.Add(new Fee
+        {
+            FeeID = Guid.NewGuid(),
+            FeeTypeID = feeType.FeeTypeID,
+            OrganizationID = null, // Global platform fee applies to all organizations.
+            Code = code,
+            Name = feeTypeName,
+            CalculationType = "FIXED",
+            FixedAmount = amount,
+            Currency = "CAD",
+            IsTaxable = false,
+            EffectiveFrom = DateTime.UtcNow.AddYears(-1),
+            IsActive = true,
+            CapturedDate = DateTime.UtcNow,
+            CapturedBy = "SYSTEM_SEED"
+        });
+
+        await context.SaveChangesAsync();
+        logger.LogInformation("Seed complete: inserted platform fee {FeeName} ({Amount} CAD).", feeTypeName, amount);
     }
 
     private static async Task SeedOrganizationMembersAsync(ArcoraDbContext context, ILogger logger)

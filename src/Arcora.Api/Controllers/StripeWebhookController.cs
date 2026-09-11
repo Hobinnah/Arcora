@@ -22,6 +22,7 @@ namespace Arcora.Api.Controllers
         private readonly IPaymentProviderEventRepository eventRepository;
         private readonly IPaymentIntentRepository paymentIntentRepository;
         private readonly IRentCollectionOrchestrator orchestrator;
+        private readonly IPaymentOnboardingService paymentOnboardingService;
         private readonly ILogger<StripeWebhookController> logger;
 
         public StripeWebhookController(
@@ -29,12 +30,14 @@ namespace Arcora.Api.Controllers
             IPaymentProviderEventRepository eventRepository,
             IPaymentIntentRepository paymentIntentRepository,
             IRentCollectionOrchestrator orchestrator,
+            IPaymentOnboardingService paymentOnboardingService,
             ILogger<StripeWebhookController> logger)
         {
             this.paymentProvider = paymentProvider;
             this.eventRepository = eventRepository;
             this.paymentIntentRepository = paymentIntentRepository;
             this.orchestrator = orchestrator;
+            this.paymentOnboardingService = paymentOnboardingService;
             this.logger = logger;
         }
 
@@ -121,6 +124,17 @@ namespace Arcora.Api.Controllers
                     {
                         logger.LogWarning("No local PaymentIntent for provider id {ProviderId}", webhookEvent.PaymentIntentId);
                     }
+                    break;
+
+                // Verification outcomes for saved PAD/card methods. These transition a stored payment
+                // method from PENDING to VERIFIED/FAILED and activate the PAD autopay mandate.
+                case "setup_intent.succeeded":
+                case "setup_intent.setup_failed":
+                case "setup_intent.canceled":
+                case "mandate.updated":
+                    await paymentOnboardingService.UpdateVerificationStatusAsync(
+                        webhookEvent.PaymentMethodId,
+                        webhookEvent.Status);
                     break;
 
                 default:

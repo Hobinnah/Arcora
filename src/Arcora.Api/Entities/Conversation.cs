@@ -39,6 +39,17 @@ public class Conversation
     public Guid? DisputeID { get; set; }
 
     /// <summary>
+    /// FK to Tenant. Identifies the tenant/prospective tenant side of a direct host-to-tenant thread.
+    /// </summary>
+    public Guid? TenantID { get; set; }
+
+    /// <summary>
+    /// FK to Organization. Identifies the host organization side of a direct host-to-tenant thread.
+    /// Any active member of the organization can view and reply.
+    /// </summary>
+    public Guid? OrganizationID { get; set; }
+
+    /// <summary>
     /// Subject of the conversation
     /// </summary>
     [MaxLength(200)]
@@ -96,4 +107,16 @@ public class Conversation
     /// </summary>
     [ForeignKey(nameof(DisputeID))]
     public Dispute? Dispute { get; set; }
+
+    /// <summary>
+    /// FK to Tenant
+    /// </summary>
+    [ForeignKey(nameof(TenantID))]
+    public Tenant? Tenant { get; set; }
+
+    /// <summary>
+    /// FK to Organization
+    /// </summary>
+    [ForeignKey(nameof(OrganizationID))]
+    public Organization? Organization { get; set; }
 }

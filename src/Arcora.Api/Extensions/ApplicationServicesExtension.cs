@@ -137,6 +137,7 @@ namespace Arcora.Api.Extensions
              services.AddTransient<IConversationParticipantRepository, ConversationParticipantRepository>();
              services.AddTransient<IConversationService, ConversationService>();
              services.AddTransient<IConversationRepository, ConversationRepository>();
+             services.AddTransient<IMessagingService, MessagingService>();
              services.AddTransient<IAttachmentService, AttachmentService>();
              services.AddTransient<IAttachmentRepository, AttachmentRepository>();
              services.AddTransient<IInspectionItemService, InspectionItemService>();

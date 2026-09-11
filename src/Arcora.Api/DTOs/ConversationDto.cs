@@ -37,6 +37,16 @@ public class ConversationDto
     public Guid? DisputeID { get; set; }
 
     /// <summary>
+    /// FK to Tenant (tenant/prospective tenant side of a direct host-to-tenant thread).
+    /// </summary>
+    public Guid? TenantID { get; set; }
+
+    /// <summary>
+    /// FK to Organization (host side of a direct host-to-tenant thread).
+    /// </summary>
+    public Guid? OrganizationID { get; set; }
+
+    /// <summary>
     /// Subject of the conversation
     /// </summary>
     [MaxLength(200)]

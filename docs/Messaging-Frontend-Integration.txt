@@ -1,0 +1,360 @@
+================================================================================
+ARCORA — MESSAGING (CHAT) FRONTEND INTEGRATION GUIDE
+================================================================================
+Audience : Frontend engineers integrating the direct host-to-tenant chat.
+Backend  : ASP.NET Core (.NET 8) Web API + SignalR
+Base URL : {API_BASE_URL}            e.g. https://api.arcora.app
+Auth     : All endpoints require a Bearer JWT (Authorization: Bearer <token>)
+--------------------------------------------------------------------------------
+
+
+1. CONCEPT OVERVIEW
+--------------------------------------------------------------------------------
+A conversation is a DIRECT thread between:
+  - a Tenant / prospective tenant   -> identified by TenantID (GUID)
+  - a Host Organization             -> identified by OrganizationID (GUID)
+
+A thread is UNIQUELY keyed by the pair (TenantID, OrganizationID). Calling
+"StartThread" with the same pair always returns the SAME conversation (it is
+created only once).
+
+Any ACTIVE member of the organization can view and reply to the thread. On the
+tenant side, only that tenant participates.
+
+Each message has a "sender" which is exactly ONE of:
+  - SenderTenantID              (message sent by the tenant)
+  - SenderOrganizationMemberID  (message sent by a host org member)
+  - SenderUserID                (the underlying app user id, optional)
+
+BUSINESS RULES
+  - A message may be EDITED or DELETED only by its ORIGINAL SENDER.
+  - Edit/Delete is only allowed within 5 MINUTES of the message being sent.
+    After 5 minutes the API returns 400 Bad Request.
+  - Deletes are soft-deletes (message disappears from the thread).
+  - On every new message, notification emails are queued to the tenant and to
+    all active organization members EXCEPT the sender. (No frontend action
+    needed — handled by the backend.)
+
+
+2. IDENTIFIERS THE FRONTEND MUST SUPPLY (THE "ACTOR")
+--------------------------------------------------------------------------------
+Several calls take an "actor" object describing WHO is acting. Populate the side
+that matches the logged-in user's current context:
+
+  ConversationActor {
+    "userID": number | null,               // app user id (optional)
+    "tenantID": "guid" | null,             // set when acting AS the tenant
+    "organizationMemberID": "guid" | null, // set when acting AS a host member
+    "organizationID": "guid" | null        // the host org (host context)
+  }
+
+Rules:
+  - Tenant context  -> set tenantID (and optionally userID).
+  - Host context    -> set organizationMemberID + organizationID (and userID).
+  - Exactly ONE side should be populated per call.
+
+
+3. REST ENDPOINTS
+--------------------------------------------------------------------------------
+Route pattern: /api/Messaging/[Action]
+
+--------------------------------------------------------------------------------
+3.1  START (OR REUSE) A THREAD
+--------------------------------------------------------------------------------
+POST /api/Messaging/StartThread
+
+Request body (StartThreadRequest):
+  {
+    "tenantID": "e2b9...guid",
+    "organizationID": "a1c4...guid",
+    "subject": "Question about 12 Baker St"   // optional
+  }
+
+Response 200 (ConversationDto):
+  {
+    "conversationID": "d4f0...guid",
+    "conversationType": "DIRECT",
+    "tenantID": "e2b9...guid",
+    "organizationID": "a1c4...guid",
+    "subject": "Question about 12 Baker St",
+    "status": "OPEN",
+    "lastMessageAt": null,
+    ...
+  }
+
+Errors:
+  400 - tenantID or organizationID missing/empty.
+
+Notes:
+  - Idempotent for a given (tenantID, organizationID) pair.
+  - Use the returned conversationID for all subsequent calls and the SignalR
+    group subscription.
+
+--------------------------------------------------------------------------------
+3.2  SEND A MESSAGE
+--------------------------------------------------------------------------------
+POST /api/Messaging/SendMessage
+
+Request body (SendMessageRequest):
+  {
+    "conversationID": "d4f0...guid",
+    "message": "Hi, is the unit still available?",
+    "messageType": "TEXT",                 // default "TEXT"
+    "replyToMessageID": null,              // optional GUID to reply to a message
+
+    // sender — populate the ONE that matches context:
+    "senderTenantID": "e2b9...guid",       // tenant sending
+    "senderOrganizationMemberID": null,    // OR host member sending
+    "senderUserID": 1024                   // optional app user id
+  }
+
+Response 200 (ConversationMessageDto):
+  {
+    "conversationMessageID": "77aa...guid",
+    "conversationID": "d4f0...guid",
+    "senderTenantID": "e2b9...guid",
+    "senderOrganizationMemberID": null,
+    "senderUserID": 1024,
+    "message": "Hi, is the unit still available?",
+    "messageType": "TEXT",
+    "replyToMessageID": null,
+    "sentAt": "2025-01-15T14:03:22Z",
+    "editedAt": null,
+    "deletedAt": null
+  }
+
+Errors:
+  400 - conversationID or message missing/empty.
+  404 - conversation not found.
+
+Side effects:
+  - Pushes a "MessageReceived" event to the SignalR group (see section 4).
+  - Queues notification emails to the other parties.
+
+--------------------------------------------------------------------------------
+3.3  EDIT A MESSAGE (sender only, within 5 minutes)
+--------------------------------------------------------------------------------
+PUT /api/Messaging/EditMessage/{id}
+  {id} = conversationMessageID (GUID)
+
+Request body (EditMessageRequest):
+  {
+    "message": "Updated text",
+    "actor": {
+      "tenantID": "e2b9...guid"            // or organizationMemberID for host
+    }
+  }
+
+Response 200 (ConversationMessageDto)  -> updated message (editedAt is set).
+
+Errors:
+  400 - message empty, OR the 5-minute edit window has passed.
+  403 - caller is not the original sender.
+  404 - message not found (or already deleted).
+
+Side effects:
+  - Pushes a "MessageEdited" event to the SignalR group.
+
+--------------------------------------------------------------------------------
+3.4  DELETE A MESSAGE (sender only, within 5 minutes)
+--------------------------------------------------------------------------------
+DELETE /api/Messaging/DeleteMessage/{id}
+  {id} = conversationMessageID (GUID)
+
+Request body (ConversationActor):
+  {
+    "tenantID": "e2b9...guid"              // or organizationMemberID for host
+  }
+
+Response 204 No Content  -> deleted successfully.
+
+Errors:
+  400 - the 5-minute delete window has passed.
+  403 - caller is not the original sender.
+  404 - message not found (or already deleted).
+
+Side effects:
+  - Pushes a "MessageDeleted" event to the SignalR group.
+
+--------------------------------------------------------------------------------
+3.5  INBOX (thread list / sidebar)
+--------------------------------------------------------------------------------
+GET /api/Messaging/Inbox
+
+Query parameters (InboxQuery):
+  tenantID={guid}          // set for the tenant's inbox
+  organizationID={guid}    // set for the host's inbox
+  unreadOnly=true|false    // optional, default false
+  pageNumber=1             // default 1
+  pageSize=10              // default 10, max 50
+  search=...               // optional
+
+Response 200 (PagedResult<ConversationSummaryDto>):
+  {
+    "data": [
+      {
+        "conversationID": "d4f0...guid",
+        "tenantID": "e2b9...guid",
+        "organizationID": "a1c4...guid",
+        "subject": "Question about 12 Baker St",
+        "status": "OPEN",
+        "counterpartyName": "Acme Property Group", // org name (tenant view) or
+                                                    // tenant name (host view)
+        "counterpartyPhotoUrl": null,
+        "lastMessagePreview": "Hi, is the unit still available?",
+        "lastMessageAt": "2025-01-15T14:03:22Z",
+        "unreadCount": 2
+      }
+    ],
+    "totalCount": 1
+  }
+
+Notes:
+  - Provide tenantID for a tenant, or organizationID for a host. (You may pass
+    both if a user is both a tenant and an org member.)
+  - Rows are ordered by most recent activity.
+  - "counterpartyName" is the OTHER party's label relative to the viewer.
+
+--------------------------------------------------------------------------------
+3.6  THREAD MESSAGES (message history)
+--------------------------------------------------------------------------------
+GET /api/Messaging/Thread/{conversationId}?pageNumber=1&pageSize=30
+
+Response 200 (PagedResult<ConversationMessageDto>):
+  {
+    "data": [ ...ConversationMessageDto (oldest -> newest)... ],
+    "totalCount": 57
+  }
+
+Notes:
+  - Messages are returned ascending by sentAt (oldest first).
+  - Deleted messages are excluded.
+  - Each item may include SenderTenant / SenderOrganizationMember details for
+    rendering the sender name/avatar.
+
+--------------------------------------------------------------------------------
+3.7  MARK THREAD AS READ
+--------------------------------------------------------------------------------
+POST /api/Messaging/MarkRead/{conversationId}
+
+Request body (ConversationActor):
+  {
+    "tenantID": "e2b9...guid"              // or organizationMemberID for host
+  }
+
+Response 204 No Content
+
+Notes:
+  - Call when the user opens/scrolls to the bottom of a thread. This resets the
+    unreadCount used by the Inbox.
+
+
+4. REAL-TIME (SignalR)
+--------------------------------------------------------------------------------
+Hub URL : {API_BASE_URL}/hubs/messaging
+Auth    : Requires the same Bearer JWT (pass accessTokenFactory).
+
+Client -> Server methods:
+  JoinConversation(conversationId: guid)   // subscribe to a thread's events
+  LeaveConversation(conversationId: guid)  // unsubscribe
+
+Server -> Client events:
+  "MessageReceived"  payload: ConversationMessageDto   (new message)
+  "MessageEdited"    payload: ConversationMessageDto   (edited message)
+  "MessageDeleted"   payload: { conversationMessageID, conversationID }
+
+Typical flow:
+  1. Open a thread -> GET Thread (history) + hub.invoke("JoinConversation", id).
+  2. Listen for MessageReceived / MessageEdited / MessageDeleted to update the UI.
+  3. Closing the thread -> hub.invoke("LeaveConversation", id).
+
+Example (JavaScript, @microsoft/signalr):
+  import * as signalR from "@microsoft/signalr";
+
+  const connection = new signalR.HubConnectionBuilder()
+    .withUrl(`${API_BASE_URL}/hubs/messaging`, {
+      accessTokenFactory: () => getAccessToken()
+    })
+    .withAutomaticReconnect()
+    .build();
+
+  connection.on("MessageReceived", (msg) => appendMessage(msg));
+  connection.on("MessageEdited",   (msg) => replaceMessage(msg));
+  connection.on("MessageDeleted",  (info) => removeMessage(info.conversationMessageID));
+
+  await connection.start();
+  await connection.invoke("JoinConversation", conversationId);
+
+
+5. DATA MODELS (SUMMARY)
+--------------------------------------------------------------------------------
+ConversationDto
+  conversationID: guid
+  conversationType: string ("DIRECT")
+  tenantID: guid?
+  organizationID: guid?
+  subject: string?
+  status: string ("OPEN" | "CLOSED" | ...)
+  lastMessageAt: datetime?
+
+ConversationMessageDto
+  conversationMessageID: guid
+  conversationID: guid
+  senderUserID: number?
+  senderTenantID: guid?
+  senderOrganizationMemberID: guid?
+  message: string
+  messageType: string ("TEXT")
+  replyToMessageID: guid?
+  sentAt: datetime (UTC)
+  editedAt: datetime? (UTC)
+  deletedAt: datetime? (UTC)
+  senderTenant / senderOrganizationMember: nested detail for display (optional)
+
+ConversationSummaryDto  (inbox row)
+  conversationID: guid
+  tenantID: guid?
+  organizationID: guid?
+  subject: string?
+  status: string?
+  counterpartyName: string
+  counterpartyPhotoUrl: string?
+  lastMessagePreview: string?
+  lastMessageAt: datetime?
+  unreadCount: number
+
+PagedResult<T>
+  data: T[]
+  totalCount: number
+
+
+6. RECOMMENDED FRONTEND FLOW
+--------------------------------------------------------------------------------
+  1. Start / open a thread:
+       POST /StartThread { tenantID, organizationID } -> conversationID
+  2. Connect SignalR and JoinConversation(conversationID).
+  3. Load history:
+       GET /Thread/{conversationId}
+  4. Send a message:
+       POST /SendMessage { conversationID, message, sender... }
+     (UI also updates via the MessageReceived event.)
+  5. Edit/Delete within 5 minutes only; hide the edit/delete controls once
+     (now - sentAt) > 5 minutes to avoid 400 errors.
+  6. Mark read:
+       POST /MarkRead/{conversationId} { actor }
+  7. Sidebar:
+       GET /Inbox?tenantID=... OR ?organizationID=...
+
+
+7. UI HINTS
+--------------------------------------------------------------------------------
+  - Show an "edited" badge when editedAt != null.
+  - Show/enable Edit & Delete buttons only for the current user's own messages
+    AND only while within the 5-minute window (compute from sentAt, UTC).
+  - Use unreadCount from the Inbox to render unread badges; clear it after
+    MarkRead succeeds.
+  - All timestamps are UTC (ISO 8601, "Z"); convert to local time for display.
+
+================================================================================
+END OF DOCUMENT
+================================================================================

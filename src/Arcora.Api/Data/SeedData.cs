@@ -1124,48 +1124,58 @@ public static class SeedData
         new() { Name = "REPAIR", IsPlatformFee = false, CapturedDate = Now, CapturedBy = SystemUser },
         new() { Name = "DISCOUNT", IsPlatformFee = false, CapturedDate = Now, CapturedBy = SystemUser },
         new() { Name = "CREDIT", IsPlatformFee = false, CapturedDate = Now, CapturedBy = SystemUser },
-        new() { Name = "BOOKING FEE", IsPlatformFee = true, CapturedDate = Now, CapturedBy = SystemUser }
+        new() { Name = "BOOKING FEE", IsPlatformFee = true, CapturedDate = Now, CapturedBy = SystemUser },
+        new() { Name = "Tenant Placement Fee", IsPlatformFee = true, CapturedDate = Now, CapturedBy = SystemUser },
+        new() { Name = "Host Placement Fee", IsPlatformFee = true, CapturedDate = Now, CapturedBy = SystemUser },
+        new() { Name = "Host Active Unit Subscription Fee", IsPlatformFee = true, CapturedDate = Now, CapturedBy = SystemUser }
     };
 
-    /// <summary>Tax rates by province.</summary>
+    /// <summary>
+    /// Sales tax rates for every Canadian province and territory. HST provinces have a single
+    /// combined rate; the remaining jurisdictions charge federal GST (5%) plus, where applicable,
+    /// a provincial sales tax (PST/RST) or Quebec's QST.
+    /// </summary>
     public static IReadOnlyList<TaxRate> TaxRates { get; } = new List<TaxRate>
     {
-        new()
-        {
-            Code = "HST-ON",
-            Name = "Ontario HST",
-            CountryCode = "CA",
-            ProvinceCode = "ON",
-            Rate = 0.13m,
-            EffectiveFrom = Now.AddYears(-5),
-            IsActive = true,
-            CapturedDate = Now,
-            CapturedBy = SystemUser
-        },
-        new()
-        {
-            Code = "GST-BC",
-            Name = "BC GST",
-            CountryCode = "CA",
-            ProvinceCode = "BC",
-            Rate = 0.05m,
-            EffectiveFrom = Now.AddYears(-5),
-            IsActive = true,
-            CapturedDate = Now,
-            CapturedBy = SystemUser
-        },
-        new()
-        {
-            Code = "PST-BC",
-            Name = "BC PST",
-            CountryCode = "CA",
-            ProvinceCode = "BC",
-            Rate = 0.07m,
-            EffectiveFrom = Now.AddYears(-5),
-            IsActive = true,
-            CapturedDate = Now,
-            CapturedBy = SystemUser
-        }
+        // ----- HST provinces (combined federal + provincial) -----
+        NewTax("HST-ON", "Ontario HST", "ON", 0.13m),
+        NewTax("HST-NB", "New Brunswick HST", "NB", 0.15m),
+        NewTax("HST-NL", "Newfoundland and Labrador HST", "NL", 0.15m),
+        NewTax("HST-NS", "Nova Scotia HST", "NS", 0.15m),
+        NewTax("HST-PE", "Prince Edward Island HST", "PE", 0.15m),
+
+        // ----- GST-only provinces and territories (5% federal) -----
+        NewTax("GST-AB", "Alberta GST", "AB", 0.05m),
+        NewTax("GST-NT", "Northwest Territories GST", "NT", 0.05m),
+        NewTax("GST-NU", "Nunavut GST", "NU", 0.05m),
+        NewTax("GST-YT", "Yukon GST", "YT", 0.05m),
+
+        // ----- GST + provincial sales tax provinces -----
+        NewTax("GST-BC", "British Columbia GST", "BC", 0.05m),
+        NewTax("PST-BC", "British Columbia PST", "BC", 0.07m),
+
+        NewTax("GST-MB", "Manitoba GST", "MB", 0.05m),
+        NewTax("RST-MB", "Manitoba RST", "MB", 0.07m),
+
+        NewTax("GST-SK", "Saskatchewan GST", "SK", 0.05m),
+        NewTax("PST-SK", "Saskatchewan PST", "SK", 0.06m),
+
+        NewTax("GST-QC", "Quebec GST", "QC", 0.05m),
+        NewTax("QST-QC", "Quebec QST", "QC", 0.09975m)
+    };
+
+    /// <summary>Helper to build a Canadian <see cref="TaxRate"/> with the shared seed defaults.</summary>
+    private static TaxRate NewTax(string code, string name, string provinceCode, decimal rate) => new()
+    {
+        Code = code,
+        Name = name,
+        CountryCode = "CA",
+        ProvinceCode = provinceCode,
+        Rate = rate,
+        EffectiveFrom = Now.AddYears(-5),
+        IsActive = true,
+        CapturedDate = Now,
+        CapturedBy = SystemUser
     };
 
     /// <summary>Amenity catalog lookup values.</summary>

@@ -253,6 +253,8 @@ namespace Arcora.Payments.Stripe
             string? status = null;
             string? failureCode = null;
             string? failureMessage = null;
+            string? setupIntentId = null;
+            string? paymentMethodId = null;
 
             switch (stripeEvent.Data.Object)
             {
@@ -273,6 +275,15 @@ namespace Arcora.Payments.Stripe
                 case Mandate mandate:
                     mandateId = mandate.Id;
                     status = mandate.Status;
+                    paymentMethodId = mandate.PaymentMethodId;
+                    break;
+                case SetupIntent setupIntent:
+                    setupIntentId = setupIntent.Id;
+                    status = setupIntent.Status;
+                    mandateId = setupIntent.MandateId;
+                    paymentMethodId = setupIntent.PaymentMethodId;
+                    failureCode = setupIntent.LastSetupError?.Code ?? setupIntent.LastSetupError?.DeclineCode;
+                    failureMessage = setupIntent.LastSetupError?.Message;
                     break;
             }
 
@@ -286,7 +297,9 @@ namespace Arcora.Payments.Stripe
                 status,
                 FailureClassifier.Classify(status, failureCode),
                 failureCode,
-                failureMessage);
+                failureMessage,
+                setupIntentId,
+                paymentMethodId);
         }
 
         private static ProviderPaymentMethodResult MapPaymentMethod(PaymentMethodKind kind, PaymentMethod pm, string verificationStatus)

@@ -189,6 +189,56 @@ namespace Arcora.Api.Services.Implementations
             };
         }
 
+        /// <inheritdoc/>
+        public async Task UpdateVerificationStatusAsync(string? providerPaymentMethodId, string? providerStatus, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(providerPaymentMethodId))
+            {
+                logger.LogWarning("Verification webhook received without a provider payment method id; skipping.");
+                return;
+            }
+
+            var methods = await paymentMethodRepository.Find(x => x.ProviderPaymentMethodID == providerPaymentMethodId);
+            var method = methods?.FirstOrDefault();
+            if (method == null)
+            {
+                logger.LogWarning("No payment method found for provider id {ProviderId}; verification update skipped.", providerPaymentMethodId);
+                return;
+            }
+
+            var newStatus = MapVerificationStatus(providerStatus ?? string.Empty);
+
+            // Idempotency: nothing to do if the status is unchanged.
+            if (string.Equals(method.VerificationStatus, newStatus, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            method.VerificationStatus = newStatus;
+            method.VerifiedAt = newStatus == "VERIFIED" ? DateTime.UtcNow : null;
+            method.UpdatedDate = DateTime.UtcNow;
+            method.UpdatedBy = "STRIPE_WEBHOOK";
+            await paymentMethodRepository.Update(method);
+            await paymentMethodRepository.Save();
+
+            // For a verified PAD, activate the associated autopay mandate so autopay can proceed.
+            if (newStatus == "VERIFIED" && method.MethodRole == RolePrimary)
+            {
+                var mandates = await autopayMandateRepository.Find(x => x.PaymentMethodID == method.PaymentMethodID);
+                foreach (var mandate in (mandates ?? Enumerable.Empty<AutopayMandate>()).Where(m => m != null && m.Status != "ACTIVE"))
+                {
+                    mandate!.Status = "ACTIVE";
+                    mandate.ActivatedAt = DateTime.UtcNow;
+                    mandate.UpdatedDate = DateTime.UtcNow;
+                    mandate.UpdatedBy = "STRIPE_WEBHOOK";
+                    await autopayMandateRepository.Update(mandate);
+                    await autopayMandateRepository.Save();
+                }
+            }
+
+            logger.LogInformation("Payment method {PaymentMethodId} verification updated to {Status} via webhook.", method.PaymentMethodID, newStatus);
+        }
+
         private async Task CreateMandateAsync(Tenant tenant, PaymentMethod padMethod, string customerId, CancellationToken cancellationToken)
         {
             var mandateResult = await paymentProvider.CreatePadMandateAsync(customerId, padMethod.ProviderPaymentMethodID!, cancellationToken: cancellationToken);
@@ -230,15 +280,18 @@ namespace Arcora.Api.Services.Implementations
             _ => throw new ArgumentException($"Unsupported MethodKind '{methodKind}'. Expected 'PAD' or 'CARD'.")
         };
 
-        // Stripe SetupIntent statuses -> Arcora verification statuses.
+        // Stripe SetupIntent / mandate statuses -> Arcora verification statuses.
         private static string MapVerificationStatus(string providerStatus) => providerStatus?.ToLowerInvariant() switch
         {
             "succeeded" => "VERIFIED",
+            "active" => "VERIFIED",
             "processing" => "PENDING",
+            "pending" => "PENDING",
             "requires_action" => "PENDING",
             "requires_confirmation" => "PENDING",
             "requires_payment_method" => "FAILED",
             "canceled" => "FAILED",
+            "inactive" => "FAILED",
             _ => "PENDING"
         };
 

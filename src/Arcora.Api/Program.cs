@@ -10,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
 builder.Services.AddApplicationServices(builder.Configuration);
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -110,5 +111,6 @@ app.UseRateLimiter();
 app.UseMiddleware<TokenManagerMiddleware>();
 
 app.MapControllers();
+app.MapHub<Arcora.Api.Realtime.MessagingHub>("/hubs/messaging");
 
 app.Run();

@@ -151,6 +151,57 @@ namespace Arcora.Api
                 .Replace("{{SupportLine}}", supportLine);
         }
 
+        /// <summary>
+        /// Builds a branded HTML notification for a new chat message. This template is fully self-contained
+        /// (it does not depend on an on-disk HTML file) so it can be dispatched reliably from the messaging service.
+        /// </summary>
+        /// <param name="recipientName">The display name of the person receiving the notification.</param>
+        /// <param name="senderName">The display name of the person who sent the message.</param>
+        /// <param name="messagePreview">The message body (or a preview of it).</param>
+        /// <param name="conversationSubject">An optional conversation subject/title.</param>
+        /// <param name="actionUrl">The link the recipient clicks to open the conversation.</param>
+        /// <param name="companyName">The company/brand name used in the email header and footer.</param>
+        /// <param name="supportEmail">The support/contact email shown in the footer.</param>
+        /// <returns>A complete HTML document representing the email body.</returns>
+        public static string BuildNewMessageEmail(
+            string recipientName,
+            string senderName,
+            string messagePreview,
+            string? conversationSubject,
+            string actionUrl,
+            string companyName,
+            string? supportEmail = null)
+        {
+            var brand = string.IsNullOrWhiteSpace(companyName) ? "Arcora" : companyName;
+            var greetingName = string.IsNullOrWhiteSpace(recipientName) ? "there" : recipientName;
+            var subjectLine = string.IsNullOrWhiteSpace(conversationSubject)
+                ? string.Empty
+                : $"<p style=\"margin:0 0 12px;font-family:Arial,sans-serif;font-size:13px;line-height:20px;color:#6b7280;\">Re: {System.Net.WebUtility.HtmlEncode(conversationSubject)}</p>";
+            var supportLine = string.IsNullOrWhiteSpace(supportEmail)
+                ? string.Empty
+                : $"<p style=\"margin:0 0 8px;font-family:Arial,sans-serif;font-size:13px;line-height:20px;color:#6b7280;\">Need help? Contact us at <a href=\"mailto:{supportEmail}\" style=\"color:#0d9488;text-decoration:none;\">{supportEmail}</a>.</p>";
+            var link = string.IsNullOrWhiteSpace(actionUrl) ? "#" : actionUrl;
+
+            return
+                "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head>" +
+                "<body style=\"margin:0;padding:0;background:#f3f4f6;\">" +
+                "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f3f4f6;padding:24px 0;\"><tr><td align=\"center\">" +
+                "<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);\">" +
+                $"<tr><td style=\"background:#0f3a34;padding:20px 28px;\"><span style=\"font-family:Arial,sans-serif;font-size:18px;font-weight:700;color:#ffffff;\">{System.Net.WebUtility.HtmlEncode(brand)}</span></td></tr>" +
+                "<tr><td style=\"padding:28px;\">" +
+                $"<p style=\"margin:0 0 6px;font-family:Arial,sans-serif;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#0d9488;font-weight:700;\">New message</p>" +
+                $"<h1 style=\"margin:0 0 12px;font-family:Arial,sans-serif;font-size:22px;line-height:28px;color:#0f3a34;\">Hi {System.Net.WebUtility.HtmlEncode(greetingName)}, you have a new message</h1>" +
+                subjectLine +
+                $"<p style=\"margin:0 0 16px;font-family:Arial,sans-serif;font-size:14px;line-height:22px;color:#374151;\"><strong style=\"color:#0f3a34;\">{System.Net.WebUtility.HtmlEncode(senderName)}</strong> wrote:</p>" +
+                $"<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr><td style=\"background:#f9fafb;border-left:4px solid #0d9488;border-radius:6px;padding:14px 16px;font-family:Arial,sans-serif;font-size:14px;line-height:22px;color:#374151;\">{System.Net.WebUtility.HtmlEncode(messagePreview)}</td></tr></table>" +
+                $"<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:24px 0 8px;\"><tr><td style=\"border-radius:8px;background:#0d9488;\"><a href=\"{link}\" style=\"display:inline-block;padding:12px 24px;font-family:Arial,sans-serif;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;\">Open conversation</a></td></tr></table>" +
+                "</td></tr>" +
+                "<tr><td style=\"padding:20px 28px;border-top:1px solid #e5e7eb;\">" +
+                supportLine +
+                $"<p style=\"margin:0;font-family:Arial,sans-serif;font-size:12px;line-height:18px;color:#9ca3af;\">&copy; {DateTime.UtcNow.Year} {System.Net.WebUtility.HtmlEncode(brand)}. All rights reserved.</p>" +
+                "</td></tr></table></td></tr></table></body></html>";
+        }
+
         private static readonly string TemplatesRoot = Path.Combine(AppContext.BaseDirectory, "Templates");
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _templateCache = new();
 
