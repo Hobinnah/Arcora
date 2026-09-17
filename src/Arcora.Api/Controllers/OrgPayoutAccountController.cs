@@ -12,7 +12,7 @@ namespace Arcora.Api.Controllers
     public class OrgPayoutAccountController : ControllerBase
     {
         // GET: api/<OrgPayoutAccountController>
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetAllOrgPayoutAccounts")]
         public async Task<IActionResult> Get([FromServices] IOrgPayoutAccountService orgpayoutaccountService, [FromQuery] Paging paging)
@@ -21,7 +21,7 @@ namespace Arcora.Api.Controllers
         }
 
         // GET api/<OrgPayoutAccountController>/5
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetOrgPayoutAccountByID")]
@@ -34,7 +34,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST api/<OrgPayoutAccountController>
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateOrgPayoutAccount")]
@@ -49,7 +49,7 @@ namespace Arcora.Api.Controllers
         }
 
         // PUT api/<OrgPayoutAccountController>/5
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateOrgPayoutAccount")]

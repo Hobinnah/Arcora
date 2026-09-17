@@ -12,7 +12,7 @@ namespace Arcora.Api.Controllers
     public class ApplicationOccupantController : ControllerBase
     {
         // GET: api/<ApplicationOccupantController>
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetAllApplicationOccupants")]
         public async Task<IActionResult> Get([FromServices] IApplicationOccupantService applicationoccupantService, [FromQuery] Paging paging)
@@ -21,7 +21,7 @@ namespace Arcora.Api.Controllers
         }
 
         // GET api/<ApplicationOccupantController>/5
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetApplicationOccupantByID")]
@@ -34,7 +34,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST api/<ApplicationOccupantController>
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateApplicationOccupant")]
@@ -49,7 +49,7 @@ namespace Arcora.Api.Controllers
         }
 
         // PUT api/<ApplicationOccupantController>/5
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateApplicationOccupant")]
@@ -82,7 +82,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST: api/applicationoccupant/{id}/{status}
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [HttpPost("{id}/{status}", Name = "UpdateApplicationOccupantStatus")]
         public async Task<ActionResult> UpdateApplicationOccupantStatus([FromServices] IApplicationOccupantService applicationoccupantService, [FromRoute] Guid id, [FromRoute] string status)
         {

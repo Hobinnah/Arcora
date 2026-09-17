@@ -12,7 +12,7 @@ namespace Arcora.Api.Controllers
     public class TenantInvitationController : ControllerBase
     {
         // GET: api/<TenantInvitationController>
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetAllTenantInvitations")]
         public async Task<IActionResult> Get([FromServices] ITenantInvitationService tenantinvitationService, [FromQuery] Paging paging)
@@ -21,7 +21,7 @@ namespace Arcora.Api.Controllers
         }
 
         // GET api/<TenantInvitationController>/5
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetTenantInvitationByID")]
@@ -34,7 +34,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST api/<TenantInvitationController>
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateTenantInvitation")]
@@ -49,7 +49,7 @@ namespace Arcora.Api.Controllers
         }
 
         // PUT api/<TenantInvitationController>/5
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateTenantInvitation")]
@@ -82,7 +82,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST: api/tenantinvitation/{id}/{status}
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [HttpPost("{id}/{status}", Name = "UpdateTenantInvitationStatus")]
         public async Task<ActionResult> UpdateTenantInvitationStatus([FromServices] ITenantInvitationService tenantinvitationService, [FromRoute] Guid id, [FromRoute] string status)
         {

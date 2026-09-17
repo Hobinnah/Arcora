@@ -12,7 +12,7 @@ namespace Arcora.Api.Controllers
     public class TenantEmploymentController : ControllerBase
     {
         // GET: api/<TenantEmploymentController>
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetAllTenantEmployments")]
         public async Task<IActionResult> Get([FromServices] ITenantEmploymentService tenantemploymentService, [FromQuery] Paging paging)
@@ -21,7 +21,7 @@ namespace Arcora.Api.Controllers
         }
 
         // GET api/<TenantEmploymentController>/5
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetTenantEmploymentByID")]
@@ -34,7 +34,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST api/<TenantEmploymentController>
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateTenantEmployment")]
@@ -49,7 +49,7 @@ namespace Arcora.Api.Controllers
         }
 
         // PUT api/<TenantEmploymentController>/5
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateTenantEmployment")]

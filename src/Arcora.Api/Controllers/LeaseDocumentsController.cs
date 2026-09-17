@@ -12,7 +12,7 @@ namespace Arcora.Api.Controllers
     public class LeaseDocumentsController : ControllerBase
     {
         // GET: api/<LeaseDocumentsController>
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetAllLeaseDocuments")]
         public async Task<IActionResult> Get([FromServices] ILeaseDocumentsService leasedocumentsService, [FromQuery] Paging paging)
@@ -21,7 +21,7 @@ namespace Arcora.Api.Controllers
         }
 
         // GET api/<LeaseDocumentsController>/5
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetLeaseDocumentsByID")]
@@ -34,7 +34,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST api/<LeaseDocumentsController>
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateLeaseDocuments")]
@@ -49,7 +49,7 @@ namespace Arcora.Api.Controllers
         }
 
         // PUT api/<LeaseDocumentsController>/5
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateLeaseDocuments")]
@@ -64,7 +64,7 @@ namespace Arcora.Api.Controllers
         }
 
         // DELETE api/<LeaseDocumentsController>/5
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpDelete("{id}", Name = "DeleteLeaseDocuments")]
@@ -82,7 +82,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST api/<LeaseDocumentsController>/Upload
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "UploadLeaseDocument")]
@@ -103,7 +103,7 @@ namespace Arcora.Api.Controllers
         }
 
         // GET api/<LeaseDocumentsController>/Download/5
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "DownloadLeaseDocument")]

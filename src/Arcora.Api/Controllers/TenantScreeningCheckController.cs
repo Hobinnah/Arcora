@@ -12,7 +12,7 @@ namespace Arcora.Api.Controllers
     public class TenantScreeningCheckController : ControllerBase
     {
         // GET: api/<TenantScreeningCheckController>
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetAllTenantScreeningChecks")]
         public async Task<IActionResult> Get([FromServices] ITenantScreeningCheckService tenantscreeningcheckService, [FromQuery] Paging paging)
@@ -21,7 +21,7 @@ namespace Arcora.Api.Controllers
         }
 
         // GET api/<TenantScreeningCheckController>/5
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetTenantScreeningCheckByID")]
@@ -34,7 +34,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST api/<TenantScreeningCheckController>
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateTenantScreeningCheck")]
@@ -49,7 +49,7 @@ namespace Arcora.Api.Controllers
         }
 
         // PUT api/<TenantScreeningCheckController>/5
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateTenantScreeningCheck")]
@@ -82,7 +82,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST: api/tenantscreeningcheck/{id}/{status}
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [HttpPost("{id}/{status}", Name = "UpdateTenantScreeningCheckStatus")]
         public async Task<ActionResult> UpdateTenantScreeningCheckStatus([FromServices] ITenantScreeningCheckService tenantscreeningcheckService, [FromRoute] Guid id, [FromRoute] string status)
         {

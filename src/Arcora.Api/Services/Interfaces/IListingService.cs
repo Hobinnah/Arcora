@@ -13,6 +13,18 @@ namespace Arcora.Api.Services.Interfaces
         /// <returns></returns>
         Task<PagedResult<ListingDto>> GetAll(Paging paging);
         /// <summary>
+        /// Retrieves all listings that belong to the specified organization.
+        /// </summary>
+        /// <param name="organizationId">The organization whose listings should be returned.</param>
+        /// <returns>The organization's listings.</returns>
+        Task<IEnumerable<ListingDto>> GetListingsByOrganization(Guid organizationId);
+        /// <summary>
+        /// Retrieves the total number of listings that belong to the specified organization.
+        /// </summary>
+        /// <param name="organizationId">The organization whose listings should be counted.</param>
+        /// <returns>The number of listings owned by the organization.</returns>
+        Task<int> GetListingsCountByOrganization(Guid organizationId);
+        /// <summary>
         /// Efficiently searches available listings using Airbnb-style criteria (location,
         /// move-in date, stay/lease length, party size and optional filters).
         /// </summary>
@@ -53,5 +65,12 @@ namespace Arcora.Api.Services.Interfaces
         /// Returns <see cref = "ListingDto"/> with the updated listing if successful, or null if not found.
         /// </returns>
         Task<ListingDto?> UpdateListingStatus(Guid id, string status);
+
+        /// <summary>
+        /// Processes a frontend payload containing property/address/units/listings and
+        /// creates the corresponding backend entities, resolving catalog lookups as needed.
+        /// Returns created IDs for reconciliation on the client.
+        /// </summary>
+        Task<ListingImportResultDto> ImportListingPayload(ListingImportDto payload);
     }
 }

@@ -4,17 +4,18 @@ using Arcora.Api.Middleware;
 using Arcora.Api;
 using Arcora.Api.Data;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi.Models;;
+using Microsoft.OpenApi.Models;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
+builder.Services.AddHttpClient();
 builder.Services.AddApplicationServices(builder.Configuration);
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+
 builder.Services.AddEndpointsApiExplorer();
-// Add Swagger
+
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
@@ -36,7 +37,6 @@ builder.Services.AddSwaggerGen(c =>
         }
     });
 
-    // Add JWT Authentication
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -58,53 +58,35 @@ builder.Services.AddSwaggerGen(c =>
                     Id = "Bearer"
                 }
             },
-            new string[] {}
+            new string[] { }
         }
     });
 });
 
-
 var app = builder.Build();
 
-
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    // Enable Swagger UI
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "Arcora API v1");
-        c.RoutePrefix = string.Empty; // Serve Swagger UI at root
+        c.RoutePrefix = string.Empty;
     });
 
-    // Seed development sample data when the listing tables are empty.
     using var scope = app.Services.CreateScope();
     var context = scope.ServiceProvider.GetRequiredService<ArcoraDbContext>();
     var seedLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbSeeder");
 
-    // Ensure the database exists and all migrations are applied before seeding.
     await context.Database.MigrateAsync();
 
-    // When "SeedData:ForceReseed" is true, existing seeded rows are cleared first so the
-    // latest SeedData graph is inserted. Otherwise seeding only runs when tables are empty.
     var forceReseed = builder.Configuration.GetValue<bool>("SeedData:ForceReseed");
     await DbSeeder.SeedAsync(context, seedLogger, forceReseed);
 }
 
-
-
-
 app.UseHttpsRedirection();
-
-
-
 app.UseGlobalExceptionMiddleware();
-
 app.UseCors("EnableCORS");
-
-app.UseHttpsRedirection();
-
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();

@@ -4,6 +4,7 @@ using Arcora.Api.Models;
 using Arcora.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Threading;
 
 namespace Arcora.Api.Controllers
 {
@@ -12,7 +13,7 @@ namespace Arcora.Api.Controllers
     public class ListingPhotoController : ControllerBase
     {
         // GET: api/<ListingPhotoController>
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetAllListingPhotos")]
         public async Task<IActionResult> Get([FromServices] IListingPhotoService listingphotoService, [FromQuery] Paging paging)
@@ -21,7 +22,7 @@ namespace Arcora.Api.Controllers
         }
 
         // GET api/<ListingPhotoController>/5
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetListingPhotoByID")]
@@ -34,22 +35,49 @@ namespace Arcora.Api.Controllers
         }
 
         // POST api/<ListingPhotoController>
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateListingPhoto")]
-        public async Task<IActionResult> CreateListingPhoto([FromServices] IListingPhotoService listingphotoService, [FromBody] ListingPhotoDto listingphotoDto)
+        [RequestSizeLimit(10485760)] // 10 MB
+        public async Task<IActionResult> CreateListingPhoto([FromServices] IListingPhotoService listingphotoService, [FromForm] Arcora.Api.Models.ListingPhotoUploadRequest request, CancellationToken cancellationToken)
         {
-            // var displayName = User.Identity?.Name ?? string.Empty;
-            // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
-            var result = await listingphotoService.CreateListingPhoto(listingphotoDto);
-            if (result.ListingPhotoID != null && result.ListingPhotoID != Guid.Empty)
-                return CreatedAtRoute("GetListingPhotoByID", new { id = result.ListingPhotoID }, result);
-            return BadRequest(new { message = "Failed to create listingphoto. A listingphoto with the same name may already exist." });
+            try
+            {
+                var result = await listingphotoService.UploadListingPhoto(request, cancellationToken);
+                if (result.ListingPhotoID != null && result.ListingPhotoID != Guid.Empty)
+                    return CreatedAtRoute("GetListingPhotoByID", new { id = result.ListingPhotoID }, result);
+                return BadRequest(new { message = "Failed to create listingphoto." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        // POST api/<ListingPhotoController>/Upload
+       // [Authorize(Roles = "User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [HttpPost(Name = "Upload")]
+        [RequestSizeLimit(10485760)] // 10 MB
+        public async Task<IActionResult> Upload([FromServices] IListingPhotoService listingphotoService, [FromForm] Arcora.Api.Models.ListingPhotoUploadRequest request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var result = await listingphotoService.UploadListingPhoto(request, cancellationToken);
+                if (result.ListingPhotoID != null && result.ListingPhotoID != Guid.Empty)
+                    return CreatedAtRoute("GetListingPhotoByID", new { id = result.ListingPhotoID }, result);
+                return BadRequest(new { message = "Failed to upload listing photo." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         // PUT api/<ListingPhotoController>/5
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateListingPhoto")]

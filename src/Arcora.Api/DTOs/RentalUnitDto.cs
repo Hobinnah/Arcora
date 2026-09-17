@@ -18,6 +18,12 @@ public class RentalUnitDto
     /// </summary>
     [Required]
     public Guid PropertyID { get; set; }
+
+    /// <summary>
+    /// Name
+    /// </summary>
+    public string? Name { get; set; }
+
     /// <summary>
     /// FK to UnitType
     /// </summary>
@@ -44,6 +50,10 @@ public class RentalUnitDto
     /// Number of bathrooms
     /// </summary>
     public decimal? Bathrooms { get; set; }
+    /// <summary>
+    /// Number of beds
+    /// </summary>
+    public int? Beds { get; set; }
     /// <summary>
     /// Square footage
     /// </summary>

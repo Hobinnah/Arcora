@@ -250,6 +250,7 @@ namespace Arcora.Api.Extensions
              services.AddTransient<IRentalUnitRepository, RentalUnitRepository>();
              services.AddTransient<IAddressService, AddressService>();
              services.AddTransient<IAddressRepository, AddressRepository>();
+             services.AddTransient<IPostalLookupRepository, PostalLookupRepository>();
              services.AddTransient<IPaymentMethodService, PaymentMethodService>();
              services.AddTransient<IPaymentMethodRepository, PaymentMethodRepository>();
              services.AddTransient<ILeaseService, LeaseService>();
@@ -578,6 +579,7 @@ namespace Arcora.Api.Extensions
                     policy.RequireAssertion(context =>
                         context.User.IsInRole("User") ||
                         context.User.IsInRole("Viewer") ||
+                        context.User.IsInRole("LandLord") ||
                         context.User.IsInRole("Admin")));
             });
 

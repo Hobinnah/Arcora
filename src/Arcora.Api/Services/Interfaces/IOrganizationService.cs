@@ -19,11 +19,13 @@ namespace Arcora.Api.Services.Interfaces
         /// <returns></returns>
         Task<OrganizationDto?> GetID(Guid ID);
         /// <summary>
-        /// Creates a new organization entry.
+        /// Creates a new organization entry. When <paramref name="creatorUserID"/> is provided the creating
+        /// user is automatically added to the organization as the primary owner member.
         /// </summary>
         /// <param name = "organizationDto"></param>
+        /// <param name = "creatorUserID">The id of the user creating the organization.</param>
         /// <returns></returns>
-        Task<OrganizationDto> CreateOrganization(OrganizationDto organizationDto);
+        Task<OrganizationDto> CreateOrganization(OrganizationDto organizationDto, long creatorUserID = 0);
         /// <summary>
         /// Updates an existing organization entry by its ID.
         /// </summary>

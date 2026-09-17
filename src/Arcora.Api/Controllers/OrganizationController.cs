@@ -12,7 +12,7 @@ namespace Arcora.Api.Controllers
     public class OrganizationController : ControllerBase
     {
         // GET: api/<OrganizationController>
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetAllOrganizations")]
         public async Task<IActionResult> Get([FromServices] IOrganizationService organizationService, [FromQuery] Paging paging)
@@ -21,7 +21,7 @@ namespace Arcora.Api.Controllers
         }
 
         // GET api/<OrganizationController>/5
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetOrganizationByID")]
@@ -34,22 +34,22 @@ namespace Arcora.Api.Controllers
         }
 
         // POST api/<OrganizationController>
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateOrganization")]
         public async Task<IActionResult> CreateOrganization([FromServices] IOrganizationService organizationService, [FromBody] OrganizationDto organizationDto)
         {
             // var displayName = User.Identity?.Name ?? string.Empty;
-            // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
-            var result = await organizationService.CreateOrganization(organizationDto);
+            long.TryParse(User.FindFirst("UserId")?.Value, out var creatorUserId);
+            var result = await organizationService.CreateOrganization(organizationDto, creatorUserId);
             if (result.OrganizationID != null && result.OrganizationID != Guid.Empty)
                 return CreatedAtRoute("GetOrganizationByID", new { id = result.OrganizationID }, result);
             return BadRequest(new { message = "Failed to create organization. A organization with the same name may already exist." });
         }
 
         // PUT api/<OrganizationController>/5
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateOrganization")]
@@ -82,7 +82,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST: api/organization/{id}/{status}
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "LandLord, Admin")]
         [HttpPost("{id}/{status}", Name = "UpdateOrganizationStatus")]
         public async Task<ActionResult> UpdateOrganizationStatus([FromServices] IOrganizationService organizationService, [FromRoute] Guid id, [FromRoute] string status)
         {

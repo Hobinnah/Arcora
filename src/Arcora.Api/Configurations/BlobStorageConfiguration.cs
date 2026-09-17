@@ -36,6 +36,6 @@ namespace Arcora.Api.Configurations
         /// <summary>
         /// Lifetime, in minutes, of generated read SAS URLs.
         /// </summary>
-        public int SasExpiryMinutes { get; set; } = 60;
+        public int SasExpiryMinutes { get; set; } = 43200;
     }
 }

@@ -103,7 +103,8 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<AmenityCatalog?> checkEntity;
             try
             {
-                checkEntity = await this.amenitycatalogRepository.Find(x => x.Name!.ToLower().Trim() == amenitycatalogDto.Name!.ToLower().Trim());
+                var normalizedName = amenitycatalogDto.Name?.ToLower().Trim();
+                checkEntity = await this.amenitycatalogRepository.Find(x => x.Name != null && x.Name.ToLower().Trim() == normalizedName);
                 if (checkEntity == null || !checkEntity.Any())
                 {
                     amenityCatalog = this.mapper.Map<AmenityCatalog>(amenitycatalogDto);

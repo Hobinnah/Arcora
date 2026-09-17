@@ -1,9 +1,14 @@
 // ===================================THIS FILE WAS AUTO GENERATED===================================
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 using Arcora.Api.DTOs;
+using Microsoft.Extensions.Logging;
 using Arcora.Api.Models;
 using Arcora.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace Arcora.Api.Controllers
 {
@@ -12,7 +17,7 @@ namespace Arcora.Api.Controllers
     public class AddressController : ControllerBase
     {
         // GET: api/<AddressController>
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetAllAddresses")]
         public async Task<IActionResult> Get([FromServices] IAddressService addressService, [FromQuery] Paging paging)
@@ -20,28 +25,28 @@ namespace Arcora.Api.Controllers
             return Ok(await addressService.GetAll(paging));
         }
 
-        // GET api/<AddressController>/5
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [HttpGet("{id}", Name = "GetAddressByID")]
-        public async Task<IActionResult> GetAddressByID([FromServices] IAddressService addressService, Guid id)
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+        [HttpGet(Name = "LookupPostalCode")]
+        public async Task<IActionResult> LookupPostalCode([FromServices] IAddressService addressService, [FromQuery] string postalCode, [FromQuery] string country = "CAN")
         {
-            var result = await addressService.GetID(id);
-            if (result == null)
-                return NotFound(new { message = "Address with the specified ID was not found." });
-            return Ok(result);
+            if (string.IsNullOrWhiteSpace(postalCode))
+                return BadRequest(new { message = "postalCode is required." });
+
+            // Delegate to AddressService implementation
+            var serviceSuggestions = await addressService.LookupAddressesByPostalCode(postalCode, country);
+            return Ok(serviceSuggestions);           
         }
 
         // POST api/<AddressController>
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateAddress")]
         public async Task<IActionResult> CreateAddress([FromServices] IAddressService addressService, [FromBody] AddressDto addressDto)
         {
-            // var displayName = User.Identity?.Name ?? string.Empty;
-            // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
             var result = await addressService.CreateAddress(addressDto);
             if (result.AddressID != null && result.AddressID != Guid.Empty)
                 return CreatedAtRoute("GetAddressByID", new { id = result.AddressID }, result);
@@ -49,14 +54,12 @@ namespace Arcora.Api.Controllers
         }
 
         // PUT api/<AddressController>/5
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateAddress")]
         public async Task<IActionResult> UpdateAddress([FromServices] IAddressService addressService, Guid id, [FromBody] AddressDto addressDto)
         {
-            // var displayName = User.Identity?.Name ?? string.Empty;
-            // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
             var result = await addressService.UpdateAddress(id, addressDto);
             if (result == null)
                 return NotFound(new { message = "Address with the specified ID was not found." });

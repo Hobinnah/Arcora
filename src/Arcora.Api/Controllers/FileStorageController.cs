@@ -23,7 +23,7 @@ namespace Arcora.Api.Controllers
         /// <summary>
         /// Uploads a file to the container matching the given category.
         /// </summary>
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "UploadFile")]
@@ -41,7 +41,7 @@ namespace Arcora.Api.Controllers
         /// <summary>
         /// Downloads a blob's raw content.
         /// </summary>
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet(Name = "DownloadFile")]
@@ -57,7 +57,7 @@ namespace Arcora.Api.Controllers
         /// <summary>
         /// Generates a time-limited read-only SAS URL for a blob.
         /// </summary>
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet(Name = "GetSasUrl")]
@@ -73,7 +73,7 @@ namespace Arcora.Api.Controllers
         /// <summary>
         /// Deletes a blob.
         /// </summary>
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpDelete(Name = "DeleteFile")]

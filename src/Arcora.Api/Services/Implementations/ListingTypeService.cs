@@ -103,7 +103,8 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<ListingType?> checkEntity;
             try
             {
-                checkEntity = await this.listingtypeRepository.Find(x => x.Name!.ToLower().Trim() == listingtypeDto.Name!.ToLower().Trim());
+                var normalizedName = listingtypeDto.Name?.ToLower().Trim();
+                checkEntity = await this.listingtypeRepository.Find(x => x.Name != null && x.Name.ToLower().Trim() == normalizedName);
                 if (checkEntity == null || !checkEntity.Any())
                 {
                     listingType = this.mapper.Map<ListingType>(listingtypeDto);

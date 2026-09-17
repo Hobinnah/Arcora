@@ -63,7 +63,7 @@ namespace Arcora.Api
         /// </summary>
         /// <param name = "ct"></param>
         /// <returns></returns>
-        [Authorize(Roles = "User, Viewer, Admin")]
+        [Authorize(Roles = "User, Viewer, LandLord, Admin")]
         [HttpGet]
         public async Task<IActionResult> GetUsers([FromServices] IAccountService accountService, CancellationToken ct = default)
         {
@@ -77,7 +77,7 @@ namespace Arcora.Api
             return Ok(users);
         }
 
-        [Authorize(Roles = "User, Viewer, Admin")]
+        [Authorize(Roles = "User, Viewer, LandLord, Admin")]
         [HttpPost]
         public async Task<IActionResult> ChangePassword([FromServices] IAccountService accountService, [FromQuery] string userId, [FromBody] ChangePasswordRequest request, CancellationToken ct)
         {

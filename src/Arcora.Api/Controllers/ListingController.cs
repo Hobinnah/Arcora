@@ -19,12 +19,43 @@ namespace Arcora.Api.Controllers
             return Ok(await listingService.GetAll(paging));
         }
 
+        // POST api/<ListingController>/Import
+        [Authorize(Roles = "User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [HttpPost(Name = "PublishListing")]
+        public async Task<IActionResult> PublishListing([FromServices] IListingService listingService, [FromBody] ListingImportDto payload)
+        {
+            if (payload == null)
+                return BadRequest(new { message = "Payload is required." });
+            var result = await listingService.ImportListingPayload(payload);
+            return Ok(result);
+        }
+
         // GET: api/<ListingController>/Search
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "SearchListings")]
         public async Task<IActionResult> Search([FromServices] IListingService listingService, [FromQuery] ListingSearchCriteria criteria)
         {
             return Ok(await listingService.SearchListings(criteria));
+        }
+
+        // GET: api/<ListingController>/GetByOrganization/{organizationId}
+        [Authorize(Roles = "User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [HttpGet("{organizationId}", Name = "GetListingsByOrganization")]
+        public async Task<IActionResult> GetByOrganization([FromServices] IListingService listingService, Guid organizationId)
+        {
+            return Ok(await listingService.GetListingsByOrganization(organizationId));
+        }
+
+        // GET: api/<ListingController>/CountByOrganization/{organizationId}
+        [Authorize(Roles = "User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [HttpGet("{organizationId}", Name = "CountListingsByOrganization")]
+        public async Task<IActionResult> CountByOrganization([FromServices] IListingService listingService, Guid organizationId)
+        {
+            return Ok(await listingService.GetListingsCountByOrganization(organizationId));
         }
 
         // GET api/<ListingController>/5
@@ -40,7 +71,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST api/<ListingController>
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateListing")]
@@ -55,7 +86,7 @@ namespace Arcora.Api.Controllers
         }
 
         // PUT api/<ListingController>/5
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateListing")]
@@ -88,7 +119,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST: api/listing/{id}/{status}
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [HttpPost("{id}/{status}", Name = "UpdateListingStatus")]
         public async Task<ActionResult> UpdateListingStatus([FromServices] IListingService listingService, [FromRoute] Guid id, [FromRoute] string status)
         {

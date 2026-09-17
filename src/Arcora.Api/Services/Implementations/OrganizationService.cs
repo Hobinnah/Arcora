@@ -7,6 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -19,13 +20,17 @@ namespace Arcora.Api.Services.Implementations
         private readonly IMemoryCache cache;
         private readonly ILogger<OrganizationService> logger;
         private readonly IOrganizationRepository organizationRepository;
+        private readonly IOrganizationMemberRepository organizationMemberRepository;
+        private readonly UserManager<User> userManager;
         private readonly IOptions<CacheConfiguration> _options;
-        public OrganizationService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<OrganizationService> logger, IOrganizationRepository organizationRepository)
+        public OrganizationService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<OrganizationService> logger, IOrganizationRepository organizationRepository, IOrganizationMemberRepository organizationMemberRepository, UserManager<User> userManager)
         {
             this.cache = cache;
             this.logger = logger;
             this.mapper = mapper;
             this.organizationRepository = organizationRepository;
+            this.organizationMemberRepository = organizationMemberRepository;
+            this.userManager = userManager;
             this._options = options;
             if (this._options.Value.ExpirationTimeInMinutes <= 0)
                 this._options.Value.ExpirationTimeInMinutes = 15;
@@ -97,7 +102,7 @@ namespace Arcora.Api.Services.Implementations
         }
 
         /// <inheritdoc/>
-        public async Task<OrganizationDto> CreateOrganization(OrganizationDto organizationDto)
+        public async Task<OrganizationDto> CreateOrganization(OrganizationDto organizationDto, long creatorUserID = 0)
         {
             Organization organization = new Organization();
             IEnumerable<Organization?> checkEntity;
@@ -112,6 +117,9 @@ namespace Arcora.Api.Services.Implementations
                     organization = await organizationRepository.Create(organization) ?? new Organization();
                     await organizationRepository.Save();
                     cache.Remove(Cache.ORGANIZATIONS.ToString());
+
+                    // Automatically enrol the creator as the primary owner member of the new organization.
+                    await AddCreatorAsOwnerAsync(organization, creatorUserID);
                 }
             }
             catch (Exception er)
@@ -121,6 +129,54 @@ namespace Arcora.Api.Services.Implementations
             }
 
             return this.mapper.Map<OrganizationDto>(organization);
+        }
+
+        /// <summary>
+        /// Adds the creating user to the newly created organization as the active primary owner. Failures are
+        /// logged but do not roll back organization creation.
+        /// </summary>
+        private async Task AddCreatorAsOwnerAsync(Organization organization, long creatorUserID)
+        {
+            if (creatorUserID <= 0 || organization.OrganizationID == Guid.Empty)
+                return;
+
+            try
+            {
+                var alreadyMember = await organizationMemberRepository.Any(m =>
+                    m.OrganizationID == organization.OrganizationID && m.UserID == creatorUserID);
+                if (alreadyMember)
+                    return;
+
+                var creator = await userManager.FindByIdAsync(creatorUserID.ToString());
+                var creatorName = creator != null
+                    ? $"{creator.FirstName} {creator.LastName}".Trim()
+                    : creatorUserID.ToString();
+                if (string.IsNullOrWhiteSpace(creatorName))
+                    creatorName = creatorUserID.ToString();
+
+                var now = DateTime.UtcNow;
+                var member = new OrganizationMember
+                {
+                    OrganizationMemberID = Guid.NewGuid(),
+                    OrganizationID = organization.OrganizationID,
+                    UserID = creatorUserID,
+                    RoleName = "OWNER",
+                    Status = "ACTIVE",
+                    IsPrimaryOwner = true,
+                    InvitedAt = now,
+                    AcceptedAt = now,
+                    CapturedDate = now,
+                    CapturedBy = creatorName
+                };
+
+                await organizationMemberRepository.Create(member);
+                await organizationMemberRepository.Save();
+                cache.Remove(Cache.ORGANIZATIONMEMBERS.ToString());
+            }
+            catch (Exception er)
+            {
+                logger.LogError(er, "An error occurred while adding the creator as owner for Organization {OrganizationId}. Timestamp: {Timestamp}", organization.OrganizationID, DateTime.UtcNow);
+            }
         }
 
         /// <inheritdoc/>

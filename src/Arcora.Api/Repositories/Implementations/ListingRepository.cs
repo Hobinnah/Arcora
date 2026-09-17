@@ -56,6 +56,26 @@ namespace Arcora.Api.Repositories.Implementations
             return await this.context.Set<Listing>().AnyAsync();
         }
 
+        public async Task<List<Listing>> GetListingsByOrganizationAsync(Guid organizationId)
+        {
+            // Fetching listings for an organization loads navigation data only, to keep the
+            // operation efficient and consistent with GetListingsAsync.
+            return await ApplyDefaultOrder(this.context.Listings.AsNoTracking()
+                .Where(x => x.OrganizationID == organizationId)
+                .Include(x => x.RentalUnit)!.ThenInclude(u => u!.Property)!.ThenInclude(p => p!.Address)
+                .Include(x => x.RentalUnit)!.ThenInclude(u => u!.UnitType)
+                .Include(x => x.ListingType)
+                .Include(x => x.Organization)
+                .Include(x => x.ListingPhotos)
+                ).ToListAsync();
+        }
+
+        public async Task<int> CountListingsByOrganizationAsync(Guid organizationId)
+        {
+            return await this.context.Listings.AsNoTracking()
+                .CountAsync(x => x.OrganizationID == organizationId);
+        }
+
         /// <inheritdoc/>
         public async Task<(List<Listing> Items, int TotalCount)> SearchListingsAsync(ListingSearchCriteria criteria)
         {

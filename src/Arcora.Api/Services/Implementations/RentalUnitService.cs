@@ -103,7 +103,8 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<RentalUnit?> checkEntity;
             try
             {
-                checkEntity = await this.rentalunitRepository.Find(x => x.UnitNumber!.ToLower().Trim() == rentalunitDto.UnitNumber!.ToLower().Trim());
+                var normalizedUnitNumber = rentalunitDto.UnitNumber?.ToLower().Trim();
+                checkEntity = await this.rentalunitRepository.Find(x => x.UnitNumber != null && x.UnitNumber.ToLower().Trim() == normalizedUnitNumber);
                 if (checkEntity == null || !checkEntity.Any())
                 {
                     rentalUnit = this.mapper.Map<RentalUnit>(rentalunitDto);

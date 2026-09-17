@@ -20,6 +20,12 @@ public class RentalUnit
     /// </summary>
     [Required]
     public Guid PropertyID { get; set; }
+
+    /// <summary>
+    /// Name
+    /// </summary>
+    public string? Name { get; set; }
+
     /// <summary>
     /// FK to UnitType
     /// </summary>
@@ -41,6 +47,11 @@ public class RentalUnit
     /// Number of bedrooms
     /// </summary>
     public decimal? Bedrooms { get; set; }
+
+    /// <summary>
+    /// Number of beds
+    /// </summary>
+    public int? Beds { get; set; }
 
     /// <summary>
     /// Number of bathrooms

@@ -14,7 +14,7 @@ namespace Arcora.Api.Accounts
     public record VerifyLoginCodeRequest(string Email, string Code, string? VerificationToken = null);
     public record RequestLoginCodeResponse(bool EmailExists, string Message, string? VerificationToken);
     public record VerifyLoginCodeResponse(bool IsLoginSuccessful);
-    public record AuthResponse(string AccessToken, bool IsLoginSuccessful, IEnumerable<string> Roles, User User, TenantDto? Tenant = null, IEnumerable<OrganizationMemberDto>? MemberOrganizations = null);
+    public record AuthResponse(string AccessToken, bool IsLoginSuccessful, IEnumerable<string> Roles, User User, TenantDto? Tenant = null, IEnumerable<OrganizationMemberDto>? MemberOrganizations = null, OrganizationDto? Organization = null);
     // Lightweight Result helpers
     public record Result(bool Succeeded, IEnumerable<string> Errors)
     {

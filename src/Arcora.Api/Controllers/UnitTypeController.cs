@@ -32,7 +32,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST api/<UnitTypeController>
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateUnitType")]
@@ -47,7 +47,7 @@ namespace Arcora.Api.Controllers
         }
 
         // PUT api/<UnitTypeController>/5
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateUnitType")]

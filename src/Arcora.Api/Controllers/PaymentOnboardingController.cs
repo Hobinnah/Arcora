@@ -15,7 +15,7 @@ namespace Arcora.Api.Controllers
     public class PaymentOnboardingController : ControllerBase
     {
         // POST: api/PaymentOnboarding/Start
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPost(Name = "StartPaymentOnboarding")]
@@ -33,7 +33,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST: api/PaymentOnboarding/CreateSetupIntent
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -56,7 +56,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST: api/PaymentOnboarding/SavePaymentMethod
-        [Authorize(Roles = "User, Admin")]
+        [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -79,7 +79,7 @@ namespace Arcora.Api.Controllers
         }
 
         // GET: api/PaymentOnboarding/Status/{tenantId}
-        [Authorize(Roles = "Viewer, User, Admin")]
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet("{tenantId}", Name = "GetPaymentOnboardingStatus")]
         public async Task<IActionResult> Status([FromServices] IPaymentOnboardingService onboardingService, Guid tenantId)

@@ -1,0 +1,89 @@
+Purpose:
+Provide the React frontend with a clear example of how to call the API, what the response looks like, and what to do when the user selects an address.
+
+API endpoints used by frontend:
+- Lookup by postal code (returns suggestions / may enumerate addresses):
+  GET /api/Address/LookupPostalCode?postalCode={postalCode}&country={country}
+- Direct retrieve by provider id (debug/test):
+  GET /api/Address/RetrieveById?id={id}&country={country}
+
+Notes:
+- Both endpoints require Authorization header: `Authorization: Bearer <JWT>` (if API auth enabled).
+- Responses are JSON arrays of suggestion objects with the fields below.
+- The interactive Canada Post service may return container results (Next=="Find"). The API will attempt enumeration; you should still present results to the user for selection.
+
+Expected suggestion object shape (example):
+[
+  {
+    "id": "CA|CP|B|22846226",
+    "text": "511 Schmeiser Ave, Saskatoon, SK S7V 1P4",
+    "line1": "511 Schmeiser Ave",
+    "line2": "",
+    "city": "Saskatoon",
+    "provinceCode": "SK",
+    "postalCode": "S7V 1P4",
+    "countryCode": "CA"
+  },
+  ...
+]
+
+Frontend instructions (concise):
+1. User enters postal code in postal code input.
+2. Call LookupPostalCode when the user requests suggestions (on blur or click "Find addresses").
+   - Use URL-encode for postal code (spaces -> %20) or rely on fetch param encoding.
+   - Include Authorization header if required.
+3. Receive the JSON array. Render a selectable list (autocomplete list or modal) with the `text` field as display.
+4. When user selects an item, populate address form fields with:
+   - addressLine1: `line1`
+   - addressLine2: `line2`
+   - city: `city`
+   - province/state: `provinceCode`
+   - postal code: `postalCode`
+   - country: `countryCode`
+   - store provider id (optional): `id` (use later if you need Provider-specific Retrieve)
+5. If you need exact canonical address data for a provider id, call `RetrieveById` (server exposes this for testing). Prefer letting the user pick the right address rather than blindly enumerating everything.
+
+React fetch example (using fetch):
+
+```javascript
+async function fetchAddressSuggestions(postalCode) {
+  const url = `/api/Address/LookupPostalCode?postalCode=${encodeURIComponent(postalCode)}&country=CA`;
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('accessToken')}` // or your auth flow
+    }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json(); // array of suggestion objects
+}
+```
+
+Example select handler (React):
+
+```javascript
+function onSuggestionSelect(suggestion) {
+  setFormValues({
+    line1: suggestion.line1 || '',
+    line2: suggestion.line2 || '',
+    city: suggestion.city || '',
+    provinceCode: suggestion.provinceCode || '',
+    postalCode: suggestion.postalCode || '',
+    countryCode: suggestion.countryCode || 'CA'
+  });
+  // optionally save provider id
+  setProviderId(suggestion.id);
+}
+```
+
+UI tips:
+- Show `text` (human readable) in the suggestion list.
+- If multiple language variants appear ("Schmeiser Ave" vs "Av Schmeiser"), show both and allow user to pick.
+- If the list is long, allow filtering by street number or name typed after the postal code.
+
+Security and performance:
+- Do not log or expose the Canada Post Key in the frontend.
+- Keep requests rate-limited on the client (debounce input). The server already limits searches; avoid hammering the API with many prefixes.
+
+If you want, I can also produce a small React component file (`src/components/AddressLookup.jsx`) that implements this logic and UI. Let me know and I will create it.

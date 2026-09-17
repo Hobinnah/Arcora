@@ -131,5 +131,5 @@ public class LeaseDocumentsDto
     /// <summary>
     /// FK to LeaseRenewals
     /// </summary>
-    public LeaseRenewalsDto? LeaseRenewalLeaseRenewals { get; set; }
+    public LeaseRenewalsDto? LeaseRenewals { get; set; }
 }

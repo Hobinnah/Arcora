@@ -18,8 +18,7 @@ public class ListingPhoto
     /// <summary>
     /// FK to Listing
     /// </summary>
-    [Required]
-    public Guid ListingID { get; set; }
+    public Guid? ListingID { get; set; }
 
     /// <summary>
     /// Photo URL
@@ -27,6 +26,26 @@ public class ListingPhoto
     [Required]
     [MaxLength(500)]
     public string? Url { get; set; }
+
+    /// <summary>
+    /// Storage provider for the photo (e.g. AZURE_BLOB).
+    /// </summary>
+    [Required]
+    [MaxLength(100)]
+    public string? StorageProvider { get; set; } = "AZURE_BLOB";
+
+    /// <summary>
+    /// Storage container name
+    /// </summary>
+    [MaxLength(255)]
+    public string? StorageContainer { get; set; }
+
+    /// <summary>
+    /// Reference to the stored blob
+    /// </summary>
+    [Required]
+    [MaxLength(500)]
+    public string? StorageReference { get; set; }
 
     /// <summary>
     /// Photo location (LivingRoom, Bedroom, Bathroom, Laundry, Exterior, Additional)
@@ -67,6 +86,11 @@ public class ListingPhoto
     /// </summary>
     [MaxLength(100)]
     public string? CapturedBy { get; set; }
+
+    /// <summary>
+    /// Optional numeric user id (IdentityUser<long>) who captured the photo.
+    /// </summary>
+    public long? UserID { get; set; }
 
     /// <summary>
     /// FK to Listing

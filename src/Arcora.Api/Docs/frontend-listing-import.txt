@@ -1,0 +1,99 @@
+Endpoint
+POST /api/listing/import
+Content-Type: application/json
+Auth: Bearer token (role: User, Landlord or Admin)
+
+Purpose
+Single RPC to create Address -> Property -> RentalUnit(s) -> Listing(s) and reconcile uploaded photos + listing amenities.
+
+Request DTO (frontend responsibilities)
+- Use the existing `ListingImportDto` shape.
+- Top-level fields:
+  - `Property` (PropertyDto) — include nested `Address` (AddressDto) when creating a new address.
+  - `Units[]` (array of UnitImportDto)
+  - `SafetyDetails` (optional, ignored server-side for now)
+
+UnitImportDto fields (per unit)
+- `RentalUnit` (RentalUnitDto): UnitNumber, Bedrooms, Bathrooms, Notes, CapturedBy, etc. Do NOT set PropertyID (server will set from created property).
+- `UnitTypeName` (string): friendly name, e.g. "Apartment" (server resolves to UnitTypeID).
+- `Listing` (ListingDto): Title, Description, BaseMonthlyRentAmount, Currency, MinimumLeaseMonths, MaximumLeaseMonths, Notes, IsFurnished, IsPetFriendly, CapturedBy, etc. Do NOT set ListingTypeID or RentalUnitID (server will set/resolve).
+- `ListingTypeName` (string): friendly listing type name (server resolves/creates ListingType).
+- `SelectedAmenities` (string[]): amenity names e.g. ["WiFi","Washer"], server resolves against AmenityCatalog.
+- `ListingPhotos` (ListingPhotoDto[]): previously uploaded photos to reconcile. Common pattern: `CapturedBy` had values like "2_Unit_1_"; server finds photos with matching `CapturedBy` and null ListingID and updates them to the real ListingID.
+
+Important server behaviors
+- Address: If `Property.Address` is provided, server creates Address and returns AddressID. Property.AddressID will be set server-side prior to creating property.
+- Property: created from `Property` object. Return PropertyID.
+- UnitType & ListingType: when client does not have the catalog ID, provide the name in `UnitTypeName` / `ListingTypeName`. Server will search catalog and create item if missing.
+- RentalUnit: server will create `RentalUnit` and return RentalUnitID.
+- Listing: server will create Listing and return ListingID.
+- ListingAmenity: server resolves amenity names and creates ListingAmenity records.
+- ListingPhoto reconciliation: provide photos with `CapturedBy` values you used when uploading. Server will match and call updateListingPhoto to set ListingID.
+
+Example payload (trim to fields you have):
+{
+  "Property": {
+    "OrganizationID": "00000000-0000-0000-0000-000000000000",
+    "Name": "Sunset Towers",
+    "PropertyType": "Condo",
+    "TimeZone": "America/Toronto",
+    "Address": {
+      "Line1": "123 Main St",
+      "City": "Toronto",
+      "ProvinceCode": "ON",
+      "PostalCode": "M1A1A1",
+      "CountryCode": "CA",
+      "Latitude": 43.70011,
+      "Longitude": -79.4163,
+      "CapturedBy": "frontend-user-42"
+    },
+    "CapturedBy": "frontend-user-42"
+  },
+  "Units": [
+    {
+      "RentalUnit": {
+        "UnitNumber": "1A",
+        "Bedrooms": 1,
+        "Bathrooms": 1,
+        "Notes": "Corner unit",
+        "CapturedBy": "frontend-user-42"
+      },
+      "UnitTypeName": "Apartment",
+      "Listing": {
+        "Title": "Bright 1BR near downtown",
+        "Description": "Clean 1 bedroom with great light.",
+        "BaseMonthlyRentAmount": 1800.00,
+        "Currency": "CAD",
+        "MinimumLeaseMonths": 6,
+        "MaximumLeaseMonths": 12,
+        "Notes": "No smoking",
+        "IsFurnished": false,
+        "IsPetFriendly": true,
+        "CapturedBy": "frontend-user-42"
+      },
+      "ListingTypeName": "LongTerm",
+      "SelectedAmenities": ["WiFi","Washer"],
+      "ListingPhotos": [
+        {
+          "Url": "https://.../blob1.jpg",
+          "DisplayOrder": 1,
+          "IsCoverPhoto": true,
+          "CapturedBy": "2_Unit_1_"
+        }
+      ]
+    }
+  ],
+  "SafetyDetails": null
+}
+
+Response (ListingImportResultDto)
+- `AddressID`: GUID or null
+- `PropertyID`: GUID
+- `Units`: array of { UnitNumber, RentalUnitID, ListingID }
+
+Notes / tips for frontend
+- Set `CapturedBy` on uploads and DTOs so photo reconciliation can match records uploaded earlier (CapturedBy value is used).
+- Do not pre-populate IDs (AddressID, PropertyID, RentalUnitID, ListingID) when creating new records. The server returns the created IDs.
+- Use application/json and include a valid authorization bearer token with appropriate role.
+
+File saved to repository: `src/Arcora.Api/Docs/frontend-listing-import.txt`

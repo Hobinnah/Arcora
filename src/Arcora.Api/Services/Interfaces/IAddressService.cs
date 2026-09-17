@@ -37,5 +37,10 @@ namespace Arcora.Api.Services.Interfaces
         /// <param name = "ID"></param>
         /// <returns></returns>
         Task DeleteAddress(Guid ID);
+        /// <summary>
+        /// Lookup addresses via Canada Post AddressComplete using postal code and country.
+        /// Returns a list of suggestion DTOs.
+        /// </summary>
+        Task<List<AddressLookupSuggestionDto>> LookupAddressesByPostalCode(string postalCode, string country = "CA");
     }
 }

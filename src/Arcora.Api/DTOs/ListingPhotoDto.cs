@@ -17,8 +17,30 @@ public class ListingPhotoDto
     /// <summary>
     /// FK to Listing
     /// </summary>
-    [Required]
-    public Guid ListingID { get; set; }
+    /// <summary>
+    /// Optional FK to Listing
+    /// </summary>
+    public Guid? ListingID { get; set; }
+
+    /// <summary>
+    /// Optional numeric user id who captured the photo.
+    /// </summary>
+    public long? UserID { get; set; }
+
+    /// <summary>
+    /// Storage provider for the photo (e.g. AZURE_BLOB).
+    /// </summary>
+    public string? StorageProvider { get; set; }
+
+    /// <summary>
+    /// Storage container name
+    /// </summary>
+    public string? StorageContainer { get; set; }
+
+    /// <summary>
+    /// Reference to the stored blob
+    /// </summary>
+    public string? StorageReference { get; set; }
 
     /// <summary>
     /// Photo URL

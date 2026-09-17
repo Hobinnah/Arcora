@@ -86,7 +86,7 @@ namespace Arcora.Api.Services.Implementations
             if (!await blob.ExistsAsync(cancellationToken))
                 return null;
 
-            var expiresOn = DateTimeOffset.UtcNow.AddMinutes(options.SasExpiryMinutes <= 0 ? 60 : options.SasExpiryMinutes);
+            var expiresOn = DateTimeOffset.UtcNow.AddMinutes(options.SasExpiryMinutes <= 0 ? 43200 : options.SasExpiryMinutes);
             var builder = new BlobSasBuilder
             {
                 BlobContainerName = container.Name,
@@ -99,7 +99,16 @@ namespace Arcora.Api.Services.Implementations
             // Account-key based SAS (works with connection string and Azurite).
             if (blob.CanGenerateSasUri)
             {
-                return blob.GenerateSasUri(builder).ToString();
+                var sasUri = blob.GenerateSasUri(builder).ToString();
+                try
+                {
+                    logger.LogInformation("Generated blob SAS (masked): {Sas}", MaskSasInUrl(sasUri));
+                }
+                catch
+                {
+                    // ignore logging failures
+                }
+                return sasUri;
             }
 
             // Managed identity: fall back to a user delegation SAS.
@@ -108,12 +117,55 @@ namespace Arcora.Api.Services.Implementations
                 var start = DateTimeOffset.UtcNow.AddMinutes(-5);
                 var userDelegationKey = await blobServiceClient.GetUserDelegationKeyAsync(start, expiresOn, cancellationToken);
                 var sas = builder.ToSasQueryParameters(userDelegationKey.Value, blobServiceClient.AccountName).ToString();
-                return $"{blob.Uri}?{sas}";
+                var full = $"{blob.Uri}?{sas}";
+                try
+                {
+                    logger.LogInformation("Generated user-delegation blob SAS (masked): {Sas}", MaskSasInUrl(full));
+                }
+                catch
+                {
+                    // ignore logging failures
+                }
+                return full;
             }
             catch (Exception er)
             {
                 logger.LogError(er, "Failed to generate a user delegation SAS for blob {BlobName}. Timestamp: {Timestamp}", blobName, DateTime.UtcNow);
                 return null;
+            }
+        }
+
+        private static string MaskSasInUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return url ?? string.Empty;
+            try
+            {
+                var idx = url.IndexOf('?');
+                if (idx == -1) return url;
+                var baseUrl = url.Substring(0, idx + 1);
+                var qs = url.Substring(idx + 1);
+                // mask sig and se values
+                var parts = qs.Split('&');
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    if (parts[i].StartsWith("sig=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        parts[i] = "sig=****";
+                    }
+                    else if (parts[i].StartsWith("se=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        parts[i] = "se=****";
+                    }
+                    else if (parts[i].StartsWith("sv=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        parts[i] = "sv=****";
+                    }
+                }
+                return baseUrl + string.Join('&', parts);
+            }
+            catch
+            {
+                return "****";
             }
         }
 

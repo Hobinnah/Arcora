@@ -97,6 +97,7 @@ namespace Arcora.Api
           public virtual DbSet<CalendarEvent> CalendarEvents { get; set; }
           public virtual DbSet<ListingType> ListingTypes { get; set; }
           public virtual DbSet<UnitType> UnitTypes { get; set; }
+          public virtual DbSet<PostalLookupSuggestion> PostalLookupSuggestions { get; set; }
 
         #endregion
 

@@ -11,6 +11,22 @@ namespace Arcora.Api.Repositories.Interfaces
         Task<bool> HasListingsAsync();
 
         /// <summary>
+        /// Retrieves all listings that belong to the specified organization, including the
+        /// navigation data needed to project a <c>ListingDto</c>.
+        /// </summary>
+        /// <param name="organizationId">The organization whose listings should be returned.</param>
+        /// <returns>The organization's listings ordered by the default (most recent first) order.</returns>
+        Task<List<Listing>> GetListingsByOrganizationAsync(Guid organizationId);
+
+        /// <summary>
+        /// Counts the listings that belong to the specified organization. The count is
+        /// evaluated server-side without materializing the entities.
+        /// </summary>
+        /// <param name="organizationId">The organization whose listings should be counted.</param>
+        /// <returns>The number of listings owned by the organization.</returns>
+        Task<int> CountListingsByOrganizationAsync(Guid organizationId);
+
+        /// <summary>
         /// Efficiently searches published, available listings using Airbnb-style criteria
         /// (location, move-in date, stay/lease length, party size and optional filters).
         /// Filtering, availability checks and paging are performed server-side.

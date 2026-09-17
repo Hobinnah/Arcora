@@ -18,12 +18,24 @@ namespace Arcora.Api.Services.Interfaces
         /// <param name = "ID"></param>
         /// <returns></returns>
         Task<ListingPhotoDto?> GetID(Guid ID);
+
+        /// <summary>
+        /// Retrieves listing photos by the capturedBy field. 
+        /// </summary>
+        /// <param name="capturedBy"> The user who captured the photos. </param>
+        /// <returns></returns>
+        Task<List<ListingPhotoDto?>> GetPhotosByCapturedBy(string capturedBy);
+
         /// <summary>
         /// Creates a new listing photo entry.
         /// </summary>
         /// <param name = "listingPhotoDto"></param>
         /// <returns></returns>
         Task<ListingPhotoDto> CreateListingPhoto(ListingPhotoDto listingPhotoDto);
+        /// <summary>
+        /// Uploads a listing photo via multipart/form-data and persists metadata.
+        /// </summary>
+        Task<ListingPhotoDto> UploadListingPhoto(Arcora.Api.Models.ListingPhotoUploadRequest request, CancellationToken cancellationToken = default);
         /// <summary>
         /// Updates an existing listing photo entry by its ID.
         /// </summary>

@@ -103,7 +103,8 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<UnitType?> checkEntity;
             try
             {
-                checkEntity = await this.unittypeRepository.Find(x => x.Name!.ToLower().Trim() == unittypeDto.Name!.ToLower().Trim());
+                var normalizedName = unittypeDto.Name?.ToLower().Trim();
+                checkEntity = await this.unittypeRepository.Find(x => x.Name != null && x.Name.ToLower().Trim() == normalizedName);
                 if (checkEntity == null || !checkEntity.Any())
                 {
                     unitType = this.mapper.Map<UnitType>(unittypeDto);
