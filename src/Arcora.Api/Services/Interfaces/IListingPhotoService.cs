@@ -49,5 +49,13 @@ namespace Arcora.Api.Services.Interfaces
         /// <param name = "ID"></param>
         /// <returns></returns>
         Task DeleteListingPhoto(Guid ID);
+
+        /// <summary>
+        /// Populates each photo DTO's <see cref="ListingPhotoDto.Url"/> with a freshly
+        /// generated, short-lived read-only SAS URL so the frontend can display the images.
+        /// </summary>
+        /// <param name="photos">The photo DTOs to populate.</param>
+        /// <returns></returns>
+        Task PopulateReadUrlsAsync(IEnumerable<ListingPhotoDto?>? photos);
     }
 }

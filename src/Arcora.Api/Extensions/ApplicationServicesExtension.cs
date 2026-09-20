@@ -433,7 +433,7 @@ namespace Arcora.Api.Extensions
                     };
 
                     // If a browser hits a protected page without auth, challenge via OIDC by default.
-                    options.ForwardChallenge = OpenIdConnectDefaults.AuthenticationScheme;
+                    options.ForwardChallenge = CookieAuthenticationDefaults.AuthenticationScheme; //OpenIdConnectDefaults.AuthenticationScheme;
                 })
                 .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, o =>
                 {

@@ -284,6 +284,18 @@ namespace Arcora.Api.Services.Implementations
             }
         }
 
+        /// <inheritdoc/>
+        public async Task PopulateReadUrlsAsync(IEnumerable<ListingPhotoDto?>? photos)
+        {
+            if (photos == null)
+                return;
+
+            foreach (var photo in photos)
+            {
+                await PopulateReadUrlAsync(photo);
+            }
+        }
+
         /// <summary>
         /// Populates the DTO's <see cref="ListingPhotoDto.Url"/> with a freshly generated, short-lived
         /// read-only SAS URL. Failures are logged but never block the response.

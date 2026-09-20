@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography.Xml;
 
 namespace Arcora.Api.Services.Implementations
 {
@@ -259,6 +260,22 @@ namespace Arcora.Api.Services.Implementations
                         }
 
                         result.Units.Add(unitResult);
+
+                        // 7) Listing rules
+                        if (createdListing.ListingID != null)
+                        {
+                            var defaultRules = this.InitialListingRules(
+                                createdListing.ListingID.Value,
+                                unit.RentalUnit.MaximumOccupants ?? 0);
+
+                            if (defaultRules.Any())
+                            {
+                                await this.dbContext.ListingRules.AddRangeAsync(defaultRules);
+                                await this.dbContext.SaveChangesAsync();
+                            }
+                        }
+
+
                     }
 
                     await transaction.CommitAsync();
@@ -276,6 +293,120 @@ namespace Arcora.Api.Services.Implementations
             });
 
             return result;
+        }
+
+        private List<ListingRule> InitialListingRules(Guid listingID, int numberOfGuests)
+        {
+            var data = new List<ListingRule>
+            {
+                new ListingRule
+                {
+                    CapturedBy = "Seed",
+                    EffectiveFrom = DateTime.UtcNow,
+                    IsAllowed = true,
+                    ListingID = listingID,
+                    RuleDescription = "Events allowed",
+                    RuleTitle = "No",
+                    RuleType = "PARTIES",
+                    CapturedDate = DateTime.UtcNow
+                },
+                new ListingRule
+                {
+                    CapturedBy = "Seed",
+                    EffectiveFrom = DateTime.UtcNow,
+                    IsAllowed = true,
+                    ListingID = listingID,
+                    RuleDescription = "Pets allowed",
+                    RuleTitle = "false",
+                    RuleType = "PETS",
+                    CapturedDate = DateTime.UtcNow
+                },
+                new ListingRule
+                {
+                    CapturedBy = "Seed",
+                    EffectiveFrom = DateTime.UtcNow,
+                    IsAllowed = true,
+                    ListingID = listingID,
+                    RuleDescription = "Start Time",
+                    RuleTitle = "10:00 PM",
+                    RuleType = "QUIET_HOURS_START",
+                    CapturedDate = DateTime.UtcNow
+                },
+                new ListingRule
+                {
+                    CapturedBy = "Seed",
+                    EffectiveFrom = DateTime.UtcNow,
+                    IsAllowed = true,
+                    ListingID = listingID,
+                    RuleDescription = "End Time",
+                    RuleTitle = "07:00 AM",
+                    RuleType = "QUIET_HOURS_END",
+                    CapturedDate = DateTime.UtcNow
+                },
+                new ListingRule
+                {
+                    CapturedBy = "Seed",
+                    EffectiveFrom = DateTime.UtcNow,
+                    IsAllowed = true,
+                    ListingID = listingID,
+                    RuleDescription = "Smoking, vaping, e?cigarettes allowed",
+                    RuleTitle = "false",
+                    RuleType = "SMOKING",
+                    CapturedDate = DateTime.UtcNow
+                },
+                new ListingRule
+                {
+                    CapturedBy = "Seed",
+                    EffectiveFrom = DateTime.UtcNow,
+                    IsAllowed = true,
+                    ListingID = listingID,
+                    RuleDescription = "Check In",
+                    RuleTitle = "01:00 PM",
+                    RuleType = "CHECK_IN",
+                    CapturedDate = DateTime.UtcNow
+                },
+                new ListingRule
+                {
+                    CapturedBy = "Seed",
+                    EffectiveFrom = DateTime.UtcNow,
+                    IsAllowed = true,
+                    ListingID = listingID,
+                    RuleDescription = "Check Out",
+                    RuleTitle = "11:00 AM",
+                    RuleType = "CHECK_OUT",
+                    CapturedDate = DateTime.UtcNow
+                },
+                new ListingRule
+                {
+                    CapturedBy = "Seed",
+                    EffectiveFrom = DateTime.UtcNow,
+                    IsAllowed = true,
+                    ListingID = listingID,
+                    RuleDescription = "Number Of Guests",
+                    RuleTitle = numberOfGuests.ToString(),
+                    RuleType = "NUMBER_OF_GUESTS",
+                    CapturedDate = DateTime.UtcNow
+                }
+            };
+
+            return data;
+        }
+
+        /// <summary>
+        /// Generates fresh read SAS URLs for every photo on the given listings so the
+        /// frontend can render the images (mirrors ListingPhotoService behaviour).
+        /// </summary>
+        private async Task ApplyPhotoReadUrlsAsync(IEnumerable<ListingDto> listings)
+        {
+            var photos = listings?
+                .Where(l => l?.ListingPhotos != null)
+                .SelectMany(l => l.ListingPhotos!)
+                .ToList();
+
+            if (photos == null || photos.Count == 0)
+                return;
+
+            await this.listingPhotoService.PopulateReadUrlsAsync(photos);
         }
 
         /// <summary>
@@ -348,6 +479,7 @@ namespace Arcora.Api.Services.Implementations
             var pagedEntities = filteredEntities.OrderByDescending(x => x.CapturedDate).Skip((paging!.PageNumber - 1) * paging.PageSize).Take(paging.PageSize).ToList();
             var pagedDtos = this.mapper.Map<IEnumerable<ListingDto>>(pagedEntities).ToList();
             await this.ApplyRatingAggregatesAsync(pagedDtos);
+            await this.ApplyPhotoReadUrlsAsync(pagedDtos);
             return new PagedResult<ListingDto>
             {
                 Data = pagedDtos,
@@ -363,6 +495,7 @@ namespace Arcora.Api.Services.Implementations
                 var entities = await this.listingRepository.GetListingsByOrganizationAsync(organizationId) ?? new List<Listing>();
                 var dtos = this.mapper.Map<IEnumerable<ListingDto>>(entities).ToList();
                 await this.ApplyRatingAggregatesAsync(dtos);
+                await this.ApplyPhotoReadUrlsAsync(dtos);
                 return dtos;
             }
             catch (Exception er)
@@ -394,6 +527,7 @@ namespace Arcora.Api.Services.Implementations
                 var (items, totalCount) = await this.listingRepository.SearchListingsAsync(criteria ?? new ListingSearchCriteria());
                 var dtos = this.mapper.Map<IEnumerable<ListingDto>>(items).ToList();
                 await this.ApplyRatingAggregatesAsync(dtos);
+                await this.ApplyPhotoReadUrlsAsync(dtos);
                 return new PagedResult<ListingDto>
                 {
                     Data = dtos,
@@ -427,6 +561,7 @@ namespace Arcora.Api.Services.Implementations
 
                 var dto = this.mapper.Map<ListingDto>(match);
                 await this.ApplyRatingAggregatesAsync(new[] { dto });
+                await this.ApplyPhotoReadUrlsAsync(new[] { dto });
                 return dto;
             }
             catch (Exception er)

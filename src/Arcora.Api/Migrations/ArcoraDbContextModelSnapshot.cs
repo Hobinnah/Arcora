@@ -2499,6 +2499,9 @@ namespace Arcora.Api.Migrations
                     b.Property<decimal>("BaseMonthlyRentAmount")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<int>("SemiAnnualDiscountRate")
+                        .HasColumnType("int");
+
                     b.Property<decimal?>("Bathrooms")
                         .HasColumnType("decimal(18,2)");
 
@@ -2540,6 +2543,10 @@ namespace Arcora.Api.Migrations
                     b.Property<short>("MinimumLeaseMonths")
                         .HasColumnType("smallint");
 
+                    b.Property<string>("LongTermCancellationPolicy")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<string>("Notes")
                         .IsRequired()
                         .HasMaxLength(1000)
@@ -2550,6 +2557,9 @@ namespace Arcora.Api.Migrations
 
                     b.Property<DateTime?>("PublishedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<int>("QuarterlyDiscountRate")
+                        .HasColumnType("int");
 
                     b.Property<Guid>("RentalUnitID")
                         .HasColumnType("uniqueidentifier");
@@ -2562,6 +2572,10 @@ namespace Arcora.Api.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("ShortTermCancellationPolicy")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
@@ -2591,6 +2605,9 @@ namespace Arcora.Api.Migrations
                     b.Property<string>("WIFIPassword")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("YearlyDiscountRate")
+                        .HasColumnType("int");
 
                     b.Property<int>("YearBuilt")
                         .HasColumnType("int");
@@ -2631,8 +2648,7 @@ namespace Arcora.Api.Migrations
                         .HasColumnType("nvarchar(50)");
 
                     b.Property<string>("Instructions")
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");

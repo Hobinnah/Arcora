@@ -102,6 +102,22 @@ namespace Arcora.Api.Services.Implementations
         }
 
         /// <inheritdoc/>
+        public async Task<List<OrganizationMemberDto>?> GetOrganizationMemberByOrgID(Guid organizationID)
+        {
+            try
+            {
+                List<OrganizationMember>? match = await this.organizationmemberRepository.GetOrganizationMembersByOrgIDAsync(organizationID);
+
+                return match == null ? null : this.mapper.Map<List<OrganizationMemberDto>>(match);
+            }
+            catch (Exception er)
+            {
+                logger.LogError(er, "An error occurred while fetching OrganizationMember by ID. Timestamp: {Timestamp}", DateTime.UtcNow);
+                throw;
+            }
+        }
+
+        /// <inheritdoc/>
         public async Task<IEnumerable<OrganizationMemberDto>?> GetMemberOrganizationsAsync(long userID)
         {
             try

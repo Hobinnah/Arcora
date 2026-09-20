@@ -18,6 +18,15 @@ namespace Arcora.Api.Services.Interfaces
         /// <param name = "ID"></param>
         /// <returns></returns>
         Task<OrganizationMemberDto?> GetID(Guid ID);
+
+        /// <summary>
+        /// Asynchronously retrieves an organization member by the specified organization ID.
+        /// </summary>
+        /// <param name="organizationID">The unique identifier of the organization.</param>
+        /// <returns>A task that represents the asynchronous operation. The task result contains an OrganizationMemberDto if
+        /// found; otherwise, null.</returns>
+        Task<List<OrganizationMemberDto>?> GetOrganizationMemberByOrgID(Guid organizationID);
+
         /// <summary>
         /// Creates a new organization member entry.
         /// </summary>

@@ -34,7 +34,6 @@ public class ListingAccessInstructionDto
     /// <summary>
     /// Detailed instructions
     /// </summary>
-    [MaxLength(256)]
     public string? Instructions { get; set; }
 
     /// <summary>

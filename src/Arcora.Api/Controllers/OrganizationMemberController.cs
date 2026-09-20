@@ -33,6 +33,19 @@ namespace Arcora.Api.Controllers
             return Ok(result);
         }
 
+        // GET api/<OrganizationMemberController>/5
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [HttpGet("{organizationID}", Name = "GetOrganizationMemberByOrgID")]
+        public async Task<IActionResult> GetOrganizationMemberByOrgID([FromServices] IOrganizationMemberService organizationmemberService, Guid organizationID)
+        {
+            var result = await organizationmemberService.GetOrganizationMemberByOrgID(organizationID);
+            if (result == null)
+                return NotFound(new { message = "OrganizationMember with the specified ID was not found." });
+            return Ok(result);
+        }
+
         // POST api/<OrganizationMemberController>
         [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]

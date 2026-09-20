@@ -217,6 +217,21 @@ public class ListingDto
     public decimal BaseMonthlyRentAmount { get; set; } = 0;
 
     /// <summary>
+    /// Quarterly discount rate percentage
+    /// </summary>
+    public int QuarterlyDiscountRate { get; set; } = 0;
+
+    /// <summary>
+    /// Semi-annual discount rate percentage
+    /// </summary>
+    public int SemiAnnualDiscountRate { get; set; } = 0;
+
+    /// <summary>
+    /// Yearly discount rate percentage
+    /// </summary>
+    public int YearlyDiscountRate { get; set; } = 0;
+
+    /// <summary>
     /// Security deposit amount
     /// </summary>
     [Required]
@@ -280,6 +295,18 @@ public class ListingDto
     [Required]
     [MaxLength(1000)]
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// Short-term cancellation policy (e.g. Flexible, Moderate, Limited)
+    /// </summary>
+    [MaxLength(50)]
+    public string? ShortTermCancellationPolicy { get; set; }
+
+    /// <summary>
+    /// Long-term cancellation policy (e.g. Firm Long Term, Strict Long Term)
+    /// </summary>
+    [MaxLength(50)]
+    public string? LongTermCancellationPolicy { get; set; }
 
     /// <summary>
     /// WiFi network name
