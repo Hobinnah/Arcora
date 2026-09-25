@@ -103,8 +103,8 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<ListingAmenity?> checkEntity;
             try
             {
-                var normalizedNotes = listingamenityDto.Notes?.ToLower().Trim();
-                checkEntity = await this.listingamenityRepository.Find(x => x.Notes != null && x.Notes.ToLower().Trim() == normalizedNotes);
+
+                checkEntity = await this.listingamenityRepository.Find(x => x.AmenityID == listingamenityDto.AmenityID && x.ListingID == listingamenityDto.ListingID);
                 if (checkEntity == null || !checkEntity.Any())
                 {
                     listingAmenity = this.mapper.Map<ListingAmenity>(listingamenityDto);
@@ -113,6 +113,10 @@ namespace Arcora.Api.Services.Implementations
                     listingAmenity = await listingamenityRepository.Create(listingAmenity) ?? new ListingAmenity();
                     await listingamenityRepository.Save();
                     cache.Remove(Cache.LISTINGAMENITIES.ToString());
+                }
+                else
+                {
+                    listingAmenity = checkEntity.First() ?? new ListingAmenity();
                 }
             }
             catch (Exception er)

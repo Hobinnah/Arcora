@@ -44,9 +44,9 @@ namespace Arcora.Api.Controllers
         [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet("{organizationId}", Name = "GetListingsByOrganization")]
-        public async Task<IActionResult> GetByOrganization([FromServices] IListingService listingService, Guid organizationId)
+        public async Task<IActionResult> GetByOrganization([FromServices] IListingService listingService, Guid organizationId, [FromQuery] Paging paging)
         {
-            return Ok(await listingService.GetListingsByOrganization(organizationId));
+            return Ok(await listingService.GetListingsByOrganization(organizationId, paging));
         }
 
         // GET: api/<ListingController>/CountByOrganization/{organizationId}

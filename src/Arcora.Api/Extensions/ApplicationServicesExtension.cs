@@ -244,6 +244,7 @@ namespace Arcora.Api.Extensions
              services.AddTransient<IListingRepository, ListingRepository>();
              services.AddTransient<IOrganizationMemberService, OrganizationMemberService>();
              services.AddTransient<IOrganizationMemberRepository, OrganizationMemberRepository>();
+             services.AddTransient<ICohostInvitationRepository, CohostInvitationRepository>();
              services.AddTransient<IOrganizationService, OrganizationService>();
              services.AddTransient<IOrganizationRepository, OrganizationRepository>();
              services.AddTransient<IRentalUnitService, RentalUnitService>();

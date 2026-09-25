@@ -84,6 +84,12 @@ public class Listing
     public decimal BaseMonthlyRentAmount { get; set; }
 
     /// <summary>
+    /// Base monthly rent amount upper bound
+    /// </summary>
+    [Column("BaseMonthlyRentAmountMax")]
+    public decimal BaseMonthlyRentAmountMax { get; set; } = 0;
+
+    /// <summary>
     /// Quarterly discount rate percentage
     /// </summary>
     public int QuarterlyDiscountRate { get; set; } = 0;
@@ -139,6 +145,17 @@ public class Listing
     /// Date until which listing is available
     /// </summary>
     public DateTime? AvailableTo { get; set; }
+
+    /// <summary>
+    /// Advance notice required before check-in (e.g. 24 hours)
+    /// </summary>
+    [MaxLength(100)]
+    public string? AdvanceNotice { get; set; }
+
+    /// <summary>
+    /// Indicates whether same-day bookings are allowed
+    /// </summary>
+    public bool AllowSameDay { get; set; } = false;
 
     /// <summary>
     /// Minimum lease duration in months

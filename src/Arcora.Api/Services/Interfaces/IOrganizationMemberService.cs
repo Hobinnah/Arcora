@@ -62,5 +62,47 @@ namespace Arcora.Api.Services.Interfaces
         /// Returns <see cref = "OrganizationMemberDto"/> with the updated organizationmember if successful, or null if not found.
         /// </returns>
         Task<OrganizationMemberDto?> UpdateOrganizationMemberStatus(Guid id, string status);
+
+        /// <summary>
+        /// Sends a signed cohost invitation email for an organization with a time-limited token.
+        /// </summary>
+        /// <param name="cohostInvitationDto">Invitation payload including organization, invitee and requested access level.</param>
+        /// <returns>The invitation result including token and expiry metadata.</returns>
+        Task<CohostInvitationResultDto> InviteCohostAsync(CohostInvitationDto cohostInvitationDto, long invitedByUserID);
+
+        /// <summary>
+        /// Returns pending cohost invitation records for the specified organization.
+        /// Pending excludes accepted invites and only returns actionable invitations.
+        /// </summary>
+        Task<List<CohostInvitationRecordDto>> GetCohostInvitationsByOrganizationAsync(Guid organizationID);
+
+        /// <summary>
+        /// Returns all cohost invitation records for the specified organization.
+        /// </summary>
+        Task<List<CohostInvitationRecordDto>> GetAllCohostInvitationsByOrganizationAsync(Guid organizationID);
+
+        /// <summary>
+        /// Resolves a cohost invitation from token for the invite landing flow.
+        /// </summary>
+        Task<CohostInvitationRecordDto?> GetCohostInviteDetailsAsync(string token);
+
+        /// <summary>
+        /// Applies an invitee response (ACCEPT or DECLINE) for a cohost invitation token.
+        /// </summary>
+        Task<CohostInvitationRecordDto?> RespondToCohostInvitationAsync(string token, string response, long userID);
+
+        /// <summary>
+        /// Revokes a pending cohost invitation.
+        /// </summary>
+        /// <param name="cohostInvitationID">The invitation identifier.</param>
+        /// <param name="updatedByUserID">The authenticated user performing the revoke operation.</param>
+        Task<CohostInvitationRecordDto?> RevokeCohostInvitationAsync(Guid cohostInvitationID, long updatedByUserID);
+
+        /// <summary>
+        /// Reactivates a previously revoked cohost invitation.
+        /// </summary>
+        /// <param name="cohostInvitationID">The invitation identifier.</param>
+        /// <param name="updatedByUserID">The authenticated user performing the reactivation operation.</param>
+        Task<CohostInvitationRecordDto?> ReactivateRevokedCohostAsync(Guid cohostInvitationID, long updatedByUserID);
     }
 }

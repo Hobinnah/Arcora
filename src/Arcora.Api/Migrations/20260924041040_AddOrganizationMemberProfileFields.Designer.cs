@@ -4,6 +4,7 @@ using Arcora.Api;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Arcora.Api.Migrations
 {
     [DbContext(typeof(ArcoraDbContext))]
-    partial class ArcoraDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260924041040_AddOrganizationMemberProfileFields")]
+    partial class AddOrganizationMemberProfileFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -712,77 +715,6 @@ namespace Arcora.Api.Migrations
                     b.HasIndex("TenantID");
 
                     b.ToTable("ChargeBacks");
-                });
-
-            modelBuilder.Entity("Arcora.Api.Entities.CohostInvitation", b =>
-                {
-                    b.Property<Guid>("CohostInvitationID")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime?>("AcceptedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("CapturedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<DateTime?>("CapturedDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("CohostAccess")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("CohostName")
-                        .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)");
-
-                    b.Property<DateTime?>("DeclinedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid>("OrganizationID")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("PhoneNumber")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<DateTime?>("UpdatedDate")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("CohostInvitationID");
-
-                    b.HasIndex("OrganizationID");
-
-                    b.ToTable("CohostInvitations");
                 });
 
             modelBuilder.Entity("Arcora.Api.Entities.Contractor", b =>
@@ -6164,17 +6096,6 @@ namespace Arcora.Api.Migrations
                     b.Navigation("Payment");
 
                     b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("Arcora.Api.Entities.CohostInvitation", b =>
-                {
-                    b.HasOne("Arcora.Api.Entities.Organization", "Organization")
-                        .WithMany()
-                        .HasForeignKey("OrganizationID")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.Navigation("Organization");
                 });
 
             modelBuilder.Entity("Arcora.Api.Entities.Contractor", b =>

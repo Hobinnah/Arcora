@@ -1,0 +1,96 @@
+Cohost Invite Frontend Endpoints - What to Call and When
+=======================================================
+
+1) Show pending invites (host dashboard pending tab)
+----------------------------------------------------
+Use:
+GET /api/OrganizationMember/GetCohostInvitationsByOrganization?organizationID={organization-guid}
+
+Purpose:
+- Returns pending/actionable invites only.
+- ACCEPTED invites are excluded.
+
+Expected statuses in this endpoint:
+- PENDING
+- INVITED
+
+When to call:
+- On page load of Pending Invites tab
+- After sending an invite
+- After revoke/resend actions (if implemented)
+- On manual refresh
+
+
+2) Show full invite history (host dashboard all/history tab)
+-----------------------------------------------------------
+Use:
+GET /api/OrganizationMember/GetAllCohostInvitationsByOrganization?organizationID={organization-guid}
+
+Purpose:
+- Returns all invites for the organization (pending + accepted + declined + expired etc).
+
+When to call:
+- On page load of All Invites / History tab
+- On filter changes for historical reporting
+- On manual refresh
+
+
+3) Invite details from email link (invitee landing)
+---------------------------------------------------
+Use:
+GET /api/OrganizationMember/InviteDetails?token={token}
+
+When to call:
+- Immediately when invitee opens /cohost-invite/:token
+- Again after login/signup before submit
+
+
+4) Accept/decline invite from invitee flow
+------------------------------------------
+Use:
+POST /api/OrganizationMember/RespondInvitation?token={token}&response=ACCEPT|DECLINE
+(Requires authenticated user)
+
+When to call:
+- After invitee confirms accept/decline in UI
+- Ensure user is logged in first
+
+Important behavior:
+- On ACCEPT, backend ensures user has LandLord role (adds it if missing).
+
+
+5) Send cohost invite (primary host action)
+-------------------------------------------
+Use:
+POST /api/OrganizationMember/InviteCohost
+Body:
+{
+  "organizationID": "{organization-guid}",
+  "email": "invitee@example.com",
+  "phoneNumber": "+1 555 123 4567",
+  "cohostAccess": "Full access"
+}
+
+When to call:
+- When primary host submits invite form
+
+
+6) Revoke a cohost invite (host action)
+---------------------------------------
+Use:
+POST /api/OrganizationMember/RevokeCohostInvitation?cohostInvitationID={cohost-invitation-guid}
+
+Current backend status:
+- Planned endpoint contract for frontend integration.
+- If not available in deployed backend yet, hide/disable revoke action until endpoint is released.
+
+When to call:
+- When host clicks "Revoke" on a pending invite row.
+- After success, refresh pending endpoint and all/history endpoint.
+
+
+UI implementation note
+----------------------
+- Do not use the "pending" endpoint for history pages.
+- Do not use the "all" endpoint for pending counters/badges.
+- Keep these concerns separate to avoid showing ACCEPTED rows in pending UI.

@@ -44,6 +44,42 @@ public class OrganizationMemberDto
     /// </summary>
     [Required]
     public bool IsPrimaryOwner { get; set; }
+
+    /// <summary>
+    /// URL of the member's profile photo
+    /// </summary>
+    public string? ProfilePhotoUrl { get; set; }
+
+    /// <summary>
+    /// Travel destination of the member
+    /// </summary>
+    public string? TravelDestination { get; set; }
+
+    /// <summary>
+    /// Description of the member's work
+    /// </summary>
+    public string? WorkDescription { get; set; }
+
+    /// <summary>
+    /// Description of what makes the member's home unique
+    /// </summary>
+    public string? HomeUniqueDescription { get; set; }
+
+    /// <summary>
+    /// Description of the member's pets
+    /// </summary>
+    public string? PetsDescription { get; set; }
+
+    /// <summary>
+    /// Decade the member was born in
+    /// </summary>
+    public string? BirthDecade { get; set; }
+
+    /// <summary>
+    /// Description of the member's school
+    /// </summary>
+    public string? SchoolDescription { get; set; }
+
     /// <summary>
     /// Date when the member was invited
     /// </summary>

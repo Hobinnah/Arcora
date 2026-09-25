@@ -1,0 +1,96 @@
+Cohost Invite Frontend Integration Guide
+======================================
+
+1) Primary host sends invite
+----------------------------
+Endpoint:
+POST /api/OrganizationMember/InviteCohost
+
+Request body:
+{
+  "organizationID": "<organization-guid>",
+  "email": "invitee@example.com",
+  "phoneNumber": "+1 555 123 4567",
+  "cohostAccess": "Full access"
+}
+
+Allowed cohostAccess values:
+- Full access
+- Calendar and message access
+- Calendar access
+
+Success response (200):
+{
+  "cohostInvitationID": "<invite-guid>",
+  "email": "invitee@example.com",
+  "phoneNumber": "+1 555 123 4567",
+  "cohostAccess": "Full access",
+  "token": "<signed-token>",
+  "expiresAtUtc": "2026-10-01T00:00:00Z",
+  "status": "PENDING"
+}
+
+Notes:
+- Backend now persists cohost invites.
+- Duplicate pending invites are prevented (existing pending invite is updated).
+
+
+2) Host checks invite statuses
+------------------------------
+Endpoint:
+GET /api/OrganizationMember/GetCohostInvitationsByOrganization?organizationID=<organization-guid>
+
+Use this endpoint to render host-side invitation history/status list.
+
+Each item includes:
+- cohostInvitationID
+- organizationID
+- email
+- phoneNumber
+- cohostAccess
+- status
+- expiresAtUtc
+- acceptedAtUtc
+- declinedAtUtc
+- capturedDateUtc
+- updatedDateUtc
+
+
+3) Invitee email link handling
+------------------------------
+Email link format currently sent:
+- {FrontendUrl}/cohost-invite/{token}?response=ACCEPT
+- {FrontendUrl}/cohost-invite/{token}?response=DECLINE
+
+Frontend route to implement:
+- /cohost-invite/:token
+
+
+4) Auth + resume flow (required)
+--------------------------------
+When invitee opens link:
+- Save token + response immediately in temp storage.
+- If not signed in, redirect to signup/login.
+- After auth, return to /cohost-invite/:token and continue.
+
+If user is new:
+- Complete signup first.
+- Resume invite flow with same token.
+
+
+5) Submit final decision (next backend step)
+--------------------------------------------
+Planned API endpoints for final acceptance/decline:
+- GET /api/OrganizationMember/InviteDetails?token=<token>
+- POST /api/OrganizationMember/RespondInvitation?response=ACCEPT|DECLINE&token=<token>
+
+Until these are implemented, frontend should still support token-preserving auth resume flow.
+
+
+6) UX requirements
+------------------
+- Show clear states: loading, unauthenticated, ready, submitting, success, error.
+- Show expired/invalid token message.
+- On success, route invitee to cohost onboarding/dashboard.
+- Avoid logging token in analytics and browser logs.
+- Clear stored token after completion.

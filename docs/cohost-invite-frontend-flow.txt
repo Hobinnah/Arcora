@@ -1,0 +1,125 @@
+Cohost Invitation Frontend Flow (Arcora)
+Cohost Invitation Frontend Flow (Arcora)
+======================================
+
+Goal
+----
+When an invited cohost clicks the invitation link, the app must support:
+1) token-based invite validation,
+2) sign-up/login if the user is not authenticated,
+3) resume and complete invite acceptance after authentication.
+
+Invite Link Format
+------------------
+The email currently sends links like:
+- {FrontendUrl}/cohost-invite/{token}?response=ACCEPT
+- {FrontendUrl}/cohost-invite/{token}?response=DECLINE
+
+Token validity is 5 days.
+
+Primary Host -> Invite Cohost API Contract
+------------------------------------------
+Endpoint to call when a primary host invites someone:
+- POST /api/OrganizationMember/InviteCohost
+
+Request payload (JSON):
+- OrganizationID (Guid, required)
+- Email (string, required)
+- PhoneNumber (string, required)
+- CohostAccess (string, required)
+
+Allowed CohostAccess values:
+- Full access
+- Calendar and message access
+- Calendar access
+
+Request example:
+{
+  "organizationID": "00000000-0000-0000-0000-000000000000",
+  "email": "invitee@example.com",
+  "phoneNumber": "+1 555 123 4567",
+  "cohostAccess": "Calendar and message access"
+}
+
+Success response (200):
+- Email
+- PhoneNumber
+- CohostAccess
+- Token
+- ExpiresAtUtc
+
+Success response example:
+{
+  "email": "invitee@example.com",
+  "phoneNumber": "+1 555 123 4567",
+  "cohostAccess": "Calendar and message access",
+  "token": "<signed-token>",
+  "expiresAtUtc": "2026-01-01T12:00:00Z"
+}
+
+Error responses:
+- 400 BadRequest (invalid payload / invalid access value / already a member)
+- 404 NotFound (organization not found)
+
+Required Frontend Behavior
+--------------------------
+1. Landing page route
+   - Implement route: /cohost-invite/:token
+   - Read query param: response (ACCEPT or DECLINE)
+
+2. Persist invite context immediately
+   - Save token + response in temporary storage (session/local storage) so it survives redirects.
+
+3. Validate token/invite details (public endpoint)
+   - Call backend invite-details endpoint (to be implemented by backend):
+     GET /api/OrganizationMember/InviteDetails?token={token}
+   - If invalid/expired -> show error page with CTA to request a new invite.
+   - If valid -> show invite details (organization, access level, email, phone, expiry).
+
+4. Auth gate
+   - If user is not authenticated:
+     a) redirect to sign-up/login
+     b) include returnUrl back to /cohost-invite/:token?response=...
+   - After successful sign-up/login, return to invite page and resume.
+
+5. Resume flow after auth
+   - Re-read token from URL or temporary storage.
+   - Re-validate token (never trust cached validation).
+
+6. Ensure invite identity consistency
+   - The signed-in user email should match invite email from invite-details.
+   - If mismatch -> block completion and show clear message.
+
+7. Submit final response (public or authenticated endpoint)
+   - Call backend respond endpoint (to be implemented by backend):
+     POST /api/OrganizationMember/RespondInvitation?response=ACCEPT|DECLINE&token={token}
+
+8. Handle final state
+   - ACCEPT success: show success screen and CTA to organization/listings dashboard.
+   - DECLINE success: show confirmation that invite was declined.
+   - Expired/invalid/already-used: show terminal message and support contact.
+
+UX + Security Notes
+-------------------
+- Do not expose token in logs/analytics.
+- Avoid storing token long-term; clear it after completion.
+- Re-check validity before final submission.
+- Show expiry time in UTC (or convert to user local time in UI, but keep source UTC).
+- If response query is missing, show two buttons (Accept / Decline) and pass selected response to submit call.
+
+Suggested Frontend State Model
+------------------------------
+status: loading | unauthenticated | ready | submitting | success | error
+
+data:
+- token
+- response (optional)
+- inviteDetails { organizationName, cohostAccess, email, phoneNumber, expiresAtUtc }
+- errorMessage
+
+Minimum Acceptance Criteria
+---------------------------
+- Unauthenticated invited user can sign up/login and resume with the same token.
+- Valid token can be accepted or declined.
+- Expired/invalid token shows a clear error state.
+- Successful accept routes cohost into post-onboarding experience.

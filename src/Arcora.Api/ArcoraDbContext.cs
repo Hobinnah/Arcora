@@ -24,6 +24,7 @@ namespace Arcora.Api
           public virtual DbSet<RentalUnit> RentalUnits { get; set; }
           public virtual DbSet<Organization> Organizations { get; set; }
           public virtual DbSet<OrganizationMember> OrganizationMembers { get; set; }
+          public virtual DbSet<CohostInvitation> CohostInvitations { get; set; }
           public virtual DbSet<Listing> Listings { get; set; }
           public virtual DbSet<ListingTermPrice> ListingTermPrices { get; set; }
           public virtual DbSet<ListingAccessInstruction> ListingAccessInstructions { get; set; }

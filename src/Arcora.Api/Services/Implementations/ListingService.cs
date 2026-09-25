@@ -488,20 +488,45 @@ namespace Arcora.Api.Services.Implementations
         }
 
         /// <inheritdoc/>
-        public async Task<IEnumerable<ListingDto>> GetListingsByOrganization(Guid organizationId)
+        public async Task<PagedResult<ListingDto>> GetListingsByOrganization(Guid organizationId, Paging paging)
         {
             try
             {
                 var entities = await this.listingRepository.GetListingsByOrganizationAsync(organizationId) ?? new List<Listing>();
-                var dtos = this.mapper.Map<IEnumerable<ListingDto>>(entities).ToList();
+                var filteredEntities = entities.AsEnumerable();
+                if (!string.IsNullOrWhiteSpace(paging?.Search))
+                {
+                    filteredEntities = filteredEntities.Where(x =>
+                        !string.IsNullOrWhiteSpace(x.Title) &&
+                        x.Title.Contains(paging.Search, StringComparison.OrdinalIgnoreCase));
+                }
+
+                var totalCount = filteredEntities.Count();
+                var pageNumber = paging?.PageNumber > 0 ? paging.PageNumber : 1;
+                var pageSize = paging?.PageSize > 0 ? paging.PageSize : 10;
+                var pagedEntities = filteredEntities
+                    .OrderByDescending(x => x.CapturedDate)
+                    .Skip((pageNumber - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                var dtos = this.mapper.Map<IEnumerable<ListingDto>>(pagedEntities).ToList();
                 await this.ApplyRatingAggregatesAsync(dtos);
                 await this.ApplyPhotoReadUrlsAsync(dtos);
-                return dtos;
+                return new PagedResult<ListingDto>
+                {
+                    Data = dtos,
+                    TotalCount = totalCount
+                };
             }
             catch (Exception er)
             {
                 logger.LogError(er, "An error occurred while fetching Listings for Organization {OrganizationID}. Timestamp: {Timestamp}", organizationId, DateTime.UtcNow);
-                return new List<ListingDto>();
+                return new PagedResult<ListingDto>
+                {
+                    Data = new List<ListingDto>(),
+                    TotalCount = 0
+                };
             }
         }
 

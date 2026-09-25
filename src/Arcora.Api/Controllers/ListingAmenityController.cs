@@ -64,7 +64,7 @@ namespace Arcora.Api.Controllers
         }
 
         // DELETE api/<ListingAmenityController>/5
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin, LandLord")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpDelete("{id}", Name = "DeleteListingAmenity")]

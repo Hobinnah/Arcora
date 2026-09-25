@@ -86,6 +86,55 @@ namespace Arcora.Api
         }
 
         /// <summary>
+        /// Builds the branded HTML body for a cohost invitation email. The email informs the recipient that
+        /// an organization wishes to add them as a cohost for its listings and provides accept/decline links.
+        /// </summary>
+        /// <param name="organizationName">The inviting organization's display name.</param>
+        /// <param name="cohostAccess">The level of access granted to the cohost.</param>
+        /// <param name="email">The invitee's email address.</param>
+        /// <param name="phoneNumber">The invitee's phone number.</param>
+        /// <param name="expiresAt">A human-readable expiry for the invitation link.</param>
+        /// <param name="acceptUrl">The link the invitee clicks to accept.</param>
+        /// <param name="declineUrl">The link the invitee clicks to decline.</param>
+        /// <param name="companyName">The company/brand name used in the email header and footer.</param>
+        /// <param name="supportEmail">The support/contact email shown in the footer.</param>
+        /// <returns>A complete HTML document representing the email body.</returns>
+        public static string BuildCohostInvitationEmail(
+            string organizationName,
+            string cohostName,
+            string inviterName,
+            string cohostAccess,
+            string email,
+            string? phoneNumber,
+            string expiresAt,
+            string acceptUrl,
+            string declineUrl,
+            string companyName,
+            string? supportEmail = null)
+        {
+            var brand = string.IsNullOrWhiteSpace(companyName) ? "Arcora" : companyName;
+            var supportLine = string.IsNullOrWhiteSpace(supportEmail)
+                ? string.Empty
+                : $"<p style=\"margin:0 0 8px;font-family:Arial,sans-serif;font-size:13px;line-height:20px;color:#6b7280;\">Need help? Contact us at <a href=\"mailto:{supportEmail}\" style=\"color:#0d9488;text-decoration:none;\">{supportEmail}</a>.</p>";
+
+            var template = LoadTemplate("CohostInvitation.html");
+
+            return template
+                .Replace("{{Brand}}", brand)
+                .Replace("{{OrganizationName}}", System.Net.WebUtility.HtmlEncode(organizationName))
+                .Replace("{{CohostName}}", System.Net.WebUtility.HtmlEncode(cohostName))
+                .Replace("{{InviterName}}", System.Net.WebUtility.HtmlEncode(inviterName))
+                .Replace("{{CohostAccess}}", System.Net.WebUtility.HtmlEncode(cohostAccess))
+                .Replace("{{Email}}", System.Net.WebUtility.HtmlEncode(email))
+                .Replace("{{PhoneNumber}}", System.Net.WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(phoneNumber) ? "Not provided" : phoneNumber))
+                .Replace("{{ExpiresAt}}", System.Net.WebUtility.HtmlEncode(expiresAt))
+                .Replace("{{AcceptUrl}}", acceptUrl)
+                .Replace("{{DeclineUrl}}", declineUrl)
+                .Replace("{{Year}}", DateTime.UtcNow.Year.ToString())
+                .Replace("{{SupportLine}}", supportLine);
+        }
+
+        /// <summary>
         /// Builds the branded HTML body for a rental-application confirmation email, sent to both the
         /// tenant (their application was submitted) and the host/landlord (a new application was received).
         /// </summary>

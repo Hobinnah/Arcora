@@ -2,6 +2,7 @@
 using Arcora.Api.DTOs;
 using Arcora.Api.Models;
 using Arcora.Api.Services.Interfaces;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -103,6 +104,157 @@ namespace Arcora.Api.Controllers
             if (organizationmember == null)
                 return NotFound($"OrganizationMember with ID {id} not found.");
             return Ok(organizationmember);
+        }
+
+        [Authorize(Roles = "User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [HttpPost(Name = "InviteCohost")]
+        public async Task<IActionResult> InviteCohost([FromServices] IOrganizationMemberService organizationmemberService, [FromBody] CohostInvitationDto cohostInvitationDto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!long.TryParse(userIdClaim, out var userId) || userId <= 0)
+                return BadRequest(new { message = "Unable to resolve the authenticated user." });
+
+            try
+            {
+                var result = await organizationmemberService.InviteCohostAsync(cohostInvitationDto, userId);
+                return Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [HttpGet(Name = "GetCohostInvitationsByOrganization")]
+        public async Task<IActionResult> GetCohostInvitationsByOrganization([FromServices] IOrganizationMemberService organizationmemberService, [FromQuery] Guid organizationID)
+        {
+            var result = await organizationmemberService.GetCohostInvitationsByOrganizationAsync(organizationID);
+            return Ok(result);
+        }
+
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [HttpGet(Name = "GetAllCohostInvitationsByOrganization")]
+        public async Task<IActionResult> GetAllCohostInvitationsByOrganization([FromServices] IOrganizationMemberService organizationmemberService, [FromQuery] Guid organizationID)
+        {
+            var result = await organizationmemberService.GetAllCohostInvitationsByOrganizationAsync(organizationID);
+            return Ok(result);
+        }
+
+        [AllowAnonymous]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [HttpGet(Name = "GetCohostInviteDetails")]
+        public async Task<IActionResult> InviteDetails([FromServices] IOrganizationMemberService organizationmemberService, [FromQuery] string token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+                return BadRequest(new { message = "A token is required." });
+
+            var result = await organizationmemberService.GetCohostInviteDetailsAsync(token);
+            if (result == null)
+                return NotFound(new { message = "The cohost invitation could not be found or the link is invalid or expired." });
+
+            return Ok(result);
+        }
+
+        [Authorize]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [HttpPost(Name = "RespondToCohostInvitation")]
+        public async Task<IActionResult> RespondInvitation([FromServices] IOrganizationMemberService organizationmemberService, [FromQuery] string token, [FromQuery] string response)
+        {
+            if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(response))
+                return BadRequest(new { message = "A token and response are required." });
+
+            var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!long.TryParse(userIdClaim, out var userId) || userId <= 0)
+                return BadRequest(new { message = "Unable to resolve the authenticated user." });
+
+            try
+            {
+                var result = await organizationmemberService.RespondToCohostInvitationAsync(token, response, userId);
+                if (result == null)
+                    return NotFound(new { message = "The cohost invitation could not be found or the link is invalid or expired." });
+
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+        }
+
+        [Authorize(Roles = "User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [HttpPost(Name = "RevokeCohostInvitation")]
+        public async Task<IActionResult> RevokeCohostInvitation([FromServices] IOrganizationMemberService organizationmemberService, [FromQuery] Guid cohostInvitationID)
+        {
+            if (cohostInvitationID == Guid.Empty)
+                return BadRequest(new { message = "A valid cohostInvitationID is required." });
+
+            var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!long.TryParse(userIdClaim, out var userId) || userId <= 0)
+                return BadRequest(new { message = "Unable to resolve the authenticated user." });
+
+            try
+            {
+                var result = await organizationmemberService.RevokeCohostInvitationAsync(cohostInvitationID, userId);
+                if (result == null)
+                    return NotFound(new { message = "Cohost invitation not found." });
+
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [Authorize(Roles = "User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [HttpPost(Name = "ReactivateRevokedCohost")]
+        public async Task<IActionResult> ReactivateRevokedCohost([FromServices] IOrganizationMemberService organizationmemberService, [FromQuery] Guid cohostInvitationID)
+        {
+            if (cohostInvitationID == Guid.Empty)
+                return BadRequest(new { message = "A valid cohostInvitationID is required." });
+
+            var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!long.TryParse(userIdClaim, out var userId) || userId <= 0)
+                return BadRequest(new { message = "Unable to resolve the authenticated user." });
+
+            try
+            {
+                var result = await organizationmemberService.ReactivateRevokedCohostAsync(cohostInvitationID, userId);
+                if (result == null)
+                    return NotFound(new { message = "Cohost invitation not found." });
+
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
     }
 }

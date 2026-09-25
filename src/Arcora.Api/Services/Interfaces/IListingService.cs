@@ -16,8 +16,9 @@ namespace Arcora.Api.Services.Interfaces
         /// Retrieves all listings that belong to the specified organization.
         /// </summary>
         /// <param name="organizationId">The organization whose listings should be returned.</param>
+        /// <param name="paging">Paging and optional search parameters.</param>
         /// <returns>The organization's listings.</returns>
-        Task<IEnumerable<ListingDto>> GetListingsByOrganization(Guid organizationId);
+        Task<PagedResult<ListingDto>> GetListingsByOrganization(Guid organizationId, Paging paging);
         /// <summary>
         /// Retrieves the total number of listings that belong to the specified organization.
         /// </summary>
