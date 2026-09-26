@@ -19,6 +19,12 @@ namespace Arcora.Api.Services.Interfaces
         /// <returns></returns>
         Task<ListingRuleDto?> GetID(Guid ID);
         /// <summary>
+        /// Retrieves listing rules for a specific listing.
+        /// </summary>
+        /// <param name = "listingID"></param>
+        /// <returns></returns>
+        Task<IEnumerable<ListingRuleDto>> GetByListingID(Guid listingID);
+        /// <summary>
         /// Creates a new listing rule entry.
         /// </summary>
         /// <param name = "listingRuleDto"></param>

@@ -33,6 +33,14 @@ namespace Arcora.Api.Controllers
             return Ok(result);
         }
 
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [HttpGet("{listingID}", Name = "GetListingRulesByListingID")]
+        public async Task<IActionResult> GetListingRulesByListingID([FromServices] IListingRuleService listingruleService, Guid listingID)
+        {
+            return Ok(await listingruleService.GetByListingID(listingID));
+        }
+
         // POST api/<ListingRuleController>
         [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]

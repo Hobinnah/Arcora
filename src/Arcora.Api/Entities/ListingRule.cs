@@ -32,7 +32,7 @@ public class ListingRule
     /// Title of the rule
     /// </summary>
     [Required]
-    [MaxLength(200)]
+    [Column(TypeName = "nvarchar(max)")]
     public string? RuleTitle { get; set; }
 
     /// <summary>

@@ -35,6 +35,8 @@ namespace Arcora.Api.Controllers
                 new { Key = "SMOKING", Value = "Smoking" },
                 new { Key = "NUMBER_OF_GUESTS", Value = "Number Of Guests" },
                 new { Key = "CHECK_IN", Value = "Check In" },
+                new { Key = "CHECK_IN_END", Value = "Check In End"},
+                new { Key = "COMMERCIAL_PHOTOGRAPHY", Value = "Commercial Photography"},
                 new { Key = "CHECK_OUT", Value = "Check Out" },
                 new { Key = "ADDITIONAL", Value = "Additional Rules" }
             });

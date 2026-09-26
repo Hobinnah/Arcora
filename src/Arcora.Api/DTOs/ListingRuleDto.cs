@@ -31,7 +31,6 @@ public class ListingRuleDto
     /// Title of the rule
     /// </summary>
     [Required]
-    [MaxLength(200)]
     public string? RuleTitle { get; set; }
 
     /// <summary>

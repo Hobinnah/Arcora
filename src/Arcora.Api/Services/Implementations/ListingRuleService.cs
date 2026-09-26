@@ -97,6 +97,32 @@ namespace Arcora.Api.Services.Implementations
         }
 
         /// <inheritdoc/>
+        public async Task<IEnumerable<ListingRuleDto>> GetByListingID(Guid listingID)
+        {
+            try
+            {
+                IEnumerable<ListingRule> entities = cache.Get<IEnumerable<ListingRule>>(Cache.LISTINGRULES.ToString()) ?? new List<ListingRule>();
+                if (entities == null || !entities.Any())
+                {
+                    entities = (await this.listingruleRepository.GetListingRuleAsync())?.Where(x => x != null) ?? new List<ListingRule>();
+                    if (entities.Any())
+                        cache.Set<IEnumerable<ListingRule>>(Cache.LISTINGRULES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
+                }
+
+                var matches = entities.Where(x => x.ListingID == listingID)
+                                     .OrderByDescending(x => x.ListingRuleID)
+                                     .ToList();
+
+                return this.mapper.Map<IEnumerable<ListingRuleDto>>(matches);
+            }
+            catch (Exception er)
+            {
+                logger.LogError(er, "An error occurred while fetching ListingRules for ListingID {ListingID}. Timestamp: {Timestamp}", listingID, DateTime.UtcNow);
+                return new List<ListingRuleDto>();
+            }
+        }
+
+        /// <inheritdoc/>
         public async Task<ListingRuleDto> CreateListingRule(ListingRuleDto listingruleDto)
         {
             ListingRule listingRule = new ListingRule();
