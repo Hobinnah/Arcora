@@ -131,6 +131,10 @@ public class LeaseDto
     /// </summary>
     public DateTime? ActivatedAt { get; set; }
     /// <summary>
+    /// URL to the fully signed agreement document (stored in Azure Blob)
+    /// </summary>
+    public string? AgreementUrl { get; set; }
+    /// <summary>
     /// Actual move-in time
     /// </summary>
     public DateTime? ActualMoveInAt { get; set; }

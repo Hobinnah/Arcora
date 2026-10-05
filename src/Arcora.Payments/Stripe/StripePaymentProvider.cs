@@ -291,6 +291,7 @@ namespace Arcora.Payments.Stripe
                 stripeEvent.Id,
                 stripeEvent.Type,
                 requestBody,
+                stripeEvent.Account,
                 paymentIntentId,
                 mandateId,
                 chargeId,

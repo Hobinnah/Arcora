@@ -25,8 +25,11 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetAttachmentByID")]
-        public async Task<IActionResult> GetAttachmentByID([FromServices] IAttachmentService attachmentService, Guid id)
+        public async Task<IActionResult> GetAttachmentByID([FromServices] IAttachmentService attachmentService, [FromServices] ILeaseCheckInService leaseCheckInService, Guid id)
         {
+            if (!await leaseCheckInService.CanAccessMoveInAttachmentAsync(id, User))
+                return NotFound(new { message = "Attachment with the specified ID was not found." });
+
             var result = await attachmentService.GetID(id);
             if (result == null)
                 return NotFound(new { message = "Attachment with the specified ID was not found." });
@@ -40,8 +43,9 @@ namespace Arcora.Api.Controllers
         [HttpPost(Name = "CreateAttachment")]
         public async Task<IActionResult> CreateAttachment([FromServices] IAttachmentService attachmentService, [FromBody] AttachmentDto attachmentDto)
         {
-            // var displayName = User.Identity?.Name ?? string.Empty;
-            // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
+            if (string.Equals(attachmentDto.AttachmentType, "MOVE_IN_CHECK_IN", StringComparison.OrdinalIgnoreCase))
+                return Conflict(new { message = "Use the lease-scoped move-in check-in photo endpoints for move-in evidence." });
+
             var result = await attachmentService.CreateAttachment(attachmentDto);
             if (result.AttachmentID != null && result.AttachmentID != Guid.Empty)
                 return CreatedAtRoute("GetAttachmentByID", new { id = result.AttachmentID }, result);
@@ -53,10 +57,11 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateAttachment")]
-        public async Task<IActionResult> UpdateAttachment([FromServices] IAttachmentService attachmentService, Guid id, [FromBody] AttachmentDto attachmentDto)
+        public async Task<IActionResult> UpdateAttachment([FromServices] IAttachmentService attachmentService, [FromServices] ILeaseCheckInService leaseCheckInService, Guid id, [FromBody] AttachmentDto attachmentDto)
         {
-            // var displayName = User.Identity?.Name ?? string.Empty;
-            // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
+            if (string.Equals(attachmentDto.AttachmentType, "MOVE_IN_CHECK_IN", StringComparison.OrdinalIgnoreCase) || !await leaseCheckInService.CanAccessMoveInAttachmentAsync(id, User))
+                return Conflict(new { message = "Use the lease-scoped move-in check-in photo endpoints for move-in evidence." });
+
             var result = await attachmentService.UpdateAttachment(id, attachmentDto);
             if (result == null)
                 return NotFound(new { message = "Attachment with the specified ID was not found." });
@@ -68,8 +73,15 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpDelete("{id}", Name = "DeleteAttachment")]
-        public async Task<IActionResult> DeleteAttachment([FromServices] IAttachmentService attachmentService, Guid id)
+        public async Task<IActionResult> DeleteAttachment([FromServices] IAttachmentService attachmentService, [FromServices] ILeaseCheckInService leaseCheckInService, Guid id)
         {
+            if (!await leaseCheckInService.CanAccessMoveInAttachmentAsync(id, User))
+                return NotFound(new { message = "Attachment with the specified ID was not found." });
+
+            var attachment = await attachmentService.GetID(id);
+            if (string.Equals(attachment?.AttachmentType, "MOVE_IN_CHECK_IN", StringComparison.OrdinalIgnoreCase))
+                return Conflict(new { message = "Use the lease-scoped move-in check-in photo endpoints for move-in evidence." });
+
             try
             {
                 await attachmentService.DeleteAttachment(id);

@@ -19,13 +19,15 @@ namespace Arcora.Api.Services.Implementations
         private readonly IMemoryCache cache;
         private readonly ILogger<SecurityDepositService> logger;
         private readonly ISecurityDepositRepository securitydepositRepository;
+        private readonly IOrganizationMemberRepository organizationMemberRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public SecurityDepositService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<SecurityDepositService> logger, ISecurityDepositRepository securitydepositRepository)
+        public SecurityDepositService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<SecurityDepositService> logger, ISecurityDepositRepository securitydepositRepository, IOrganizationMemberRepository organizationMemberRepository)
         {
             this.cache = cache;
             this.logger = logger;
             this.mapper = mapper;
             this.securitydepositRepository = securitydepositRepository;
+            this.organizationMemberRepository = organizationMemberRepository;
             this._options = options;
             if (this._options.Value.ExpirationTimeInMinutes <= 0)
                 this._options.Value.ExpirationTimeInMinutes = 15;
@@ -56,6 +58,37 @@ namespace Arcora.Api.Services.Implementations
             }
 
             IEnumerable<SecurityDeposit> filteredEntities = entities!;
+            if (paging?.UserID > 0)
+            {
+                var memberships = await this.organizationMemberRepository.GetMemberOrganizationsAsync(paging.UserID);
+                var authorizedOrganizationIDs = memberships
+                    .Where(x => x.OrganizationID != Guid.Empty &&
+                                !string.Equals(x.Status, "DEACTIVATED", StringComparison.OrdinalIgnoreCase) &&
+                                (x.IsPrimaryOwner ||
+                                 string.Equals(x.RoleName, "OWNER", StringComparison.OrdinalIgnoreCase) ||
+                                 string.Equals(x.RoleName, "ADMIN", StringComparison.OrdinalIgnoreCase) ||
+                                 string.Equals(x.RoleName, "LANDLORD", StringComparison.OrdinalIgnoreCase)))
+                    .Select(x => x.OrganizationID)
+                    .ToHashSet();
+
+                filteredEntities = filteredEntities.Where(x => authorizedOrganizationIDs.Contains(x.OrganizationID));
+            }
+            else
+            {
+                filteredEntities = Enumerable.Empty<SecurityDeposit>();
+            }
+
+            if (!string.IsNullOrWhiteSpace(paging?.Search))
+            {
+                filteredEntities = filteredEntities.Where(x =>
+                    (!string.IsNullOrWhiteSpace(x.Status) && x.Status.Contains(paging.Search, StringComparison.OrdinalIgnoreCase)) ||
+                    (!string.IsNullOrWhiteSpace(x.Currency) && x.Currency.Contains(paging.Search, StringComparison.OrdinalIgnoreCase)) ||
+                    (x.Lease != null &&
+                     ((!string.IsNullOrWhiteSpace(x.Lease.LeaseCode) && x.Lease.LeaseCode.Contains(paging.Search, StringComparison.OrdinalIgnoreCase)) ||
+                      (!string.IsNullOrWhiteSpace(x.Lease.LeaseNumber) && x.Lease.LeaseNumber.Contains(paging.Search, StringComparison.OrdinalIgnoreCase)))) ||
+                    (x.Tenant != null && !string.IsNullOrWhiteSpace(x.Tenant.Description) && x.Tenant.Description.Contains(paging.Search, StringComparison.OrdinalIgnoreCase)));
+            }
+
             int totalCount = filteredEntities.Count();
             var pagedEntities = filteredEntities.OrderByDescending(x => x.SecurityDepositID).Skip((paging!.PageNumber - 1) * paging.PageSize).Take(paging.PageSize).ToList();
             var pagedDtos = this.mapper.Map<IEnumerable<SecurityDepositDto>>(pagedEntities);

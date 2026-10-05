@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.IO;
 
 namespace Arcora.Api.Services.Implementations
 {
@@ -22,8 +23,9 @@ namespace Arcora.Api.Services.Implementations
         private readonly IOrganizationRepository organizationRepository;
         private readonly IOrganizationMemberRepository organizationMemberRepository;
         private readonly UserManager<User> userManager;
+        private readonly IFileStorageService fileStorageService;
         private readonly IOptions<CacheConfiguration> _options;
-        public OrganizationService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<OrganizationService> logger, IOrganizationRepository organizationRepository, IOrganizationMemberRepository organizationMemberRepository, UserManager<User> userManager)
+        public OrganizationService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<OrganizationService> logger, IOrganizationRepository organizationRepository, IOrganizationMemberRepository organizationMemberRepository, UserManager<User> userManager, IFileStorageService fileStorageService)
         {
             this.cache = cache;
             this.logger = logger;
@@ -31,6 +33,7 @@ namespace Arcora.Api.Services.Implementations
             this.organizationRepository = organizationRepository;
             this.organizationMemberRepository = organizationMemberRepository;
             this.userManager = userManager;
+            this.fileStorageService = fileStorageService;
             this._options = options;
             if (this._options.Value.ExpirationTimeInMinutes <= 0)
                 this._options.Value.ExpirationTimeInMinutes = 15;
@@ -68,7 +71,11 @@ namespace Arcora.Api.Services.Implementations
 
             int totalCount = filteredEntities.Count();
             var pagedEntities = filteredEntities.OrderByDescending(x => x.OrganizationID).Skip((paging!.PageNumber - 1) * paging.PageSize).Take(paging.PageSize).ToList();
-            var pagedDtos = this.mapper.Map<IEnumerable<OrganizationDto>>(pagedEntities);
+            var pagedDtos = this.mapper.Map<IEnumerable<OrganizationDto>>(pagedEntities).ToList();
+            foreach (var dto in pagedDtos)
+            {
+                await PopulateBrandLogoUrlAsync(dto);
+            }
             return new PagedResult<OrganizationDto>
             {
                 Data = pagedDtos,
@@ -92,7 +99,12 @@ namespace Arcora.Api.Services.Implementations
                     match = await this.organizationRepository.GetByID(ID);
                 }
 
-                return match == null ? null : this.mapper.Map<OrganizationDto>(match);
+                if (match == null)
+                    return null;
+
+                var dto = this.mapper.Map<OrganizationDto>(match);
+                await PopulateBrandLogoUrlAsync(dto);
+                return dto;
             }
             catch (Exception er)
             {
@@ -128,7 +140,9 @@ namespace Arcora.Api.Services.Implementations
                 throw;
             }
 
-            return this.mapper.Map<OrganizationDto>(organization);
+            var created = this.mapper.Map<OrganizationDto>(organization);
+            await PopulateBrandLogoUrlAsync(created);
+            return created;
         }
 
         /// <summary>
@@ -192,6 +206,7 @@ namespace Arcora.Api.Services.Implementations
                 await organizationRepository.Save();
                 cache.Remove(Cache.ORGANIZATIONS.ToString());
                 organizationDto = this.mapper.Map<OrganizationDto>(organization);
+                await PopulateBrandLogoUrlAsync(organizationDto);
             }
             catch (Exception er)
             {
@@ -239,7 +254,119 @@ namespace Arcora.Api.Services.Implementations
             await organizationRepository.Update(organization);
             await organizationRepository.Save();
             cache.Remove(Cache.ORGANIZATIONS.ToString());
-            return this.mapper.Map<OrganizationDto>(organization);
+            var dto = this.mapper.Map<OrganizationDto>(organization);
+            await PopulateBrandLogoUrlAsync(dto);
+            return dto;
+        }
+
+        /// <inheritdoc/>
+        public async Task<OrganizationDto?> UploadBrandLogo(Guid id, OrganizationLogoUploadRequest request, CancellationToken cancellationToken = default)
+        {
+            if (request?.File == null || request.File.Length == 0)
+                throw new ArgumentException("No file was provided.");
+
+            var allowedContentTypes = new[] { "image/jpeg", "image/jpg", "image/png", "image/webp", "image/svg+xml" };
+            var ext = Path.GetExtension(request.File.FileName)?.ToLowerInvariant();
+            var isAllowedExt = new[] { ".jpg", ".jpeg", ".png", ".webp", ".svg" }.Contains(ext);
+            if (!allowedContentTypes.Contains(request.File.ContentType?.ToLowerInvariant()) && !isAllowedExt)
+                throw new ArgumentException("Only JPEG/PNG/WebP/SVG images are allowed for organization logos.");
+
+            var organization = await organizationRepository.GetByID(id);
+            if (organization == null)
+                return null;
+
+            try
+            {
+                BlobUploadResult uploadResult;
+                await using (var stream = request.File.OpenReadStream())
+                {
+                    uploadResult = await fileStorageService.UploadAsync(
+                        StorageCategory.Image,
+                        request.File.FileName,
+                        stream,
+                        request.File.ContentType,
+                        cancellationToken);
+                }
+
+                // Best-effort clean up of the previous logo if it appears to be a managed blob reference.
+                var oldReference = ExtractBlobReference(organization.BrandLogoUrl);
+                if (!string.IsNullOrWhiteSpace(oldReference))
+                {
+                    try
+                    {
+                        await fileStorageService.DeleteAsync(StorageCategory.Image, oldReference!, cancellationToken);
+                    }
+                    catch (Exception cleanupEx)
+                    {
+                        logger.LogError(cleanupEx, "Failed to delete old organization logo blob '{Reference}' for Organization {OrganizationID}. Timestamp: {Timestamp}", oldReference, id, DateTime.UtcNow);
+                    }
+                }
+
+                // Store blob reference, and return a read SAS URL in DTO for frontend visibility.
+                organization.BrandLogoUrl = uploadResult.BlobName;
+                organization.UpdatedBy = request.UpdatedBy;
+                organization.UpdatedDate = DateTime.UtcNow;
+
+                await organizationRepository.Update(organization);
+                await organizationRepository.Save();
+                cache.Remove(Cache.ORGANIZATIONS.ToString());
+
+                var dto = mapper.Map<OrganizationDto>(organization);
+                await PopulateBrandLogoUrlAsync(dto);
+                return dto;
+            }
+            catch (ArgumentException)
+            {
+                throw;
+            }
+            catch (Exception er)
+            {
+                logger.LogError(er, "An error occurred while uploading organization brand logo. Timestamp: {Timestamp}", DateTime.UtcNow);
+                throw;
+            }
+        }
+
+        private async Task PopulateBrandLogoUrlAsync(OrganizationDto? dto)
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.BrandLogoUrl))
+                return;
+
+            var reference = ExtractBlobReference(dto.BrandLogoUrl);
+            if (string.IsNullOrWhiteSpace(reference))
+                return;
+
+            try
+            {
+                var sasUrl = await fileStorageService.GetReadSasUrlAsync(StorageCategory.Image, reference!);
+                if (!string.IsNullOrWhiteSpace(sasUrl))
+                    dto.BrandLogoUrl = sasUrl;
+            }
+            catch (Exception er)
+            {
+                logger.LogError(er, "Failed to generate read SAS URL for organization logo. Timestamp: {Timestamp}", DateTime.UtcNow);
+            }
+        }
+
+        private static string? ExtractBlobReference(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+            {
+                return value.Trim().TrimStart('/');
+            }
+
+            // Ignore data URLs or non-http(s) absolute URLs.
+            if (!uri.Scheme.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            var segments = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length <= 1)
+                return null;
+
+            // Absolute blob URL includes container as first segment.
+            return string.Join('/', segments.Skip(1));
         }
     }
 }

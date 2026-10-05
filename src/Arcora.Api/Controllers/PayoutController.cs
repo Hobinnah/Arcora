@@ -4,6 +4,8 @@ using Arcora.Api.Models;
 using Arcora.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Globalization;
+using System.Text;
 
 namespace Arcora.Api.Controllers
 {
@@ -15,9 +17,65 @@ namespace Arcora.Api.Controllers
         [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetAllPayouts")]
-        public async Task<IActionResult> Get([FromServices] IPayoutService payoutService, [FromQuery] Paging paging)
+        public async Task<IActionResult> Get([FromServices] IPayoutService payoutService, [FromQuery] Guid? organizationID, [FromQuery] string? period, [FromQuery] Paging paging)
         {
-            return Ok(await payoutService.GetAll(paging));
+            return Ok(await payoutService.GetFiltered(organizationID, period, paging));
+        }
+
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [HttpGet("{organizationID:guid}", Name = "GetEarningsSummary")]
+        public async Task<IActionResult> GetEarningsSummary([FromServices] IPayoutService payoutService, Guid organizationID, [FromQuery] string? period)
+        {
+            return Ok(await payoutService.GetEarningsSummary(organizationID, period));
+        }
+
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [HttpGet("{organizationID:guid}", Name = "GetListingBreakdown")]
+        public async Task<IActionResult> GetListingBreakdown([FromServices] IPayoutService payoutService, Guid organizationID, [FromQuery] string? period)
+        {
+            return Ok(await payoutService.GetListingBreakdown(organizationID, period));
+        }
+
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [HttpGet("{organizationID:guid}", Name = "ExportStatement")]
+        public async Task<IActionResult> ExportStatement([FromServices] IPayoutService payoutService, Guid organizationID, [FromQuery] string? period, [FromQuery] string format = "json")
+        {
+            var statementRows = (await payoutService.GetStatementTransactions(organizationID, period)).ToList();
+            if (!string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
+                return Ok(statementRows);
+
+            var csvBuilder = new StringBuilder();
+            csvBuilder.AppendLine("transactionDate,transactionType,status,amount,currency,description,referenceNumber,payoutID,paymentID,invoiceMasterID");
+            foreach (var row in statementRows)
+            {
+                csvBuilder.AppendLine(string.Join(',',
+                    row.TransactionDate.ToString("O", CultureInfo.InvariantCulture),
+                    EscapeForCsv(row.TransactionType),
+                    EscapeForCsv(row.Status),
+                    row.Amount.ToString(CultureInfo.InvariantCulture),
+                    EscapeForCsv(row.Currency),
+                    EscapeForCsv(row.Description),
+                    EscapeForCsv(row.ReferenceNumber),
+                    row.PayoutID?.ToString(CultureInfo.InvariantCulture),
+                    row.PaymentID?.ToString(),
+                    row.InvoiceMasterID?.ToString()));
+            }
+
+            return File(Encoding.UTF8.GetBytes(csvBuilder.ToString()), "text/csv", $"earnings-statement-{organizationID}.csv");
+        }
+
+        private static string EscapeForCsv(string? value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return string.Empty;
+
+            if (!value.Contains(',') && !value.Contains('"') && !value.Contains('\n') && !value.Contains('\r'))
+                return value;
+
+            return $"\"{value.Replace("\"", "\"\"")}\"";
         }
 
         // GET api/<PayoutController>/5

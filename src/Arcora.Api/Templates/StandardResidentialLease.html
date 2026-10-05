@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Standard Residential Lease</title>
+    <style>
+        :root {
+            --brand: #0f3a34;
+            --accent: #0d9488;
+            --text: #1f2937;
+            --muted: #6b7280;
+            --line: #d1d5db;
+            --paper: #ffffff;
+            --bg: #f3f4f6;
+        }
+
+        body {
+            margin: 0;
+            padding: 24px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: "Georgia", "Times New Roman", serif;
+        }
+
+        .page {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--paper);
+            border: 1px solid var(--line);
+            box-shadow: 0 6px 24px rgba(15, 58, 52, 0.08);
+        }
+
+        .header {
+            padding: 28px 40px 20px;
+            border-bottom: 2px solid var(--brand);
+        }
+
+        .header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .logo {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #e5e7eb;
+            background: #f9fafb;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 30px;
+            color: var(--brand);
+            letter-spacing: 0.02em;
+        }
+
+        .subhead {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .meta {
+            margin-top: 10px;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .body {
+            padding: 28px 40px 36px;
+        }
+
+        .section {
+            margin: 0 0 24px;
+            page-break-inside: avoid;
+        }
+
+        .section h2 {
+            margin: 0 0 10px;
+            font-family: Arial, sans-serif;
+            font-size: 17px;
+            font-weight: 700;
+            color: var(--brand);
+            border-left: 4px solid var(--accent);
+            padding-left: 10px;
+        }
+
+        .section p,
+        .section li {
+            margin: 0 0 8px;
+            font-size: 15px;
+            line-height: 1.65;
+        }
+
+        .muted {
+            color: var(--muted);
+            font-style: italic;
+        }
+
+        .grid {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 8px 0 0;
+        }
+
+        .grid td {
+            border: 1px solid var(--line);
+            padding: 10px 12px;
+            vertical-align: top;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .grid td:first-child {
+            width: 35%;
+            background: #f9fafb;
+            font-weight: 600;
+            color: #111827;
+            font-family: Arial, sans-serif;
+        }
+
+        .signature-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 18px;
+        }
+
+        .sig-line {
+            border-bottom: 1px solid #4b5563;
+            height: 30px;
+        }
+
+        .sig-label {
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 6px;
+            font-family: Arial, sans-serif;
+        }
+
+        .footer {
+            border-top: 1px solid var(--line);
+            padding: 16px 40px 24px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.5;
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <article class="page">
+        <header class="header">
+            <div class="header-top">
+                <h1>Residential Lease Agreement</h1>
+                <img class="logo" src="{{Organization.BrandLogoUrl}}" alt="{{Organization.DisplayName}} Logo" />
+            </div>
+            <p class="subhead">
+                This Residential Lease Agreement (the "Agreement") is entered into by and between the parties below and is intended to comply with applicable tenancy laws.
+            </p>
+            <p class="meta">
+                Prepared for <strong>{{Organization.DisplayName}}</strong> ({{Organization.LegalName}}) � Business No: {{Organization.BusinessNumber}} � Generated: {{Generated.On}}
+            </p>
+        </header>
+
+        <main class="body">
+            <section class="section">
+                <h2>1. Parties</h2>
+                <table class="grid">
+                    <tr><td>Landlord (Organization)</td><td>{{Organization.LegalName}} ({{Organization.DisplayName}})</td></tr>
+                    <tr><td>Tenant</td><td>{{Tenant.FullName}}</td></tr>
+                    <tr><td>Tenant Email</td><td>{{Tenant.Email}}</td></tr>
+                    <tr><td>Tenant Phone</td><td>{{Tenant.PhoneNumber}}</td></tr>
+                </table>
+            </section>
+
+            <section class="section">
+                <h2>2. Premises</h2>
+                <table class="grid">
+                    <tr><td>Listing</td><td>{{Listing.Title}}</td></tr>
+                    <tr><td>Unit</td><td>{{RentalUnit.Name}} {{RentalUnit.UnitNumber}}</td></tr>
+                    <tr><td>Property Address</td><td>{{Address.Full}}</td></tr>
+                </table>
+                <p class="muted">Tenant accepts the premises in its current condition, subject to move-in inspection and local law.</p>
+            </section>
+
+            <section class="section">
+                <h2>3. Term</h2>
+                <table class="grid">
+                    <tr><td>Lease Number</td><td>{{Lease.LeaseNumber}}</td></tr>
+                    <tr><td>Lease Code</td><td>{{Lease.LeaseCode}}</td></tr>
+                    <tr><td>Start Date</td><td>{{Lease.StartDate}}</td></tr>
+                    <tr><td>End Date</td><td>{{Lease.EndDate}}</td></tr>
+                    <tr><td>Term (Months)</td><td>{{Lease.LeaseTermMonths}}</td></tr>
+                </table>
+            </section>
+
+            <section class="section">
+                <h2>4. Rent</h2>
+                <p>Tenant shall pay base monthly rent of <strong>{{Lease.Currency}} {{Lease.BaseRentAmount}}</strong> on or before the due date each month.</p>
+                <p>Grace period: {{Lease.GracePeriodDays}} day(s). Late charge may include fixed amount of {{Lease.Currency}} {{Lease.LateFeeFixedAmount}} and/or {{Lease.LateFeePercentage}}% as allowed by law.</p>
+            </section>
+
+            <section class="section">
+                <h2>5. Security Deposit</h2>
+                <p>Tenant shall pay a refundable security deposit of <strong>{{Listing.Currency}} {{Listing.SecurityDepositAmount}}</strong>, subject to deductions permitted by law for damages, unpaid rent, or other lawful charges.</p>
+            </section>
+
+            <section class="section">
+                <h2>6. Utilities</h2>
+                <p>
+                    {{Utilities.Responsibility}}
+                </p>
+                <p>
+                    Landlord shall remain responsible for utilities that cannot legally or practically be transferred to Tenant, including common-area services and any building-level service billed directly to Landlord, unless such costs are lawfully recoverable as additional rent.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>7. Pets</h2>
+                <p>Pet policy for this listing: <strong>{{Listing.IsPetFriendly}}</strong>.</p>
+                <p>
+                    Where pets are permitted, Tenant remains fully liable for pet-related injury, nuisance, odor, infestation, property damage, and cleaning costs beyond normal wear and tear. Landlord may issue lawful notices to cure for pet-related violations and may require removal of non-compliant animals as permitted by law.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>8. Parking</h2>
+                <p>
+                    Any parking privilege is ancillary to this lease, may be limited to designated spaces, and is subject to posted property rules and applicable law. Tenant shall not store inoperable, unregistered, or abandoned vehicles on the property.
+                </p>
+                <p>
+                    Unauthorized vehicles may be ticketed or towed at vehicle owner's expense where permitted by law. Landlord is not liable for loss of or damage to vehicles or contents, except to the extent caused by Landlord's gross negligence or willful misconduct.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>9. Use and Occupancy</h2>
+                <p>
+                    The premises shall be used exclusively for lawful residential purposes by approved occupants only. Assignment, short-term rental, or subletting is prohibited unless expressly authorized in writing by Landlord.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>10. Maintenance</h2>
+                <p>
+                    Tenant shall keep the premises clean and promptly report maintenance issues. Landlord will perform repairs required under applicable law within a reasonable timeframe.
+                    Tenant will be liable for damages caused by negligence or misuse.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>11. Entry and Notice</h2>
+                <p>
+                    Landlord may enter the premises with lawful notice for inspection, repairs, maintenance, or showing the property, and may enter without prior notice in emergencies where safety or property protection is at risk.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>12. Damage, Liability, and Repairs</h2>
+                <p>
+                    Tenant is responsible for maintaining the premises in good order and for damage caused by Tenant, occupants, or guests beyond normal wear and tear. Tenant must promptly notify Landlord of hazards, leaks, or needed repairs to mitigate further damage.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>13. Utilities Allocation Schedule</h2>
+                <p>
+                    Utility responsibility shall be allocated by written schedule or listing terms, including electricity, gas, water, internet, and waste. Unpaid tenant-assigned utilities may be treated as additional rent where legally permitted.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>14. Insurance</h2>
+                <p>
+                    Tenant is encouraged, and may be required where lawful, to maintain renter's insurance for personal property, temporary housing, and personal liability. Landlord's insurance does not cover Tenant's personal belongings.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>15. Default and Remedies</h2>
+                <p>
+                    Failure to pay rent, repeated lease violations, unauthorized occupancy, or other material breach constitutes default. Landlord may pursue all remedies allowed by applicable law, including notices to cure, charges, and termination processes.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>16. Early Termination</h2>
+                <p>
+                    Early termination by Tenant requires written notice and may incur lawful fees, rent responsibility until re-rental, or other charges permitted by law, unless statutory exceptions apply.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>17. Renewal and Holdover</h2>
+                <p>
+                    Renewal terms must be documented in writing. If Tenant remains in possession after lease expiration without a signed renewal, tenancy may convert to holdover or month-to-month status where allowed, under revised rental terms and notice requirements.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>18. Compliance with Laws and Community Rules</h2>
+                <p>
+                    Tenant, occupants, and guests shall comply with all laws, health and safety requirements, and building/community rules. Nuisance, excessive noise, violence, harassment, and dangerous behavior are prohibited.
+                </p>
+                <p>
+                    The use, possession, manufacture, distribution, or sale of illegal drugs or controlled substances, and any illegal activity of any kind on or near the premises, is strictly prohibited and constitutes a material lease breach subject to immediate legal remedies.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>19. Move-In and Move-Out Inspection</h2>
+                <p>
+                    Parties should complete move-in and move-out condition reports with dated photos where practical. These records may be used to assess cleaning, repairs, and lawful security deposit deductions.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>20. Dispute Resolution and Governing Venue</h2>
+                <p>
+                    The parties agree to attempt good-faith resolution of disputes before formal proceedings. Where lawful and agreed, disputes may be submitted to mediation or arbitration. Otherwise, disputes shall be resolved in the courts of competent jurisdiction where the premises are located.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>21. Notices</h2>
+                <p>
+                    Official notices under this Agreement must be delivered using legally recognized methods (for example, hand delivery, email where permitted, portal delivery, or mail) to addresses/contact points designated by each party.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>22. Privacy and Data Handling</h2>
+                <p>
+                    Parties acknowledge that lease, payment, screening, maintenance, and signature records may be processed and stored electronically for contract administration, legal compliance, and audit purposes, subject to applicable privacy and data protection laws.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>23. Entire Agreement and Severability</h2>
+                <p>
+                    This Agreement, including incorporated schedules and addenda, constitutes the entire agreement between parties regarding the tenancy. If any provision is held invalid or unenforceable, remaining provisions continue in full force to the maximum extent permitted by law.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>24. Joint and Several Liability</h2>
+                <p>
+                    Where more than one tenant signs this Agreement, each tenant is jointly and severally liable for full performance of all obligations, including rent, damages, fees, and compliance with all lease terms.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>25. Guest Policy</h2>
+                <p>
+                    Guests are permitted only for temporary visits and must comply with all lease and community rules. Guests staying beyond the landlord's approved limit may be treated as unauthorized occupants, constituting a lease violation.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>26. Unauthorized Occupants and Subletting</h2>
+                <p>
+                    No additional occupants, assignment, short-term rental, license, or subletting is allowed without prior written landlord consent. Unauthorized occupancy or transfer is a material default subject to lawful remedies.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>27. Returned Payment, NSF, and Chargebacks</h2>
+                <p>
+                    If rent or any charge is dishonored, reversed, or charged back, tenant remains responsible for the underlying obligation plus any lawful returned-payment or processing fees. Repeated failed payments may constitute default.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>28. No Waiver</h2>
+                <p>
+                    Landlord's delay, partial enforcement, or prior acceptance of noncompliant conduct does not waive any rights. All rights and remedies remain cumulative unless expressly waived in writing.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>29. No Oral Modifications</h2>
+                <p>
+                    This Agreement may only be modified by a written amendment signed by both parties, except where applicable law requires otherwise.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>30. Surrender of Premises at Move-Out</h2>
+                <p>
+                    At move-out, tenant shall surrender the premises in substantially clean condition, remove all personal property and waste, return all keys/access devices, and provide a forwarding address for notices and deposit accounting.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>31. Abandonment</h2>
+                <p>
+                    Premises may be deemed abandoned according to applicable law, including prolonged unexplained vacancy with nonpayment or clear surrender indicators. Landlord may secure, re-enter, and relet the premises consistent with legal requirements.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>32. Attorney Fees and Collection Costs</h2>
+                <p>
+                    To the extent permitted by law, the prevailing party in a dispute arising from this Agreement may recover reasonable attorney fees, court costs, and collection expenses.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>33. Addenda Priority and Crime-Free/Drug-Free Addendum</h2>
+                <p>
+                    All signed addenda are incorporated into this Agreement. If terms conflict, the addendum expressly marked as controlling shall govern for its subject matter, then this Agreement, unless law provides otherwise.
+                </p>
+                <p>
+                    A Crime-Free/Drug-Free Addendum is incorporated by reference where executed. Criminal conduct, use or distribution of illegal drugs, or other unlawful activity by tenant, occupants, or guests on or near the premises constitutes a material breach.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>34. Payment Authorization and Automatic Charges</h2>
+                <p>
+                    Tenant authorizes Landlord, through Arcora and its designated payment processors, to initiate recurring and one-time electronic debits/charges from Tenant's linked bank account(s) and/or credit/debit card(s) for all amounts due under this Agreement, including rent, utilities, lawful fees, damages, and other agreed charges.
+                </p>
+                <p>
+                    Tenant represents that all submitted payment methods are valid and that Tenant is authorized to use them. Tenant agrees to maintain at least one active payment method and to promptly update expired, closed, or restricted accounts.
+                </p>
+                <p>
+                    Returned payments, failed debits, reversals, or chargebacks do not cancel Tenant's payment obligations and may result in additional lawful fees, collection activity, and default remedies. Where permitted by law, Tenant authorizes re-attempt of failed collections for outstanding balances.
+                </p>
+                <p>
+                    Any revocation of automatic payment authorization must be submitted in writing and may not relieve Tenant of accrued or future obligations under this Agreement. Revocation is only effective after written confirmation by Landlord and does not restrict lawful manual collection methods.
+                </p>
+                <p>
+                    Arcora acts as a technology and payment-enablement platform on behalf of Landlord and does not waive Landlord rights or assume tenant obligations. To the maximum extent permitted by law, Tenant releases Arcora from claims arising from authorized payment processing, except in cases of Arcora's willful misconduct or gross negligence.
+                </p>
+            </section>
+
+            <section class="section">
+                <h2>35. Signatures</h2>
+                <!--<table class="signature-table">-->
+                     <!--Landlord--> 
+                    <!--<tr>
+                        <td colspan="3" style="width:50%; padding-right:15px; vertical-align:top;">
+                            <div class="sig-line"></div>
+                            <div class="sig-label">
+                                Landlord Signature ({{Organization.DisplayName}})
+                            </div>
+                        </td>
+                        <td colspan="3"></td>
+                    </tr>-->
+
+                     <!--Empty--> 
+                    <!--<tr>
+                        <td colspan="3"></td>
+                        <td colspan="3"></td>
+                    </tr>-->
+
+                     <!--Tenant--> 
+                    <!--<tr>
+                        <td colspan="3" style="width:50%; padding-right:15px; vertical-align:top;">
+                            <div class="sig-line"></div>
+                            <div class="sig-label">
+                                Tenant Signature ({{Tenant.FullName}})
+                            </div>
+                        </td>
+                        <td colspan="3"></td>
+                    </tr>
+                </table>-->
+            </section>
+        
+        </main>
+
+        <footer class="footer">
+            <div>{{Organization.LegalName}} � {{Address.Full}}</div>
+            <!--<div>This template is customizable and intended as a baseline contract format. Landlords should adapt language to jurisdictional requirements.</div>-->
+        </footer>
+    </article>
+</body>
+</html>

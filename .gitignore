@@ -19,3 +19,4 @@ packages/
 *.ncrunch*
 _ReSharper*/
 TestResult.xml
+/artifacts

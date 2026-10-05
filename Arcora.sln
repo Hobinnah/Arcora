@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Arcora.Api.Tests", "test\Ar
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Arcora.Payments", "src\Arcora.Payments\Arcora.Payments.csproj", "{6FD14A52-8F1A-47BE-A38D-B5CF1293B1CB}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Arcora.Documents", "src\Arcora.Documents\Arcora.Documents.csproj", "{932B3B4D-781D-4BFA-B76B-EE0C5626159E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -59,6 +61,18 @@ Global
 		{6FD14A52-8F1A-47BE-A38D-B5CF1293B1CB}.Release|x64.Build.0 = Release|Any CPU
 		{6FD14A52-8F1A-47BE-A38D-B5CF1293B1CB}.Release|x86.ActiveCfg = Release|Any CPU
 		{6FD14A52-8F1A-47BE-A38D-B5CF1293B1CB}.Release|x86.Build.0 = Release|Any CPU
+		{932B3B4D-781D-4BFA-B76B-EE0C5626159E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{932B3B4D-781D-4BFA-B76B-EE0C5626159E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{932B3B4D-781D-4BFA-B76B-EE0C5626159E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{932B3B4D-781D-4BFA-B76B-EE0C5626159E}.Debug|x64.Build.0 = Debug|Any CPU
+		{932B3B4D-781D-4BFA-B76B-EE0C5626159E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{932B3B4D-781D-4BFA-B76B-EE0C5626159E}.Debug|x86.Build.0 = Debug|Any CPU
+		{932B3B4D-781D-4BFA-B76B-EE0C5626159E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{932B3B4D-781D-4BFA-B76B-EE0C5626159E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{932B3B4D-781D-4BFA-B76B-EE0C5626159E}.Release|x64.ActiveCfg = Release|Any CPU
+		{932B3B4D-781D-4BFA-B76B-EE0C5626159E}.Release|x64.Build.0 = Release|Any CPU
+		{932B3B4D-781D-4BFA-B76B-EE0C5626159E}.Release|x86.ActiveCfg = Release|Any CPU
+		{932B3B4D-781D-4BFA-B76B-EE0C5626159E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -67,5 +81,9 @@ Global
 		{C65272D7-17AE-4709-9238-DBAE3A43763C} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{8CC36DE2-563A-49D9-8117-FFBB3C67649C} = {0C88DD14-F956-CE84-757C-A364CCF449FC}
 		{6FD14A52-8F1A-47BE-A38D-B5CF1293B1CB} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{932B3B4D-781D-4BFA-B76B-EE0C5626159E} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {2E9F9F7A-8AF0-47B1-B50F-519504A42C37}
 	EndGlobalSection
 EndGlobal

@@ -106,4 +106,43 @@ public class Inspection
     /// </summary>
     [ForeignKey(nameof(LeaseID))]
     public Lease? Lease { get; set; }
+
+    /// <summary>
+    /// Move-in check-in state
+    /// </summary>
+    [MaxLength(50)]
+    public string? OccupancyReadiness { get; set; }
+
+    /// <summary>
+    /// Date and time arrival was confirmed
+    /// </summary>
+    public DateTime? ArrivalConfirmedAt { get; set; }
+
+    /// <summary>
+    /// Date and time inspection was submitted
+    /// </summary>
+    public DateTime? SubmittedAt { get; set; }
+
+    /// <summary>
+    /// User ID who submitted the inspection
+    /// </summary>
+    public long? SubmittedByUserID { get; set; }
+
+    /// <summary>
+    /// Concurrency version
+    /// </summary>
+    [MaxLength(64)]
+    public string? Version { get; set; }
+
+    /// <summary>
+    /// Idempotency key for submission
+    /// </summary>
+    [MaxLength(255)]
+    public string? SubmissionIdempotencyKey { get; set; }
+
+    /// <summary>
+    /// Request hash for submission
+    /// </summary>
+    [MaxLength(128)]
+    public string? SubmissionRequestHash { get; set; }
 }

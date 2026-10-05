@@ -86,6 +86,7 @@ namespace Arcora.Payments.Abstractions
         string EventId,
         string EventType,
         string RawPayload,
+    string? ConnectedAccountId,
         string? PaymentIntentId,
         string? MandateId,
         string? ChargeId,

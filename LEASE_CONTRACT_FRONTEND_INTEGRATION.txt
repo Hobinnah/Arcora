@@ -1,0 +1,204 @@
+Arcora Landlord Lease Agreement Integration (Frontend)
+
+Purpose
+- Enable landlord to view, edit, and save lease agreement templates.
+- Editable sections are ALL except: 1, 2, 3, 4, 5, 31, 32, 33, 34.
+
+Base API Route Pattern
+- Controllers use: api/[controller]/[Action]
+
+=================================================================
+1) Get editable sections list (source of truth for frontend editor)
+=================================================================
+Endpoint
+- GET /api/Miscelleanous/GetLeaseContractEditableSections
+
+Auth
+- No role restriction currently declared on this action.
+
+Use
+- Frontend must use this to decide which sections are editable in landlord UI.
+
+Response
+- Array of objects:
+  - SectionNumber (int)
+  - Title (string)
+  - IsEditable (bool)
+
+
+=================================================================
+2) Get organization templates (landlord list view)
+=================================================================
+Endpoint
+- GET /api/LeaseContractTemplate/GetByOrganizationID/{organizationID}?PageNumber=1&PageSize=10&Search=
+
+Auth
+- Roles: Viewer, User, LandLord, Admin
+
+Use
+- Load all templates for an organization (default + historical/custom templates).
+
+Response shape (paged)
+- {
+    data: LeaseContractTemplateDto[],
+    totalCount: number
+  }
+
+LeaseContractTemplateDto
+- LeaseContractTemplateID (guid)
+- OrganizationID (guid)
+- TemplateName (string)
+- Description (string)
+- HtmlContent (string)
+- IsDefault (bool)
+- IsActive (bool)
+- IsSystemGenerated (bool)
+- CurrentVersionNumber (int)
+- CapturedDate, CapturedBy, UpdatedDate, UpdatedBy
+
+
+=================================================================
+3) Get single template (landlord edit screen)
+=================================================================
+Endpoint
+- GET /api/LeaseContractTemplate/GetByID/{templateID}
+
+Auth
+- Roles: Viewer, User, LandLord, Admin
+
+Use
+- Open selected template for editing.
+
+
+=================================================================
+4) Get template version history (audit panel)
+=================================================================
+Endpoint
+- GET /api/LeaseContractTemplate/GetVersions/{templateID}
+
+Auth
+- Roles: Viewer, User, LandLord, Admin
+
+Use
+- Show change history timeline.
+
+
+=================================================================
+5) Create template (save-as-new)
+=================================================================
+Endpoint
+- POST /api/LeaseContractTemplate/Create
+
+Auth
+- Roles: LandLord, Admin
+
+Content-Type
+- application/json
+
+Request body (LeaseContractTemplateUpsertDto)
+- {
+    "organizationID": "GUID",                // required
+    "templateName": "Custom Lease v1",       // required
+    "description": "Optional text",
+    "htmlContent": "<html>...</html>",      // required
+    "isDefault": true,
+    "isActive": true,
+    "changeSummary": "Initial custom draft",
+    "editedSectionNumbers": [6,7,10,12],      // required when content changes
+    "updatedBy": "landlord@email.com"
+  }
+
+Critical validation rules
+- Locked sections cannot be changed: [1,2,3,4,5,31,32,33,34].
+- editedSectionNumbers must EXACTLY match sections actually changed.
+- Non-section content (header/footer/outside section blocks) cannot be changed.
+
+Failure response
+- 400 with message explaining invalid sections or mismatch.
+
+
+=================================================================
+6) Update template (save changes)
+=================================================================
+Endpoint
+- PUT /api/LeaseContractTemplate/Update/{templateID}
+
+Auth
+- Roles: LandLord, Admin
+
+Body
+- Same as Create request body.
+
+Validation
+- Same locked section and editedSectionNumbers validation applies.
+
+
+=================================================================
+7) Set default template
+=================================================================
+Endpoint
+- PUT /api/LeaseContractTemplate/SetDefault/{templateID}?updatedBy=landlord@email.com
+
+Auth
+- Roles: LandLord, Admin
+
+Use
+- Make selected template the org default used for rendering.
+
+
+=================================================================
+8) Render lease preview with data merge (listing/tenant/org)
+=================================================================
+Endpoint
+- POST /api/LeaseContractTemplate/RenderPreview
+
+Auth
+- Roles: Viewer, User, LandLord, Admin
+
+Body
+- {
+    "leaseID": "GUID",                    // required
+    "leaseContractTemplateID": "GUID"     // optional, if omitted uses org default
+  }
+
+Response
+- {
+    "leaseContractTemplateID": "GUID|null",
+    "templateName": "...",
+    "isFallbackTemplate": true|false,
+    "rawHtml": "...",
+    "renderedHtml": "..."
+  }
+
+Use
+- Landlord preview before final save/send to tenant.
+
+
+=================================================================
+9) Get packaged standard template html
+=================================================================
+Endpoint
+- GET /api/LeaseContractTemplate/GetStandardTemplate
+
+Auth
+- Roles: Viewer, User, LandLord, Admin
+
+Use
+- Optional UI baseline/template reset display.
+
+
+=================================================================
+Frontend implementation checklist
+=================================================================
+1. Call GetLeaseContractEditableSections and lock all non-returned sections.
+2. Load templates with GetByOrganizationID.
+3. Open selected template with GetByID.
+4. On edit, track changed section numbers in UI.
+5. On save, send editedSectionNumbers exactly matching changed sections.
+6. Handle 400 responses by showing API message to user.
+7. Use RenderPreview before publishing/sending.
+8. Optionally expose version history from GetVersions.
+
+Notes
+- Default template is auto-created per organization when needed.
+- Backend sanitizes html and rejects disallowed section edits.

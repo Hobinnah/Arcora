@@ -115,6 +115,22 @@ public class OrganizationDto
     public string? BrandLogoUrl { get; set; }
 
     /// <summary>
+    /// Initial to display when `BrandLogoUrl` is not available.
+    /// Returns the first character of `DisplayName` (upper-cased) or null when not applicable.
+    /// </summary>
+    public string? BrandLogoInitial
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(BrandLogoUrl))
+                return null;
+            if (string.IsNullOrWhiteSpace(DisplayName))
+                return null;
+            return DisplayName.Substring(0, 1).ToUpperInvariant();
+        }
+    }
+
+    /// <summary>
     /// Indicates if background checks are required
     /// </summary>
     [Required]

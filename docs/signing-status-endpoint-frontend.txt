@@ -1,0 +1,114 @@
+Lease Signing Status Endpoint - Frontend Integration
+
+Purpose
+- Retrieve the current signing status for a lease signing request.
+- Optionally refresh status from SignWell before returning the response.
+
+Endpoint
+- Method: GET
+- Route: /api/leases/{leaseId}/signing-requests/{signingRequestId}
+
+Query Parameters
+- refreshFromProvider
+  - Type: boolean
+  - Optional: yes
+  - Recommended value: true
+  - Example: ?refreshFromProvider=true
+
+Full Example
+- Relative URL:
+  /api/leases/7eaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/signing-requests/11e94885-b7b0-4339-b615-ce2378e37281?refreshFromProvider=true
+
+Frontend Call Example
+- fetch:
+  const response = await fetch(
+    `${baseUrl}/api/leases/${leaseId}/signing-requests/${signingRequestId}?refreshFromProvider=true`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+
+  const data = await response.json();
+
+Expected Response Shape
+{
+  "signingRequestId": "11e94885-b7b0-4339-b615-ce2378e37281",
+  "leaseId": "7eaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  "leaseDocumentId": "00000000-0000-0000-0000-000000000000",
+  "status": "SENT_FOR_SIGNATURE",
+  "providerRequestId": "...",
+  "providerDocumentId": "...",
+  "providerStatus": "sent",
+  "documentUrl": "http://...pdf?...",
+  "sentForSignatureAt": "2026-10-04T03:18:11Z",
+  "fullySignedAt": null,
+  "refreshedFromProvider": true,
+  "signatories": [
+    {
+      "leaseSignatoryId": "00000000-0000-0000-0000-000000000000",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "role": "TENANT",
+      "status": "VIEWED",
+      "signatureOrder": 1,
+      "providerSignerId": "...",
+      "viewedAt": "2026-10-04T03:30:00Z",
+      "signedAt": null,
+      "declinedAt": null
+    }
+  ]
+}
+
+Important Response Fields
+- status
+  - Local app document status
+  - Common values:
+    - QUEUED
+    - PENDING_REVIEW
+    - SENT_FOR_SIGNATURE
+    - FULLY_SIGNED
+    - DECLINED
+    - FAILED
+
+- providerStatus
+  - Raw/high-level status returned from SignWell when refreshFromProvider=true
+
+- documentUrl
+  - Viewable PDF URL stored by the app
+
+- signatories[].status
+  - Per signer status
+  - Common values:
+    - PENDING
+    - VIEWED
+    - SIGNED
+    - DECLINED
+
+Suggested Frontend Behavior
+- Poll this endpoint while the signing session is active.
+- Recommended polling interval: every 10 to 30 seconds.
+- Use refreshFromProvider=true when the user opens a status screen and when the user manually clicks Refresh.
+- Stop polling when:
+  - status === 'FULLY_SIGNED'
+  - status === 'DECLINED'
+  - status === 'FAILED'
+
+Basic UI Mapping
+- QUEUED -> "Preparing document"
+- PENDING_REVIEW -> "Waiting for manual review"
+- SENT_FOR_SIGNATURE -> "Sent for signature"
+- FULLY_SIGNED -> "Completed"
+- DECLINED -> "Declined"
+- FAILED -> "Failed"
+
+Error Handling
+- 404 may mean the lease does not exist.
+- If refreshFromProvider=true and provider refresh fails, the API still returns the locally known status when possible.
+- Show a fallback message like: "Showing latest saved status. Live provider refresh may be temporarily unavailable."
+
+Notes
+- This endpoint supports provider refresh only after the document has been sent to SignWell and provider IDs exist.
+- If the signing flow is still queued or auto-send is disabled, providerStatus may be null.

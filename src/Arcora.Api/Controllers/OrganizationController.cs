@@ -91,5 +91,28 @@ namespace Arcora.Api.Controllers
                 return NotFound($"Organization with ID {id} not found.");
             return Ok(organization);
         }
+
+        // POST api/<OrganizationController>/UploadBrandLogo/{id}
+        [Authorize(Roles = "LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [HttpPost("{id}", Name = "UploadOrganizationBrandLogo")]
+        [RequestSizeLimit(10485760)] // 10 MB
+        public async Task<IActionResult> UploadBrandLogo([FromServices] IOrganizationService organizationService, Guid id, [FromForm] OrganizationLogoUploadRequest request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var result = await organizationService.UploadBrandLogo(id, request, cancellationToken);
+                if (result == null)
+                    return NotFound(new { message = "Organization with the specified ID was not found." });
+
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
     }
 }

@@ -1,0 +1,134 @@
+Overview
+
+This document describes what the frontend must implement to initiate and track electronic lease signing using the Arcora API + Signwell workflow.
+
+High-level flow
+
+1. Frontend calls the backend endpoint to start a signing request. The backend queues work (render -> convert -> upload -> provider create). The call is asynchronous and returns 202 Accepted immediately with a signingRequestId.
+2. Backend processes the job in background and sends the document to Signwell. Backend updates database rows (LeaseDocuments and LeaseSignatory) as it progresses.
+3. Frontend can poll a lightweight status endpoint or receive a notification (in-app websocket/notification) when signing completes. When final signed PDF is available, Lease.AgreementUrl (or LeaseDocuments.Url via LeaseDocuments read endpoint) will reference the signed PDF (SAS URL generated server-side).
+
+Endpoints (frontend integration)
+
+1) Start signing (initiate)
+POST /api/leases/{leaseId}/signing-requests
+Auth: Bearer JWT (user must be authorized for the lease)
+
+Request body (JSON):
+{
+  "leaseContractTemplateId": "<optional-template-guid>",
+  "signatories": [
+    {
+      "name": "Alice Tenant",
+      "email": "alice@example.com",
+      "role": "TENANT",             // optional
+      "userId": 123,                  // optional (local user id)
+      "tenantId": "guid-or-null",   // optional
+      "organizationMemberId": "guid", // optional
+      "signatureOrder": 1             // optional: integer (use to enforce sequential signing)
+    },
+    {
+      "name": "Bob Landlord",
+      "email": "bob@landlord.com",
+      "role": "LANDLORD",
+      "signatureOrder": 2
+    }
+  ],
+  "sequential": true,                // true = signer order enforced by provider; false = parallel
+  "subject": "Please sign your lease agreement",
+  "message": "Please review and sign the attached lease.",
+  "returnUrl": "https://app.example.com/leases/{leaseId}/signed", // optional: provider redirect after signing
+  "webhookCallbackUrl": null,        // optional; null uses server default
+  "capturedBy": "system-or-username",
+  "forceRegeneratePdf": false
+}
+
+Notes:
+- The only required items are a non-empty signatories array and valid emails.
+- Frontend should validate email format before calling API.
+- Use user-visible names and correct emails; these are used by the provider to send email invites.
+
+Response (202 Accepted)
+- Body (JSON):
+{
+  "signingRequestId": "<request-guid>",
+  "status": "Queued",
+  "leaseId": "<lease-guid>"
+}
+- Location header: /api/leases/{leaseId}/signing-requests/{signingRequestId}
+
+Frontend should show a non-blocking "request queued" state and allow the user to continue. Do not expect immediate signed document.
+
+2) Polling (optional)
+GET /api/leases/{leaseId}/signing-requests/{signingRequestId}
+Response (200):
+{ "signingRequestId": "...", "leaseId": "...", "status": "Queued" }
+
+This endpoint currently returns a lightweight/placeholder status. For production the frontend should rely on notifications or a more complete status API when implemented.
+
+UI states to represent
+- Queued: backend accepted job, not yet processed
+- Processing: backend rendering / converting PDF / uploading
+- SentForSignature: document sent to Signwell, emails sent to signers
+- PartiallySigned: some signers signed, others pending
+- Signed / Completed: all signers have signed and final PDF is stored
+- Declined: a signer declined the request
+- Failed: processing or provider error occurred
+
+Mapping to backend fields
+- LeaseDocuments.DocumentStatus values used by backend:
+  - QUEUED (placeholder created by frontend action)
+  - DRAFT (internal)
+  - SENT_FOR_SIGNATURE
+  - SIGNED
+  - FAILED
+- LeaseSignatory.Status values: PENDING, SIGNED, VIEWED, DECLINED
+- When final signed PDF is available the backend will save blob and update Lease.AgreementUrl (string). The frontend should fetch the signed PDF via the LeaseDocuments endpoints or read Lease.AgreementUrl (server may present a short-lived SAS URL).
+
+How frontend should obtain the signed PDF for download/display
+- Option A (recommended): call the LeaseDocuments listing endpoint (or single document endpoint) to get the document record. The backend populates a short-lived SAS URL into LeaseDocumentsDto.Url. Use that URL to download/show the signed PDF.
+- Option B: if Lease.AgreementUrl is surfaced by a Lease GET endpoint, backend may store the final blob URI there (but typically the backend will generate a SAS URL on read); do not rely on the raw blob URL to be public.
+
+Webhooks & notifications
+- The provider (Signwell) will call a configured webhook when signers view, sign or when the envelope completes. The backend handles webhooks and updates record state.
+- Frontend SHOULD NOT implement webhooks. Instead it should subscribe to the app's notification channel (if available) or poll the status endpoint.
+- If you control the web experience and Signwell supports a returnUrl, include a returnUrl when initiating the request so the signer can be redirected back to the app after signing. The returnUrl is provider-specific and configured in the backend payload.
+
+Security & UX notes for frontend
+- Use authenticated requests (Bearer token). Ensure user has permission to manage the lease.
+- Validate emails client-side to reduce backend rejections.
+- Show clear messaging for each state (Queued, Sent, Signed, Failed). Provide help text if signing emails are not received.
+- Provide a visible link or button to "Download signed agreement" after Signed/Completed. Use the LeaseDocuments DTO's Url for a temporary download link.
+- Avoid polling more frequently than once every 5–15 seconds. Exponential backoff is recommended for long waits.
+
+Error handling
+- 400 Bad Request: invalid payload (missing signers, bad emails). Show validation errors to user.
+- 403 Forbidden: current user not allowed to start signing for this lease.
+- 404 Not Found: lease not found.
+- 500/502/503: transient backend/provider errors — show a retry option and report to support.
+
+Other frontend responsibilities
+- Provide a preview step: call backend endpoint that renders the template (`LeaseContractTemplateService.RenderContract`) and surface the rendered HTML as a preview before starting signing (backend offers `POST /api/contracts/render` via services). The preview is important because template tokens are replaced server-side.
+- Allow the initiator to confirm signers and their order before sending.
+- If you support multiple templates per organization, offer template selection UI (pass `leaseContractTemplateId` in the start call).
+
+Example minimal flow (frontend)
+1. User opens Lease details page and clicks "Send for signature".
+2. Frontend calls preview API, presents rendered HTML to initiator.
+3. Initiator confirms signers and clicks "Send".
+4. Frontend POSTs payload to POST /api/leases/{leaseId}/signing-requests.
+5. Backend returns 202 and signingRequestId.
+6. Frontend shows success message and either:
+   - Poll GET /api/leases/{leaseId}/signing-requests/{signingRequestId} until status changes, or
+   - Rely on in-app notifications pushed from backend when webhook arrives.
+7. Once status is Completed/Signed, frontend calls LeaseDocuments GET (or Lease GET) and fetches the signed document SAS URL to download and present to user.
+
+Questions & extensions
+- If you want a push-based experience, I can add a small notifications endpoint / SignalR hub to notify the frontend when the signing job completes.
+- If you want the provider redirect integrated (returnUrl), the backend already accepts a `returnUrl` in the start payload — we still need to implement full provider integration and ensure the provider will call that URL.
+
+Contact
+- For backend details or to change field names, coordinate with the backend developer. The backend currently enqueues work and will need Signwell and HTML->PDF integrations implemented to become fully functional.
+
+Last updated: auto-generated by development tooling
+

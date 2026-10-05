@@ -37,6 +37,12 @@ public class OrgPayoutAccount
     public string? ProviderAccountID { get; set; }
 
     /// <summary>
+    /// Stripe connected account identifier
+    /// </summary>
+    [MaxLength(100)]
+    public string? StripeAccountID { get; set; }
+
+    /// <summary>
     /// Type of account
     /// </summary>
     [MaxLength(100)]
@@ -83,6 +89,39 @@ public class OrgPayoutAccount
     /// </summary>
     [Required]
     public bool IsActive { get; set; }
+
+    /// <summary>
+    /// Indicates whether charges are enabled by Stripe
+    /// </summary>
+    [Required]
+    public bool ChargesEnabled { get; set; }
+
+    /// <summary>
+    /// Indicates whether payouts are enabled by Stripe
+    /// </summary>
+    [Required]
+    public bool PayoutsEnabled { get; set; }
+
+    /// <summary>
+    /// Indicates whether Stripe onboarding details are submitted
+    /// </summary>
+    [Required]
+    public bool DetailsSubmitted { get; set; }
+
+    /// <summary>
+    /// Stripe requirements currently due in JSON array format
+    /// </summary>
+    public string? RequirementsCurrentlyDue { get; set; }
+
+    /// <summary>
+    /// Stripe requirements eventually due in JSON array format
+    /// </summary>
+    public string? RequirementsEventuallyDue { get; set; }
+
+    /// <summary>
+    /// Last time the account was synchronized with Stripe
+    /// </summary>
+    public DateTime? LastStripeSyncAt { get; set; }
     /// <summary>
     /// Record captured date
     /// </summary>

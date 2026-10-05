@@ -1,0 +1,69 @@
+ARCORA STRIPE PAYOUT BACKEND CONTRACT (Implemented)
+
+1) Start Stripe onboarding
+POST /api/OrgPayoutAccount/OnboardingLink
+Request JSON:
+{
+  "organizationID": "guid",
+  "returnUrl": "https://app.arcora.com/hosting/earnings?payout=complete",
+  "refreshUrl": "https://app.arcora.com/hosting/earnings?payout=refresh"
+}
+Response 200:
+{
+  "organizationID": "guid",
+  "stripeAccountID": "acct_123",
+  "onboardingUrl": "https://connect.stripe.com/...",
+  "expiresAt": "2026-09-26T20:00:00Z"
+}
+Notes:
+- Auth required: User/LandLord/Admin
+- User must be org manager/owner/admin/landlord member
+- Reuses existing Stripe connected account per org
+
+2) Get payout account status
+GET /api/OrgPayoutAccount/GetOrganizationPayoutAccountStatus/{organizationID}
+Response 200:
+{
+  "organizationID": "guid",
+  "isConnected": true,
+  "provider": "Stripe",
+  "stripeAccountID": "acct_123",
+  "verificationStatus": "VERIFIED",
+  "maskedAccount": ".... 4821",
+  "bankName": "Example Bank",
+  "accountType": "checking",
+  "isDefault": true,
+  "chargesEnabled": true,
+  "payoutsEnabled": true,
+  "detailsSubmitted": true,
+  "requirementsCurrentlyDue": [],
+  "requirementsEventuallyDue": []
+}
+Response 404: no active org payout account
+
+3) Refresh onboarding status
+POST /api/OrgPayoutAccount/RefreshStatus/{organizationID}
+Response:
+- same payload as GetOrganizationPayoutAccountStatus
+
+4) Stripe webhook
+POST /api/webhooks/stripe
+Handled events:
+- account.updated
+- account.external_account.created
+- account.external_account.updated
+- payout.created
+- payout.paid
+- payout.failed
+- balance.available
+Behavior:
+- Stripe signature verification
+- Event idempotency by provider event id
+- Sync org payout account safe metadata
+- Upsert payout records on payout events
+
+5) Existing earnings endpoints
+GET /api/Payout/Get?organizationID={guid}&period={This month|Last 3 months|Year to date}&pageNumber=1&pageSize=10
+GET /api/Payout/GetEarningsSummary/{organizationID}?period=...
+GET /api/Payout/GetListingBreakdown/{organizationID}?period=...
+GET /api/Payout/ExportStatement/{organizationID}?period=...&format=json|csv

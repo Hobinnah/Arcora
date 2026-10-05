@@ -96,3 +96,5 @@ app.MapControllers();
 app.MapHub<Arcora.Api.Realtime.MessagingHub>("/hubs/messaging");
 
 app.Run();
+
+public partial class Program { }

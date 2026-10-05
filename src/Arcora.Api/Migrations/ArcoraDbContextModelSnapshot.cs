@@ -219,9 +219,17 @@ namespace Arcora.Api.Migrations
                     b.Property<DateTime?>("CapturedDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("ChecksumSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("ClientUploadID")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<string>("Description")
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<string>("EntityID")
                         .IsRequired()
@@ -254,7 +262,22 @@ namespace Arcora.Api.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<DateTime?>("UploadExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UploadFailureReason")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("UploadStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.HasKey("AttachmentID");
+
+                    b.HasIndex("EntityType", "EntityID", "ClientUploadID")
+                        .IsUnique()
+                        .HasFilter("[ClientUploadID] IS NOT NULL");
 
                     b.ToTable("Attachments");
                 });
@@ -1541,6 +1564,9 @@ namespace Arcora.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTime?>("ArrivalConfirmedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("CapturedBy")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
@@ -1566,6 +1592,10 @@ namespace Arcora.Api.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<string>("OccupancyReadiness")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<string>("OverallCondition")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
@@ -1587,6 +1617,20 @@ namespace Arcora.Api.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<string>("SubmissionIdempotencyKey")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("SubmissionRequestHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long?>("SubmittedByUserID")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("UpdatedBy")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
@@ -1594,13 +1638,19 @@ namespace Arcora.Api.Migrations
                     b.Property<DateTime?>("UpdatedDate")
                         .HasColumnType("datetime2");
 
-                    b.HasKey("InspectionID");
+                    b.Property<string>("Version")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
-                    b.HasIndex("LeaseID");
+                    b.HasKey("InspectionID");
 
                     b.HasIndex("PropertyID");
 
                     b.HasIndex("RentalUnitID");
+
+                    b.HasIndex("LeaseID", "InspectionType")
+                        .IsUnique()
+                        .HasFilter("[LeaseID] IS NOT NULL AND [InspectionType] = 'MOVE_IN'");
 
                     b.ToTable("Inspections");
                 });
@@ -1642,7 +1692,8 @@ namespace Arcora.Api.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
-                    b.Property<bool>("RequiresRepair")
+                    b.Property<bool?>("RequiresRepair")
+                        .IsRequired()
                         .HasColumnType("bit");
 
                     b.HasKey("InspectionItemID");
@@ -1650,6 +1701,46 @@ namespace Arcora.Api.Migrations
                     b.HasIndex("InspectionID");
 
                     b.ToTable("InspectionItems");
+                });
+
+            modelBuilder.Entity("Arcora.Api.Entities.InspectionReview", b =>
+                {
+                    b.Property<Guid>("InspectionReviewID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CapturedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("CapturedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Comments")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid>("InspectionID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("ReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long>("ReviewedByUserID")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("InspectionReviewID");
+
+                    b.HasIndex("ReviewedByUserID");
+
+                    b.HasIndex("InspectionID", "ReviewedAt");
+
+                    b.ToTable("InspectionReviews");
                 });
 
             modelBuilder.Entity("Arcora.Api.Entities.InvoiceDetail", b =>
@@ -1838,6 +1929,10 @@ namespace Arcora.Api.Migrations
                     b.Property<DateTime?>("ActualMoveOutAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("AgreementUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
                     b.Property<bool>("AutoRenew")
                         .HasColumnType("bit");
 
@@ -1942,6 +2037,92 @@ namespace Arcora.Api.Migrations
                     b.HasIndex("TenantID");
 
                     b.ToTable("Leases");
+                });
+
+            modelBuilder.Entity("Arcora.Api.Entities.LeaseContractTemplate", b =>
+                {
+                    b.Property<Guid>("LeaseContractTemplateID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CapturedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("CapturedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("HtmlContent")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsSystemGenerated")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("OrganizationID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("TemplateName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("UpdatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("LeaseContractTemplateID");
+
+                    b.HasIndex("OrganizationID");
+
+                    b.ToTable("LeaseContractTemplates");
+                });
+
+            modelBuilder.Entity("Arcora.Api.Entities.LeaseContractTemplateVersion", b =>
+                {
+                    b.Property<Guid>("LeaseContractTemplateVersionID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CapturedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("CapturedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ChangeSummary")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<string>("HtmlContent")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("LeaseContractTemplateID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("int");
+
+                    b.HasKey("LeaseContractTemplateVersionID");
+
+                    b.HasIndex("LeaseContractTemplateID");
+
+                    b.ToTable("LeaseContractTemplateVersions");
                 });
 
             modelBuilder.Entity("Arcora.Api.Entities.LeaseDocExtractedTerm", b =>
@@ -2357,6 +2538,18 @@ namespace Arcora.Api.Migrations
                     b.Property<Guid?>("OrganizationMemberID")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("ProviderDocumentID")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("ProviderDocumentUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("ProviderRequestID")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
                     b.Property<string>("ProviderSignerID")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
@@ -2365,6 +2558,10 @@ namespace Arcora.Api.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("SignatureImageUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<int?>("SignatureOrder")
                         .HasColumnType("int");
@@ -3266,10 +3463,16 @@ namespace Arcora.Api.Migrations
                     b.Property<DateTime?>("CapturedDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool>("ChargesEnabled")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Currency")
                         .IsRequired()
                         .HasMaxLength(10)
                         .HasColumnType("nvarchar(10)");
+
+                    b.Property<bool>("DetailsSubmitted")
+                        .HasColumnType("bit");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
@@ -3277,8 +3480,14 @@ namespace Arcora.Api.Migrations
                     b.Property<bool>("IsDefault")
                         .HasColumnType("bit");
 
+                    b.Property<DateTime?>("LastStripeSyncAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<Guid>("OrganizationID")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("PayoutsEnabled")
+                        .HasColumnType("bit");
 
                     b.Property<string>("ProviderAccountID")
                         .IsRequired()
@@ -3287,6 +3496,16 @@ namespace Arcora.Api.Migrations
 
                     b.Property<string>("ProviderName")
                         .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("RequirementsCurrentlyDue")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("RequirementsEventuallyDue")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("StripeAccountID")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
@@ -6521,6 +6740,25 @@ namespace Arcora.Api.Migrations
                     b.Navigation("Inspection");
                 });
 
+            modelBuilder.Entity("Arcora.Api.Entities.InspectionReview", b =>
+                {
+                    b.HasOne("Arcora.Api.Entities.Inspection", "Inspection")
+                        .WithMany()
+                        .HasForeignKey("InspectionID")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Arcora.Api.Entities.User", "ReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserID")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("Inspection");
+
+                    b.Navigation("ReviewedByUser");
+                });
+
             modelBuilder.Entity("Arcora.Api.Entities.InvoiceDetail", b =>
                 {
                     b.HasOne("Arcora.Api.Entities.Fee", "Fee")
@@ -6621,6 +6859,28 @@ namespace Arcora.Api.Migrations
                     b.Navigation("TenancyType");
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Arcora.Api.Entities.LeaseContractTemplate", b =>
+                {
+                    b.HasOne("Arcora.Api.Entities.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationID")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("Organization");
+                });
+
+            modelBuilder.Entity("Arcora.Api.Entities.LeaseContractTemplateVersion", b =>
+                {
+                    b.HasOne("Arcora.Api.Entities.LeaseContractTemplate", "LeaseContractTemplate")
+                        .WithMany("Versions")
+                        .HasForeignKey("LeaseContractTemplateID")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("LeaseContractTemplate");
                 });
 
             modelBuilder.Entity("Arcora.Api.Entities.LeaseDocuments", b =>
@@ -7647,6 +7907,11 @@ namespace Arcora.Api.Migrations
             modelBuilder.Entity("Arcora.Api.Entities.Lease", b =>
                 {
                     b.Navigation("Ratings");
+                });
+
+            modelBuilder.Entity("Arcora.Api.Entities.LeaseContractTemplate", b =>
+                {
+                    b.Navigation("Versions");
                 });
 
             modelBuilder.Entity("Arcora.Api.Entities.Listing", b =>

@@ -47,6 +47,6 @@ namespace Arcora.Payments.Configuration
         /// that objects may be deserialized incorrectly. The preferred fix is to align the Stripe.net package
         /// version with the API version configured on your Stripe webhook endpoint.
         /// </summary>
-        public bool ThrowOnApiVersionMismatch { get; set; } = true;
+        public bool ThrowOnApiVersionMismatch { get; set; } = false;
     }
 }

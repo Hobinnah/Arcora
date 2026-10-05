@@ -48,5 +48,14 @@ namespace Arcora.Api.Services.Interfaces
         /// Returns <see cref = "OrganizationDto"/> with the updated organization if successful, or null if not found.
         /// </returns>
         Task<OrganizationDto?> UpdateOrganizationStatus(Guid id, string status);
+
+        /// <summary>
+        /// Uploads and updates the organization's brand logo.
+        /// </summary>
+        /// <param name="id">The organization id.</param>
+        /// <param name="request">Multipart request containing logo image.</param>
+        /// <param name="cancellationToken"></param>
+        /// <returns>The updated organization, or null when not found.</returns>
+        Task<OrganizationDto?> UploadBrandLogo(Guid id, OrganizationLogoUploadRequest request, CancellationToken cancellationToken = default);
     }
 }

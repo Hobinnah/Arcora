@@ -19,13 +19,15 @@ namespace Arcora.Api.Services.Implementations
         private readonly IMemoryCache cache;
         private readonly ILogger<LeaseService> logger;
         private readonly ILeaseRepository leaseRepository;
+        private readonly IListingPhotoService listingPhotoService;
         private readonly IOptions<CacheConfiguration> _options;
-        public LeaseService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<LeaseService> logger, ILeaseRepository leaseRepository)
+        public LeaseService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<LeaseService> logger, ILeaseRepository leaseRepository, IListingPhotoService listingPhotoService)
         {
             this.cache = cache;
             this.logger = logger;
             this.mapper = mapper;
             this.leaseRepository = leaseRepository;
+            this.listingPhotoService = listingPhotoService;
             this._options = options;
             if (this._options.Value.ExpirationTimeInMinutes <= 0)
                 this._options.Value.ExpirationTimeInMinutes = 15;
@@ -76,18 +78,13 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<Lease> entities = cache.Get<IEnumerable<Lease>>(Cache.LEASES.ToString()) ?? new List<Lease>();
-                Lease? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.LeaseID == ID);
-                }
-                else
-                {
-                    match = await this.leaseRepository.GetByID(ID);
-                }
+                var match = await this.leaseRepository.GetLeaseByIDAsync(ID);
+                if (match == null)
+                    return null;
 
-                return match == null ? null : this.mapper.Map<LeaseDto>(match);
+                var leaseDto = this.mapper.Map<LeaseDto>(match);
+                await this.listingPhotoService.PopulateReadUrlsAsync(leaseDto.Listing?.ListingPhotos);
+                return leaseDto;
             }
             catch (Exception er)
             {

@@ -1,0 +1,96 @@
+Arcora Earnings Page API Contract
+
+1) Payout list (View all + filters)
+Endpoint: GET /api/Payout/Get
+Query params:
+- organizationID (Guid, optional)
+- period (string, optional): This month | Last 3 months | Year to date
+- pageNumber (int, optional, default 1)
+- pageSize (int, optional, default 10, max 50)
+Response (200):
+- data: PayoutDto[]
+  - payoutID
+  - organizationID
+  - amount
+  - currency
+  - status
+  - scheduledAt
+  - paidAt
+  - providerName
+  - requestedAt
+  - processedAt
+  - from
+  - to
+  - orgPayoutAccountID
+- totalCount: int
+
+2) Earnings summary (rent collected, service fees, past due)
+Endpoint: GET /api/Payout/GetEarningsSummary/{organizationID}
+Route params:
+- organizationID (Guid, required)
+Query params:
+- period (string, optional): This month | Last 3 months | Year to date
+Response (200): EarningsSummaryDto
+- organizationID
+- period
+- periodStart
+- periodEnd
+- rentCollected
+- serviceFees
+- pastDue
+- netEarnings
+
+3) Listing breakdown (grouped earnings)
+Endpoint: GET /api/Payout/GetListingBreakdown/{organizationID}
+Route params:
+- organizationID (Guid, required)
+Query params:
+- period (string, optional): This month | Last 3 months | Year to date
+Response (200): ListingEarningsBreakdownDto[]
+- listingID
+- listingName
+- rentCollected
+- serviceFees
+- netEarnings
+
+4) Payout account status (connected/provider/masked details)
+Endpoint: GET /api/OrgPayoutAccount/GetOrganizationPayoutAccountStatus/{organizationID}
+Route params:
+- organizationID (Guid, required)
+Response (200): PayoutAccountStatusDto
+- organizationID
+- isConnected
+- provider
+- verificationStatus
+- maskedAccount
+- bankName
+- accountType
+- isDefault
+Response (404): no active payout account for organization
+
+5) Statement export (CSV or complete transaction dataset)
+Endpoint: GET /api/Payout/ExportStatement/{organizationID}
+Route params:
+- organizationID (Guid, required)
+Query params:
+- period (string, optional): This month | Last 3 months | Year to date
+- format (string, optional): json (default) | csv
+Response (200):
+- format=json -> EarningsTransactionDto[]
+  - transactionDate
+  - transactionType
+  - status
+  - amount
+  - currency
+  - description
+  - referenceNumber
+  - payoutID
+  - paymentID
+  - invoiceMasterID
+- format=csv -> text/csv file with the same columns
+
+Period filter notes:
+- This month
+- Last 3 months
+- Year to date
+- If period is omitted, all-time data is returned.

@@ -13,6 +13,14 @@ namespace Arcora.Api.Services.Interfaces
         /// <returns></returns>
         Task<PagedResult<PayoutDto>> GetAll(Paging paging);
         /// <summary>
+        /// Retrieves payouts with optional organization and period filters.
+        /// </summary>
+        /// <param name="organizationID"></param>
+        /// <param name="period"></param>
+        /// <param name="paging"></param>
+        /// <returns></returns>
+        Task<PagedResult<PayoutDto>> GetFiltered(Guid? organizationID, string? period, Paging paging);
+        /// <summary>
         /// Retrieves a payout by its ID.
         /// </summary>
         /// <param name = "ID"></param>
@@ -46,5 +54,26 @@ namespace Arcora.Api.Services.Interfaces
         /// Returns <see cref = "PayoutDto"/> with the updated payout if successful, or null if not found.
         /// </returns>
         Task<PayoutDto?> UpdatePayoutStatus(long id, string status);
+        /// <summary>
+        /// Returns period totals used by the earnings summary widget.
+        /// </summary>
+        /// <param name="organizationID"></param>
+        /// <param name="period"></param>
+        /// <returns></returns>
+        Task<EarningsSummaryDto> GetEarningsSummary(Guid organizationID, string? period);
+        /// <summary>
+        /// Returns earnings grouped by listing.
+        /// </summary>
+        /// <param name="organizationID"></param>
+        /// <param name="period"></param>
+        /// <returns></returns>
+        Task<IEnumerable<ListingEarningsBreakdownDto>> GetListingBreakdown(Guid organizationID, string? period);
+        /// <summary>
+        /// Returns a complete earnings transaction dataset for statement export.
+        /// </summary>
+        /// <param name="organizationID"></param>
+        /// <param name="period"></param>
+        /// <returns></returns>
+        Task<IEnumerable<EarningsTransactionDto>> GetStatementTransactions(Guid organizationID, string? period);
     }
 }

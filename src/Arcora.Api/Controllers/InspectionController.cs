@@ -25,8 +25,11 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetInspectionByID")]
-        public async Task<IActionResult> GetInspectionByID([FromServices] IInspectionService inspectionService, Guid id)
+        public async Task<IActionResult> GetInspectionByID([FromServices] IInspectionService inspectionService, [FromServices] ILeaseCheckInService leaseCheckInService, Guid id)
         {
+            if (!await leaseCheckInService.CanAccessMoveInInspectionAsync(id, User))
+                return NotFound(new { message = "Inspection with the specified ID was not found." });
+
             var result = await inspectionService.GetID(id);
             if (result == null)
                 return NotFound(new { message = "Inspection with the specified ID was not found." });
@@ -40,8 +43,9 @@ namespace Arcora.Api.Controllers
         [HttpPost(Name = "CreateInspection")]
         public async Task<IActionResult> CreateInspection([FromServices] IInspectionService inspectionService, [FromBody] InspectionDto inspectionDto)
         {
-            // var displayName = User.Identity?.Name ?? string.Empty;
-            // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
+            if (string.Equals(inspectionDto.InspectionType, "MOVE_IN", StringComparison.OrdinalIgnoreCase))
+                return Conflict(new { message = "Use the lease-scoped move-in check-in endpoints for MOVE_IN inspections." });
+
             var result = await inspectionService.CreateInspection(inspectionDto);
             if (result.InspectionID != null && result.InspectionID != Guid.Empty)
                 return CreatedAtRoute("GetInspectionByID", new { id = result.InspectionID }, result);
@@ -53,10 +57,11 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateInspection")]
-        public async Task<IActionResult> UpdateInspection([FromServices] IInspectionService inspectionService, Guid id, [FromBody] InspectionDto inspectionDto)
+        public async Task<IActionResult> UpdateInspection([FromServices] IInspectionService inspectionService, [FromServices] ILeaseCheckInService leaseCheckInService, Guid id, [FromBody] InspectionDto inspectionDto)
         {
-            // var displayName = User.Identity?.Name ?? string.Empty;
-            // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
+            if (string.Equals(inspectionDto.InspectionType, "MOVE_IN", StringComparison.OrdinalIgnoreCase) || !await leaseCheckInService.CanAccessMoveInInspectionAsync(id, User))
+                return Conflict(new { message = "Use the lease-scoped move-in check-in endpoints for MOVE_IN inspections." });
+
             var result = await inspectionService.UpdateInspection(id, inspectionDto);
             if (result == null)
                 return NotFound(new { message = "Inspection with the specified ID was not found." });
@@ -68,8 +73,15 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpDelete("{id}", Name = "DeleteInspection")]
-        public async Task<IActionResult> DeleteInspection([FromServices] IInspectionService inspectionService, Guid id)
+        public async Task<IActionResult> DeleteInspection([FromServices] IInspectionService inspectionService, [FromServices] ILeaseCheckInService leaseCheckInService, Guid id)
         {
+            if (!await leaseCheckInService.CanAccessMoveInInspectionAsync(id, User))
+                return NotFound(new { message = "Inspection with the specified ID was not found." });
+
+            var inspection = await inspectionService.GetID(id);
+            if (string.Equals(inspection?.InspectionType, "MOVE_IN", StringComparison.OrdinalIgnoreCase))
+                return Conflict(new { message = "Use the lease-scoped move-in check-in endpoints for MOVE_IN inspections." });
+
             try
             {
                 await inspectionService.DeleteInspection(id);

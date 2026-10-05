@@ -91,6 +91,8 @@ namespace Arcora.Api
           public virtual DbSet<OrgSubscription> OrgSubscriptions { get; set; }
           public virtual DbSet<AuditLog> AuditLogs { get; set; }
           public virtual DbSet<LeaseDocExtractedTerm> LeaseDocExtractedTerms { get; set; }
+          public virtual DbSet<LeaseContractTemplate> LeaseContractTemplates { get; set; }
+          public virtual DbSet<LeaseContractTemplateVersion> LeaseContractTemplateVersions { get; set; }
           public virtual DbSet<AmenityCatalog> AmenityCatalogs { get; set; }
           public virtual DbSet<ListingAmenity> ListingAmenities { get; set; }
           public virtual DbSet<ListingRule> ListingRules { get; set; }
@@ -99,12 +101,16 @@ namespace Arcora.Api
           public virtual DbSet<ListingType> ListingTypes { get; set; }
           public virtual DbSet<UnitType> UnitTypes { get; set; }
           public virtual DbSet<PostalLookupSuggestion> PostalLookupSuggestions { get; set; }
+          public virtual DbSet<InspectionReview> InspectionReviews { get; set; }
 
         #endregion
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSqlServer(this._configuration.GetConnectionString("DefaultAppConnection"));
+            if (!optionsBuilder.IsConfigured)
+            {
+                optionsBuilder.UseSqlServer(this._configuration.GetConnectionString("DefaultAppConnection"));
+            }
             base.OnConfiguring(optionsBuilder);
         }
 
@@ -137,6 +143,19 @@ namespace Arcora.Api
             {
                 relationship.DeleteBehavior = DeleteBehavior.NoAction;
             }
+
+            builder.Entity<Inspection>()
+                .HasIndex(x => new { x.LeaseID, x.InspectionType })
+                .IsUnique()
+                .HasFilter("[LeaseID] IS NOT NULL AND [InspectionType] = 'MOVE_IN'");
+
+            builder.Entity<Attachment>()
+                .HasIndex(x => new { x.EntityType, x.EntityID, x.ClientUploadID })
+                .IsUnique()
+                .HasFilter("[ClientUploadID] IS NOT NULL");
+
+            builder.Entity<InspectionReview>()
+                .HasIndex(x => new { x.InspectionID, x.ReviewedAt });
             // You can seed the tables in your database, after this commented line, 
         }
     }
@@ -148,7 +167,7 @@ namespace Arcora.Api
 ////OR
 
 ////dotnet new tool-manifest
-////dotnet tool install --global dotnet-ef --source https://api.nuget.org/v3/index.json
+////dotnone tool install --global dotnet-ef --source https://api.nuget.org/v3/index.json
 ////dotnet add package Microsoft.EntityFrameworkCore.Design --source https://api.nuget.org/v3/index.json
 ////dotnet ef migrations add InitialCreate
 ////ef migrations remove

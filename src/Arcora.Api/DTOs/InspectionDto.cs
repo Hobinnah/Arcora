@@ -98,4 +98,22 @@ public class InspectionDto
     /// FK to Lease
     /// </summary>
     public LeaseDto? Lease { get; set; }
+
+    [MaxLength(50)]
+    public string? OccupancyReadiness { get; set; }
+
+    public DateTime? ArrivalConfirmedAt { get; set; }
+
+    public DateTime? SubmittedAt { get; set; }
+
+    public long? SubmittedByUserID { get; set; }
+
+    [MaxLength(64)]
+    public string? Version { get; set; }
+
+    [MaxLength(255)]
+    public string? SubmissionIdempotencyKey { get; set; }
+
+    [MaxLength(128)]
+    public string? SubmissionRequestHash { get; set; }
 }

@@ -48,8 +48,7 @@ public class InspectionItemDto
     /// <summary>
     /// Indicates if repair is required
     /// </summary>
-    [Required]
-    public bool RequiresRepair { get; set; }
+    public bool? RequiresRepair { get; set; }
     /// <summary>
     /// Estimated cost for repair
     /// </summary>

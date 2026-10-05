@@ -14,6 +14,9 @@ using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Repositories.Implementations;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Services.Implementations;
+using Arcora.Api.Signing;
+using Arcora.Api.Services.Implementations;
+using Arcora.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
@@ -109,6 +112,8 @@ namespace Arcora.Api.Extensions
              services.AddTransient<IAmenityCatalogRepository, AmenityCatalogRepository>();
              services.AddTransient<ILeaseDocExtractedTermService, LeaseDocExtractedTermService>();
              services.AddTransient<ILeaseDocExtractedTermRepository, LeaseDocExtractedTermRepository>();
+             services.AddTransient<ILeaseContractTemplateService, LeaseContractTemplateService>();
+             services.AddTransient<ILeaseContractTemplateRepository, LeaseContractTemplateRepository>();
              services.AddTransient<IAuditLogService, AuditLogService>();
              services.AddTransient<IAuditLogRepository, AuditLogRepository>();
              services.AddTransient<IOrgSubscriptionService, OrgSubscriptionService>();
@@ -214,6 +219,7 @@ namespace Arcora.Api.Extensions
              services.AddTransient<ILeaseOccupantsRepository, LeaseOccupantsRepository>();
              services.AddTransient<ISecurityDepositTransactionService, SecurityDepositTransactionService>();
              services.AddTransient<ISecurityDepositTransactionRepository, SecurityDepositTransactionRepository>();
+             services.AddTransient<IHostingSecurityDepositService, HostingSecurityDepositService>();
              services.AddTransient<ISecurityDepositService, SecurityDepositService>();
              services.AddTransient<ISecurityDepositRepository, SecurityDepositRepository>();
              services.AddTransient<IReservationHoldService, ReservationHoldService>();
@@ -266,6 +272,16 @@ namespace Arcora.Api.Extensions
                   services.AddTransient<IEmailSender, EmailSender>();
                   services.AddSingleton<Arcora.Api.Email.IEmailQueue, Arcora.Api.Email.EmailQueue>();
                   services.AddHostedService<Arcora.Api.Email.EmailQueueBackgroundService>();
+
+                 // Signing queue & background processor
+                 services.AddSingleton<ISigningQueue, SigningQueue>();
+                 services.AddHostedService<SigningQueueBackgroundService>();
+
+                 // HTML -> PDF conversion service (implementation required)
+                 services.AddTransient<IHtmlToPdfService, HtmlToPdfService>();
+
+                 // Signwell HTTP client - configure base URL and API key via configuration 'Signwell:BaseUrl' and 'Signwell:ApiKey'
+                 services.AddHttpClient<ISignwellClient, SignwellClient>();
             #endregion
 
             #region===========================Auto Mapper Configurations===========================
@@ -280,6 +296,7 @@ namespace Arcora.Api.Extensions
                  cfg.AddProfile<ListingAmenityProfile>();
                  cfg.AddProfile<AmenityCatalogProfile>();
                  cfg.AddProfile<LeaseDocExtractedTermProfile>();
+                 cfg.AddProfile<LeaseContractTemplateProfile>();
                  cfg.AddProfile<AuditLogProfile>();
                  cfg.AddProfile<OrgSubscriptionProfile>();
                  cfg.AddProfile<SubscriptionPlanProfile>();
@@ -611,6 +628,8 @@ namespace Arcora.Api.Extensions
 
             services.Configure<RentCollectionOptions>(configuration.GetSection(RentCollectionOptions.SectionName));
             services.AddHostedService<RecurringRentCollectionService>();
+services.AddTransient<ILeaseCheckInService, LeaseCheckInService>();
+services.AddHostedService<LeaseCheckInDraftCleanupBackgroundService>();
 
             return services;
         }

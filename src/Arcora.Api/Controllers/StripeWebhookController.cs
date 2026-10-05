@@ -23,6 +23,7 @@ namespace Arcora.Api.Controllers
         private readonly IPaymentIntentRepository paymentIntentRepository;
         private readonly IRentCollectionOrchestrator orchestrator;
         private readonly IPaymentOnboardingService paymentOnboardingService;
+        private readonly IOrgPayoutAccountService orgPayoutAccountService;
         private readonly ILogger<StripeWebhookController> logger;
 
         public StripeWebhookController(
@@ -31,6 +32,7 @@ namespace Arcora.Api.Controllers
             IPaymentIntentRepository paymentIntentRepository,
             IRentCollectionOrchestrator orchestrator,
             IPaymentOnboardingService paymentOnboardingService,
+            IOrgPayoutAccountService orgPayoutAccountService,
             ILogger<StripeWebhookController> logger)
         {
             this.paymentProvider = paymentProvider;
@@ -38,6 +40,7 @@ namespace Arcora.Api.Controllers
             this.paymentIntentRepository = paymentIntentRepository;
             this.orchestrator = orchestrator;
             this.paymentOnboardingService = paymentOnboardingService;
+            this.orgPayoutAccountService = orgPayoutAccountService;
             this.logger = logger;
         }
 
@@ -135,6 +138,24 @@ namespace Arcora.Api.Controllers
                     await paymentOnboardingService.UpdateVerificationStatusAsync(
                         webhookEvent.PaymentMethodId,
                         webhookEvent.Status);
+                    break;
+
+                case "account.updated":
+                case "account.external_account.created":
+                case "account.external_account.updated":
+                case "balance.available":
+                    if (!string.IsNullOrWhiteSpace(webhookEvent.ConnectedAccountId))
+                        await orgPayoutAccountService.SyncStripeAccountByStripeAccountID(webhookEvent.ConnectedAccountId);
+                    break;
+
+                case "payout.created":
+                case "payout.paid":
+                case "payout.failed":
+                    if (!string.IsNullOrWhiteSpace(webhookEvent.ConnectedAccountId))
+                    {
+                        await orgPayoutAccountService.SyncStripePayoutEvent(webhookEvent.ConnectedAccountId, webhookEvent.RawPayload);
+                        await orgPayoutAccountService.SyncStripeAccountByStripeAccountID(webhookEvent.ConnectedAccountId);
+                    }
                     break;
 
                 default:

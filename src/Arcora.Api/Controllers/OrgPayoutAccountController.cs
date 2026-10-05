@@ -33,6 +33,58 @@ namespace Arcora.Api.Controllers
             return Ok(result);
         }
 
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [HttpGet("{organizationID:guid}", Name = "GetOrgPayoutAccountStatusByOrganization")]
+        public async Task<IActionResult> GetOrganizationPayoutAccountStatus([FromServices] IOrgPayoutAccountService orgpayoutaccountService, Guid organizationID)
+        {
+            var result = await orgpayoutaccountService.GetOrganizationPayoutAccountStatus(organizationID);
+            if (result == null)
+                return NotFound(new { message = "No active payout account found for this organization." });
+            return Ok(result);
+        }
+
+        [Authorize(Roles = "User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [HttpPost(Name = "CreateOrgPayoutOnboardingLink")]
+        public async Task<IActionResult> OnboardingLink([FromServices] IOrgPayoutAccountService orgpayoutaccountService, [FromBody] OrgPayoutOnboardingLinkRequestDto request)
+        {
+            if (!long.TryParse(User.FindFirst("UserId")?.Value, out var actorUserID) || actorUserID <= 0)
+                return Forbid();
+
+            try
+            {
+                return Ok(await orgpayoutaccountService.CreateOnboardingLink(request, actorUserID));
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [Authorize(Roles = "User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [HttpPost("{organizationID:guid}", Name = "RefreshOrgPayoutAccountStatus")]
+        public async Task<IActionResult> RefreshStatus([FromServices] IOrgPayoutAccountService orgpayoutaccountService, Guid organizationID)
+        {
+            var result = await orgpayoutaccountService.RefreshOrganizationPayoutAccountStatus(organizationID);
+            if (result == null)
+                return NotFound(new { message = "No active payout account found for this organization." });
+            return Ok(result);
+        }
+
         // POST api/<OrgPayoutAccountController>
         [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]

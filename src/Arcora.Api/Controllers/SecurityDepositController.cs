@@ -4,6 +4,7 @@ using Arcora.Api.Models;
 using Arcora.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Arcora.Api.Controllers
 {
@@ -17,6 +18,14 @@ namespace Arcora.Api.Controllers
         [HttpGet(Name = "GetAllSecurityDeposits")]
         public async Task<IActionResult> Get([FromServices] ISecurityDepositService securitydepositService, [FromQuery] Paging paging)
         {
+            var claimValue = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!long.TryParse(claimValue, out var actorUserID) || actorUserID <= 0)
+                return Unauthorized(new { message = "Authenticated user context is invalid." });
+
+            if (actorUserID > int.MaxValue)
+                return Unauthorized(new { message = "Authenticated user context is invalid." });
+
+            paging.UserID = (int)actorUserID;
             return Ok(await securitydepositService.GetAll(paging));
         }
 

@@ -75,6 +75,26 @@ public class LeaseSignatory
     [MaxLength(255)]
     public string? ProviderSignerID { get; set; }
     /// <summary>
+    /// ID of the signing request/envelope from the external provider (e.g., Signwell)
+    /// </summary>
+    [MaxLength(255)]
+    public string? ProviderRequestID { get; set; }
+    /// <summary>
+    /// ID of the document within the external provider
+    /// </summary>
+    [MaxLength(255)]
+    public string? ProviderDocumentID { get; set; }
+    /// <summary>
+    /// URL reference to the document on the provider side (if available)
+    /// </summary>
+    [MaxLength(1000)]
+    public string? ProviderDocumentUrl { get; set; }
+    /// <summary>
+    /// Optional URL to a signature image captured by the provider
+    /// </summary>
+    [MaxLength(1000)]
+    public string? SignatureImageUrl { get; set; }
+    /// <summary>
     /// Date and time when viewed
     /// </summary>
     public DateTime? ViewedAt { get; set; }

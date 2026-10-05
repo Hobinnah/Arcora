@@ -53,5 +53,11 @@ namespace Arcora.Api.Services.Interfaces
         /// <param name = "cancellationToken"></param>
         /// <returns>The content stream, content type and original filename, or null when not found.</returns>
         Task<(Stream Content, string? ContentType, string FileName)?> DownloadLeaseDocument(Guid ID, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Stores a fully signed agreement PDF for a lease, uploads it to blob storage, creates a LeaseDocuments
+        /// record and updates the Lease record's AgreementUrl and SignedAt fields.
+        /// </summary>
+        Task<LeaseDocumentsDto> SaveSignedAgreementAsync(Guid leaseId, Stream content, string fileName, string capturedBy, CancellationToken cancellationToken = default);
     }
 }

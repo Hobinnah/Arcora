@@ -19,21 +19,87 @@ namespace Arcora.Api.Services.Implementations
         private readonly IMemoryCache cache;
         private readonly ILogger<LeaseDocumentsService> logger;
         private readonly ILeaseDocumentsRepository leasedocumentsRepository;
+        private readonly ILeaseRepository leaseRepository;
         private readonly IFileStorageService fileStorageService;
         private readonly IOptions<CacheConfiguration> _options;
-        public LeaseDocumentsService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<LeaseDocumentsService> logger, ILeaseDocumentsRepository leasedocumentsRepository, IFileStorageService fileStorageService)
+        public LeaseDocumentsService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<LeaseDocumentsService> logger, ILeaseDocumentsRepository leasedocumentsRepository, IFileStorageService fileStorageService, ILeaseRepository leaseRepository)
         {
             this.cache = cache;
             this.logger = logger;
             this.mapper = mapper;
             this.leasedocumentsRepository = leasedocumentsRepository;
             this.fileStorageService = fileStorageService;
+            this.leaseRepository = leaseRepository;
             this._options = options;
             if (this._options.Value.ExpirationTimeInMinutes <= 0)
                 this._options.Value.ExpirationTimeInMinutes = 15;
         }
 
         /// <inheritdoc/>
+        public async Task<LeaseDocumentsDto> SaveSignedAgreementAsync(Guid leaseId, Stream content, string fileName, string capturedBy, CancellationToken cancellationToken = default)
+        {
+            if (content == null)
+                throw new ArgumentNullException(nameof(content));
+
+            try
+            {
+                var lease = await leaseRepository.GetByID(leaseId);
+
+                BlobUploadResult uploadResult;
+                await using (var stream = content)
+                {
+                    uploadResult = await fileStorageService.UploadAsync(
+                        StorageCategory.Document,
+                        fileName,
+                        stream,
+                        "application/pdf",
+                        cancellationToken);
+                }
+
+                var leaseDocuments = new LeaseDocuments
+                {
+                    LeaseDocumentID = Guid.NewGuid(),
+                    LeaseID = leaseId,
+                    ListingID = lease?.ListingID,
+                    TenantID = lease?.TenantID,
+                    RentalApplicationID = lease?.RentalApplicationID,
+                    DocumentType = "SIGNED_AGREEMENT",
+                    DocumentStatus = "SIGNED",
+                    OriginalFilename = fileName,
+                    StorageProvider = "AZURE_BLOB",
+                    StorageContainer = uploadResult.Container,
+                    StorageReference = uploadResult.BlobName,
+                    Url = uploadResult.Uri,
+                    IsPrimary = true,
+                    GeneratedAt = DateTime.UtcNow,
+                    CapturedBy = capturedBy,
+                    CapturedDate = DateTime.UtcNow
+                };
+
+                leaseDocuments = await leasedocumentsRepository.Create(leaseDocuments) ?? new LeaseDocuments();
+                await leasedocumentsRepository.Save();
+                cache.Remove(Cache.LEASEDOCUMENTS.ToString());
+
+                // Update lease record with agreement URL and signed timestamp
+                if (lease != null)
+                {
+                    lease.AgreementUrl = uploadResult.Uri;
+                    lease.SignedAt = DateTime.UtcNow;
+                    await leaseRepository.Update(lease);
+                    await leaseRepository.Save();
+                }
+
+                var dto = this.mapper.Map<LeaseDocumentsDto>(leaseDocuments);
+                await PopulateReadUrlAsync(dto);
+                return dto;
+            }
+            catch (Exception er)
+            {
+                logger.LogError(er, "An error occurred while saving signed agreement. Timestamp: {Timestamp}", DateTime.UtcNow);
+                throw;
+            }
+        }
+
         public async Task<PagedResult<LeaseDocumentsDto>> GetAll(Paging paging)
         {
             IEnumerable<LeaseDocuments> entities;
@@ -46,6 +112,8 @@ namespace Arcora.Api.Services.Implementations
                     if (entities != null && entities.Any())
                         cache.Set<IEnumerable<LeaseDocuments>>(Cache.LEASEDOCUMENTS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
                 }
+
+
             }
             catch (Exception er)
             {

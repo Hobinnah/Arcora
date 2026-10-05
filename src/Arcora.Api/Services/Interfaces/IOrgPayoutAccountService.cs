@@ -37,5 +37,37 @@ namespace Arcora.Api.Services.Interfaces
         /// <param name = "ID"></param>
         /// <returns></returns>
         Task DeleteOrgPayoutAccount(long ID);
+        /// <summary>
+        /// Retrieves payout account connection details for an organization.
+        /// </summary>
+        /// <param name="organizationID"></param>
+        /// <returns></returns>
+        Task<PayoutAccountStatusDto?> GetOrganizationPayoutAccountStatus(Guid organizationID);
+        /// <summary>
+        /// Creates a Stripe-hosted onboarding link for an organization's payout account.
+        /// </summary>
+        /// <param name="request"></param>
+        /// <param name="actorUserID"></param>
+        /// <returns></returns>
+        Task<OrgPayoutOnboardingLinkResponseDto> CreateOnboardingLink(OrgPayoutOnboardingLinkRequestDto request, long actorUserID);
+        /// <summary>
+        /// Refreshes local payout-account status from Stripe and returns the latest view model.
+        /// </summary>
+        /// <param name="organizationID"></param>
+        /// <returns></returns>
+        Task<PayoutAccountStatusDto?> RefreshOrganizationPayoutAccountStatus(Guid organizationID);
+        /// <summary>
+        /// Synchronizes organization payout account fields from Stripe for webhook updates.
+        /// </summary>
+        /// <param name="stripeAccountID"></param>
+        /// <returns></returns>
+        Task SyncStripeAccountByStripeAccountID(string stripeAccountID);
+        /// <summary>
+        /// Upserts payout records from Stripe webhook payloads.
+        /// </summary>
+        /// <param name="stripeAccountID"></param>
+        /// <param name="rawPayload"></param>
+        /// <returns></returns>
+        Task SyncStripePayoutEvent(string stripeAccountID, string rawPayload);
     }
 }

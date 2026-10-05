@@ -65,8 +65,37 @@ public class AttachmentDto
     /// <summary>
     /// Description of the attachment
     /// </summary>
-    [MaxLength(255)]
+    [MaxLength(1000)]
     public string? Description { get; set; }
+
+    /// <summary>
+    /// Client identifier for the upload
+    /// </summary>
+    [MaxLength(100)]
+    public string? ClientUploadID { get; set; }
+
+    /// <summary>
+    /// Checksum SHA256 of the file
+    /// </summary>
+    [MaxLength(64)]
+    public string? ChecksumSha256 { get; set; }
+
+    /// <summary>
+    /// Status of the upload
+    /// </summary>
+    [MaxLength(20)]
+    public string? UploadStatus { get; set; }
+
+    /// <summary>
+    /// Expiration date of the upload
+    /// </summary>
+    public DateTime? UploadExpiresAt { get; set; }
+
+    /// <summary>
+    /// Reason for upload failure
+    /// </summary>
+    [MaxLength(256)]
+    public string? UploadFailureReason { get; set; }
     /// <summary>
     /// Date attachment was captured
     /// </summary>
