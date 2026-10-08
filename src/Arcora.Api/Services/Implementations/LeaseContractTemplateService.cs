@@ -11,6 +11,7 @@ using Arcora.Api.Services.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
 
 namespace Arcora.Api.Services.Implementations;
 
@@ -27,6 +28,7 @@ public class LeaseContractTemplateService : ILeaseContractTemplateService
     private readonly ILeaseRepository leaseRepository;
     private readonly IFileStorageService fileStorageService;
     private readonly IOptions<CacheConfiguration> options;
+    private readonly ArcoraDbContext dbContext;
 
     public LeaseContractTemplateService(
         IMapper mapper,
@@ -35,7 +37,8 @@ public class LeaseContractTemplateService : ILeaseContractTemplateService
         ILogger<LeaseContractTemplateService> logger,
         ILeaseContractTemplateRepository templateRepository,
         ILeaseRepository leaseRepository,
-        IFileStorageService fileStorageService)
+        IFileStorageService fileStorageService,
+        ArcoraDbContext dbContext)
     {
         this.mapper = mapper;
         this.cache = cache;
@@ -44,6 +47,7 @@ public class LeaseContractTemplateService : ILeaseContractTemplateService
         this.leaseRepository = leaseRepository;
         this.fileStorageService = fileStorageService;
         this.options = options;
+        this.dbContext = dbContext;
 
         if (this.options.Value.ExpirationTimeInMinutes <= 0)
             this.options.Value.ExpirationTimeInMinutes = 15;
@@ -256,7 +260,9 @@ public class LeaseContractTemplateService : ILeaseContractTemplateService
         }
 
         var brandLogoUrl = await ResolveBrandLogoUrlAsync(lease.Organization?.BrandLogoUrl);
-        var rendered = RenderHtml(rawHtml, lease, brandLogoUrl);
+        var invitationQuote = await dbContext.TenantInvitations.AsNoTracking()
+            .FirstOrDefaultAsync(invitation => invitation.LeaseID == lease.LeaseID && invitation.MonthlyRentAmount != null);
+        var rendered = RenderHtml(rawHtml, lease, brandLogoUrl, invitationQuote);
 
         return new LeaseContractRenderResultDto
         {
@@ -277,7 +283,7 @@ public class LeaseContractTemplateService : ILeaseContractTemplateService
         return "<html><body><h1>Standard Residential Lease</h1><p>{{Organization.DisplayName}}</p></body></html>";
     }
 
-    private string RenderHtml(string html, Lease lease, string? brandLogoUrl)
+    private string RenderHtml(string html, Lease lease, string? brandLogoUrl, TenantInvitation? invitationQuote)
     {
         var organization = lease.Organization;
         var listing = lease.Listing;
@@ -314,9 +320,9 @@ public class LeaseContractTemplateService : ILeaseContractTemplateService
 
             ["Listing.Title"] = listing?.Title,
             ["Listing.Description"] = listing?.Description,
-            ["Listing.Currency"] = listing?.Currency,
-            ["Listing.BaseMonthlyRentAmount"] = listing?.BaseMonthlyRentAmount.ToString("N2"),
-            ["Listing.SecurityDepositAmount"] = listing?.SecurityDepositAmount.ToString("N2"),
+            ["Listing.Currency"] = invitationQuote?.Currency ?? listing?.Currency,
+            ["Listing.BaseMonthlyRentAmount"] = invitationQuote?.MonthlyRentAmount?.ToString("N2") ?? listing?.BaseMonthlyRentAmount.ToString("N2"),
+            ["Listing.SecurityDepositAmount"] = invitationQuote?.SecurityDepositAmount?.ToString("N2") ?? listing?.SecurityDepositAmount.ToString("N2"),
             ["Listing.IsPetFriendly"] = listing?.IsPetFriendly == true ? "Yes" : "No",
 
             ["Address.Line1"] = address?.Line1,

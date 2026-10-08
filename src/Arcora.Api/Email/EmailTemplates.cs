@@ -251,6 +251,58 @@ namespace Arcora.Api
                 "</td></tr></table></td></tr></table></body></html>";
         }
 
+        /// <summary>
+        /// Builds the branded HTML body for a tenant invitation email.
+        /// </summary>
+        public static string BuildTenantInvitationEmail(
+            string tenantEmail,
+            string organizationName,
+            string listingTitle,
+            string startDate,
+            string endDate,
+            string leaseTerm,
+            string monthlyRent,
+            string securityDeposit,
+            string invitationPurpose,
+            string expiresAt,
+            string? acceptUrl,
+            string? declineUrl,
+            string companyName,
+            string? supportEmail = null)
+        {
+            var brand = string.IsNullOrWhiteSpace(companyName) ? "Arcora" : companyName;
+            var supportLine = string.IsNullOrWhiteSpace(supportEmail)
+                ? string.Empty
+                : $"<p style=\"margin:0 0 8px;font-family:Arial,sans-serif;font-size:13px;line-height:20px;color:#6b7280;\">Need help? Contact us at <a href=\"mailto:{supportEmail}\" style=\"color:#0d9488;text-decoration:none;\">{supportEmail}</a>.</p>";
+
+            var invitationActionBlock = string.IsNullOrWhiteSpace(acceptUrl)
+                ? string.Empty
+                : $"<tr><td style=\"padding:24px 40px 0;\"><table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\"><tr><td style=\"border-radius:8px;background:#0d9488;\"><a href=\"{acceptUrl}\" style=\"display:inline-block;padding:12px 24px;font-family:Arial,sans-serif;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;\">Accept Invitation</a></td></tr></table></td></tr>";
+
+            var declineActionBlock = string.IsNullOrWhiteSpace(declineUrl)
+                ? string.Empty
+                : $"<tr><td style=\"padding:12px 40px 0;\"><p style=\"margin:0;font-family:Arial,sans-serif;font-size:13px;line-height:20px;color:#6b7280;\">If you want to decline, <a href=\"{declineUrl}\" style=\"color:#0d9488;text-decoration:none;font-weight:600;\">click here</a>.</p></td></tr>";
+
+            var template = LoadTemplate("TenantInvitation.html");
+
+            return template
+                .Replace("{{Brand}}", brand)
+                .Replace("{{TenantEmail}}", System.Net.WebUtility.HtmlEncode(tenantEmail))
+                .Replace("{{OrganizationName}}", System.Net.WebUtility.HtmlEncode(organizationName))
+                .Replace("{{ListingTitle}}", System.Net.WebUtility.HtmlEncode(listingTitle))
+                .Replace("{{StartDate}}", System.Net.WebUtility.HtmlEncode(startDate))
+                .Replace("{{EndDate}}", System.Net.WebUtility.HtmlEncode(endDate))
+                .Replace("{{LeaseTerm}}", System.Net.WebUtility.HtmlEncode(leaseTerm))
+                .Replace("{{MonthlyRent}}", System.Net.WebUtility.HtmlEncode(monthlyRent))
+                .Replace("{{SecurityDeposit}}", System.Net.WebUtility.HtmlEncode(securityDeposit))
+                .Replace("{{InvitationPurpose}}", System.Net.WebUtility.HtmlEncode(invitationPurpose))
+                .Replace("{{ExpiresAt}}", System.Net.WebUtility.HtmlEncode(expiresAt))
+                .Replace("{{InvitationActionBlock}}", invitationActionBlock)
+                .Replace("{{DeclineActionBlock}}", declineActionBlock)
+                .Replace("{{Year}}", DateTime.UtcNow.Year.ToString())
+                .Replace("{{SupportLine}}", supportLine);
+        }
+
         private static readonly string TemplatesRoot = Path.Combine(AppContext.BaseDirectory, "Templates");
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _templateCache = new();
 

@@ -32,6 +32,10 @@ namespace Arcora.Api.Services.Implementations
         private readonly IListingPhotoService listingPhotoService;
         private readonly ArcoraDbContext dbContext;
         private readonly IOptions<CacheConfiguration> _options;
+        private static readonly string[] NonBlockingLeaseStatuses = ArcoraDbContext.NonBlockingLeaseStatuses;
+        private static readonly string[] NonBlockingHoldStatuses = ArcoraDbContext.NonBlockingHoldStatuses;
+        private static readonly string[] NonBlockingEventStatuses = ArcoraDbContext.NonBlockingCalendarEventStatuses;
+
         public ListingService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<ListingService> logger, IListingRepository listingRepository, IRatingRepository ratingRepository,
             IAddressService addressService, IPropertyService propertyService, IRentalUnitService rentalUnitService, IUnitTypeService unitTypeService, IListingTypeService listingTypeService,
             IAmenityCatalogService amenityCatalogService, IListingAmenityService listingAmenityService, IListingPhotoService listingPhotoService, ArcoraDbContext dbContext)
@@ -685,6 +689,216 @@ namespace Arcora.Api.Services.Implementations
             await listingRepository.Save();
             cache.Remove(Cache.LISTINGS.ToString());
             return this.mapper.Map<ListingDto>(listing);
+        }
+
+        private static bool Overlaps(DateTime startA, DateTime endA, DateTime startB, DateTime endB)
+        {
+            return startA < endB && endA > startB;
+        }
+
+        private static ListingLeaseTermOptionDto ResolveLeaseTermOption(Listing listing, short leaseTermMonths, DateTime effectiveDate)
+        {
+            var activeTermPrice = listing.ListingTermPrices?
+                .FirstOrDefault(tp =>
+                    tp.IsActive &&
+                    tp.LeaseTermMonths == leaseTermMonths &&
+                    (!tp.EffectiveFrom.HasValue || tp.EffectiveFrom.Value.Date <= effectiveDate.Date) &&
+                    (!tp.EffectiveTo.HasValue || tp.EffectiveTo.Value.Date >= effectiveDate.Date));
+
+            return new ListingLeaseTermOptionDto
+            {
+                LeaseTermMonths = leaseTermMonths,
+                MonthlyRentAmount = activeTermPrice?.MonthlyRentAmount ?? listing.BaseMonthlyRentAmount,
+                SecurityDepositAmount = activeTermPrice?.SecurityDepositAmount ?? listing.SecurityDepositAmount,
+                Currency = listing.Currency ?? "CAD"
+            };
+        }
+
+        private async Task<List<ListingAvailabilityConflictDto>> GetAvailabilityConflicts(Guid listingId, Guid organizationId, DateTime startDate, DateTime endDate)
+        {
+            var now = DateTime.UtcNow;
+
+            var leaseConflicts = await this.dbContext.Leases
+                .AsNoTracking()
+                .Where(l => l.ListingID == listingId
+                    && l.OrganizationID == organizationId
+                    && !NonBlockingLeaseStatuses.Contains((l.Status ?? string.Empty).ToUpper())
+                    && l.StartDate < endDate
+                    && (l.EndDate ?? DateTime.MaxValue) > startDate)
+                .Select(l => new ListingAvailabilityConflictDto
+                {
+                    SourceType = "LEASE",
+                    SourceID = l.LeaseID,
+                    StartDate = l.StartDate,
+                    EndDate = l.EndDate ?? DateTime.MaxValue,
+                    Status = l.Status,
+                    Reason = "Accepted/active lease blocks this date range."
+                })
+                .ToListAsync();
+
+            var holdConflicts = await this.dbContext.ReservationHolds
+                .AsNoTracking()
+                .Where(h => h.ListingID == listingId
+                    && !NonBlockingHoldStatuses.Contains((h.Status ?? string.Empty).ToUpper())
+                    && h.ReleasedAt == null
+                    && h.ExpiresAt > now
+                    && h.StartDate < endDate
+                    && h.EndDate > startDate)
+                .Select(h => new ListingAvailabilityConflictDto
+                {
+                    SourceType = "RESERVATION_HOLD",
+                    SourceID = h.ReservationHoldID,
+                    StartDate = h.StartDate,
+                    EndDate = h.EndDate,
+                    Status = h.Status,
+                    Reason = "Active reservation hold blocks this date range."
+                })
+                .ToListAsync();
+
+            var calendarConflicts = await this.dbContext.CalendarEvents
+                .AsNoTracking()
+                .Where(e => e.ListingID == listingId
+                    && e.BlocksAvailability
+                    && !NonBlockingEventStatuses.Contains((e.Status ?? string.Empty).ToUpper())
+                    && e.StartAt < endDate
+                    && e.EndAt > startDate)
+                .Select(e => new ListingAvailabilityConflictDto
+                {
+                    SourceType = "CALENDAR_EVENT",
+                    SourceID = e.CalendarEventID,
+                    StartDate = e.StartAt,
+                    EndDate = e.EndAt,
+                    Status = e.Status,
+                    Reason = e.Title
+                })
+                .ToListAsync();
+
+            return leaseConflicts
+                .Concat(holdConflicts)
+                .Concat(calendarConflicts)
+                .OrderBy(c => c.StartDate)
+                .ToList();
+        }
+
+        /// <inheritdoc/>
+        public async Task<List<AvailableListingForTermDto>> GetAvailableListings(Guid organizationId, DateTime startDate, short leaseTermMonths)
+        {
+            if (organizationId == Guid.Empty || leaseTermMonths <= 0)
+                return new List<AvailableListingForTermDto>();
+
+            var requestedStart = startDate.Date;
+            var requestedEnd = requestedStart.AddMonths(leaseTermMonths);
+
+            var listings = await this.dbContext.Listings
+                .AsNoTracking()
+                .Include(l => l.ListingTermPrices)
+                .Where(l => l.OrganizationID == organizationId
+                    && l.Status != null
+                    && l.Status.ToUpper() == "PUBLISHED"
+                    && l.MinimumLeaseMonths <= leaseTermMonths
+                    && l.MaximumLeaseMonths >= leaseTermMonths
+                    && (!l.AvailableFrom.HasValue || l.AvailableFrom.Value.Date <= requestedStart)
+                    && (!l.AvailableTo.HasValue || l.AvailableTo.Value.Date >= requestedEnd.Date))
+                .ToListAsync();
+
+            var results = new List<AvailableListingForTermDto>();
+
+            foreach (var listing in listings)
+            {
+                var requestedConflicts = await this.GetAvailabilityConflicts(listing.ListingID, organizationId, requestedStart, requestedEnd);
+                if (requestedConflicts.Count != 0)
+                    continue;
+
+                var candidateTerms = new HashSet<short>();
+                for (short term = listing.MinimumLeaseMonths; term <= listing.MaximumLeaseMonths; term++)
+                    candidateTerms.Add(term);
+
+                if (listing.ListingTermPrices != null)
+                {
+                    foreach (var pricedTerm in listing.ListingTermPrices.Where(x => x.IsActive).Select(x => x.LeaseTermMonths))
+                        candidateTerms.Add(pricedTerm);
+                }
+
+                var availableTerms = new List<ListingLeaseTermOptionDto>();
+                foreach (var term in candidateTerms.OrderBy(x => x))
+                {
+                    if (term < listing.MinimumLeaseMonths || term > listing.MaximumLeaseMonths)
+                        continue;
+
+                    var endForTerm = requestedStart.AddMonths(term);
+                    if (listing.AvailableTo.HasValue && listing.AvailableTo.Value.Date < endForTerm.Date)
+                        continue;
+
+                    var termConflicts = await this.GetAvailabilityConflicts(listing.ListingID, organizationId, requestedStart, endForTerm);
+                    if (termConflicts.Count == 0)
+                        availableTerms.Add(ResolveLeaseTermOption(listing, term, requestedStart));
+                }
+
+                var requestedPricing = ResolveLeaseTermOption(listing, leaseTermMonths, requestedStart);
+                results.Add(new AvailableListingForTermDto
+                {
+                    ListingID = listing.ListingID,
+                    OrganizationID = listing.OrganizationID,
+                    Title = listing.Title,
+                    StartDate = requestedStart,
+                    EndDate = requestedEnd,
+                    RequestedLeaseTermMonths = leaseTermMonths,
+                    RequestedMonthlyRentAmount = requestedPricing.MonthlyRentAmount,
+                    RequestedSecurityDepositAmount = requestedPricing.SecurityDepositAmount,
+                    Currency = requestedPricing.Currency,
+                    AvailableLeaseTerms = availableTerms
+                });
+            }
+
+            return results;
+        }
+
+        /// <inheritdoc/>
+        public async Task<ListingAvailabilityResponseDto?> GetListingAvailability(Guid organizationId, Guid listingId, DateTime startDate, short leaseTermMonths)
+        {
+            if (organizationId == Guid.Empty || listingId == Guid.Empty || leaseTermMonths <= 0)
+                return null;
+
+            var listing = await this.dbContext.Listings.AsNoTracking()
+                .FirstOrDefaultAsync(l => l.ListingID == listingId && l.OrganizationID == organizationId);
+
+            if (listing == null)
+                return null;
+
+            var requestedStart = startDate.Date;
+            var requestedEnd = requestedStart.AddMonths(leaseTermMonths);
+
+            var outsideListingWindow =
+                (listing.AvailableFrom.HasValue && listing.AvailableFrom.Value.Date > requestedStart)
+                || (listing.AvailableTo.HasValue && listing.AvailableTo.Value.Date < requestedEnd.Date)
+                || leaseTermMonths < listing.MinimumLeaseMonths
+                || leaseTermMonths > listing.MaximumLeaseMonths;
+
+            var conflicts = await this.GetAvailabilityConflicts(listingId, organizationId, requestedStart, requestedEnd);
+
+            if (outsideListingWindow)
+            {
+                conflicts.Insert(0, new ListingAvailabilityConflictDto
+                {
+                    SourceType = "LISTING_WINDOW",
+                    SourceID = listing.ListingID,
+                    StartDate = listing.AvailableFrom?.Date ?? DateTime.MinValue,
+                    EndDate = listing.AvailableTo?.Date ?? DateTime.MaxValue,
+                    Status = listing.Status,
+                    Reason = "Requested term is outside listing availability window or allowed lease-term range."
+                });
+            }
+
+            return new ListingAvailabilityResponseDto
+            {
+                ListingID = listingId,
+                OrganizationID = organizationId,
+                StartDate = requestedStart,
+                EndDate = requestedEnd,
+                LeaseTermMonths = leaseTermMonths,
+                IsAvailable = conflicts.Count == 0,
+                Conflicts = conflicts
+            };
         }
     }
 }

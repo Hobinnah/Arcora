@@ -4,6 +4,7 @@ using Arcora.Api;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Arcora.Api.Migrations
 {
     [DbContext(typeof(ArcoraDbContext))]
-    partial class ArcoraDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261006024949_AddTenantInvitationName")]
+    partial class AddTenantInvitationName
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,40 +24,6 @@ namespace Arcora.Api.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
-
-            modelBuilder.Entity("Arcora.Api.Entities.AccountSettings", b =>
-                {
-                    b.Property<long>("UserID")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasMaxLength(3)
-                        .HasColumnType("nvarchar(3)");
-
-                    b.Property<bool>("EmailNotifications")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("Language")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<bool>("SmsNotifications")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("Timezone")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("UserID");
-
-                    b.ToTable("AccountSettings");
-                });
 
             modelBuilder.Entity("Arcora.Api.Entities.Address", b =>
                 {
@@ -560,9 +529,7 @@ namespace Arcora.Api.Migrations
 
                     b.HasIndex("PaymentMethodID");
 
-                    b.HasIndex("TenantID")
-                        .IsUnique()
-                        .HasFilter("[Status] = 'ACTIVE'");
+                    b.HasIndex("TenantID");
 
                     b.ToTable("AutopayMandates");
                 });
@@ -5721,13 +5688,6 @@ namespace Arcora.Api.Migrations
 
             modelBuilder.Entity("Arcora.Api.Entities.TenantInvitation", b =>
                 {
-                    b.Property<decimal?>("MonthlyRentAmount").HasPrecision(18, 2).HasColumnType("decimal(18,2)");
-                    b.Property<decimal?>("SecurityDepositAmount").HasPrecision(18, 2).HasColumnType("decimal(18,2)");
-                    b.Property<string>("Currency").HasMaxLength(3).HasColumnType("nvarchar(3)");
-                    b.Property<DateTime?>("StartDate").HasColumnType("datetime2");
-                    b.Property<DateTime?>("EndDate").HasColumnType("datetime2");
-                    b.Property<short?>("LeaseTermMonths").HasColumnType("smallint");
-                    b.Property<Guid?>("ReservationHoldID").HasColumnType("uniqueidentifier");
                     b.Property<Guid>("TenantInvitationID")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
@@ -5791,20 +5751,6 @@ namespace Arcora.Api.Migrations
                     b.HasIndex("RentalApplicationID");
 
                     b.ToTable("TenantInvitations");
-                });
-
-            modelBuilder.Entity("Arcora.Api.Entities.TenantInvitationEmail", b =>
-                {
-                    b.Property<Guid>("TenantInvitationID").HasColumnType("uniqueidentifier");
-                    b.Property<string>("Status").IsRequired().HasMaxLength(30).HasColumnType("nvarchar(30)");
-                    b.Property<string>("ProtectedMessage").IsRequired().HasColumnType("nvarchar(max)");
-                    b.Property<int>("Attempts").HasColumnType("int");
-                    b.Property<DateTime>("NextAttemptAt").HasColumnType("datetime2");
-                    b.Property<DateTime?>("LastAttemptAt").HasColumnType("datetime2");
-                    b.Property<DateTime?>("SentAt").HasColumnType("datetime2");
-                    b.HasKey("TenantInvitationID");
-                    b.HasIndex("Status", "NextAttemptAt");
-                    b.ToTable("TenantInvitationEmails", (string)null);
                 });
 
             modelBuilder.Entity("Arcora.Api.Entities.TenantScreeningCheck", b =>
@@ -5968,8 +5914,7 @@ namespace Arcora.Api.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("PhoneNumber")
-                        .HasMaxLength(16)
-                        .HasColumnType("nvarchar(16)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("PhoneNumberConfirmed")
                         .HasColumnType("bit");
@@ -5996,10 +5941,6 @@ namespace Arcora.Api.Migrations
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex")
                         .HasFilter("[NormalizedUserName] IS NOT NULL");
-
-                    b.HasIndex("PhoneNumber")
-                        .IsUnique()
-                        .HasFilter("[PhoneNumber] IS NOT NULL");
 
                     b.ToTable("AspNetUsers", (string)null);
                 });
@@ -6276,17 +6217,6 @@ namespace Arcora.Api.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("AspNetUserTokens", (string)null);
-                });
-
-            modelBuilder.Entity("Arcora.Api.Entities.AccountSettings", b =>
-                {
-                    b.HasOne("Arcora.Api.Entities.User", "User")
-                        .WithOne()
-                        .HasForeignKey("Arcora.Api.Entities.AccountSettings", "UserID")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Arcora.Api.Entities.Address", b =>
@@ -7842,16 +7772,6 @@ namespace Arcora.Api.Migrations
                     b.Navigation("Lease");
 
                     b.Navigation("RentalApplication");
-                });
-
-            modelBuilder.Entity("Arcora.Api.Entities.TenantInvitationEmail", b =>
-                {
-                    b.HasOne("Arcora.Api.Entities.TenantInvitation", "TenantInvitation")
-                        .WithOne()
-                        .HasForeignKey("Arcora.Api.Entities.TenantInvitationEmail", "TenantInvitationID")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-                    b.Navigation("TenantInvitation");
                 });
 
             modelBuilder.Entity("Arcora.Api.Entities.TenantScreeningCheck", b =>

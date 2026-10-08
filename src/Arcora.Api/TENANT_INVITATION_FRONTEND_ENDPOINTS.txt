@@ -1,0 +1,129 @@
+Arcora Tenant Invitation - Frontend Integration Endpoints
+
+1) POST /api/tenantinvitation/createTenantInvitation
+Purpose:
+- Rechecks listing availability and creates:
+  a) Tenant invitation record
+  b) Pending reservation hold
+  in a single transaction.
+- Requires active organization membership with primary-owner or Full access permission.
+- CapturedBy is derived from the authenticated caller; request audit identities are ignored.
+- Persists an encrypted email outbox job in the same transaction.
+- Returns "created, delivery pending", not "email sent".
+
+Required payload fields:
+- organizationID (Guid)
+- listingID (Guid)
+- startDate (DateTime)
+- leaseTermMonths (short)
+- invitationPurpose (string)
+- email (string)
+
+Optional payload fields:
+- leaseID, phoneNumber, rentalApplicationID, tenantID, capturedBy
+
+Pricing used by backend:
+- Monthly rent/currency from Lease (if leaseID provided and valid for listing/org), otherwise
+  ListingTermPrice (active term/date), otherwise Listing base rent.
+- Security deposit from ListingTermPrice when available, otherwise Listing.SecurityDepositAmount.
+- Rent, deposit, normalized currency, start/end dates and lease term are saved on the invitation
+  together with its exact reservation-hold ID. Later listing/term-price edits do not change this quote.
+- Returned invitation fields: price (saved monthly rent), securityDepositAmount, currency,
+  startDate, endDate and leaseTermMonths. All quote fields are immutable; changing them requires reissue.
+
+Availability blockers checked:
+- Active leases
+- Active reservation holds
+- Calendar events with BlocksAvailability=true
+- Cancelled/expired/released/deleted blockers are ignored.
+
+Token + expiration:
+- Backend generates signed invitation token.
+- Stores a token hash on the invitation. The email body/link is encrypted using ASP.NET Data Protection in the outbox.
+- Expiration is fixed to DateTime.UtcNow.AddDays(3).
+
+
+2) POST /api/tenantinvitation/respond?token={token}&response=ACCEPT|DECLINE
+Purpose:
+- Public endpoint for invited tenant to respond from email links.
+
+Validation performed by backend:
+- Token format/signature
+- Token hash matches invitation record
+- Token email matches invitation email
+- Token/invitation not expired
+- Only PENDING invitations can transition. REVOKED/DECLINED/EXPIRED cannot be accepted.
+- Repeating the same accepted/declined response is idempotent; switching responses is rejected.
+- Acceptance, revocation and lease conversion serialize per listing.
+
+Status outcomes:
+- ACCEPT  -> invitation status becomes ACCEPTED
+- DECLINE -> invitation status becomes DECLINED
+- Expired -> invitation status becomes EXPIRED
+- Decline/revocation releases the invitation hold. Natural expiry stops blocking availability.
+
+Email delivery:
+- GET /api/tenantinvitation/by-organization includes emailDeliveryStatus, emailDeliveryAttempts, emailSentAt.
+- PENDING = waiting for worker; FAILED = automatic exponential retry scheduled.
+- SENT = SMTP accepted the email, not proof of inbox delivery; CANCELLED = no longer usable.
+- POST /api/tenantinvitation/{id}/retry-email retries a failed, unexpired pending invitation.
+- Retries are serialized and rate-limited to at least 30 seconds since the previous delivery attempt.
+- Holds remain active during delivery failure until invitation expiry, as requested.
+- Outbox delivery is at-least-once: an SMTP acceptance followed by a process crash before commit can duplicate an email.
+- Existing invitations have no historical delivery proof; the UI labels their delivery as untracked.
+
+Deployment:
+- With registration/profile writes paused, explicitly run from the repository root:
+  dotnet run --project src\Arcora.Api\Arcora.Api.csproj --no-launch-profile -- --normalize-account-phones
+- Preflight uses the configured SQL Server and the same phone parser as registration.
+- Invalid/duplicate numbers cause an all-or-nothing failure with account IDs only.
+- The unique-phone migration requires its fresh hashed preflight snapshot; changed user rows invalidate the snapshot.
+- Apply AddCanonicalUserPhoneUniqueIndex, AddTenantInvitationEmailOutbox and AddTenantInvitationQuote
+  (20261008000200) after resolving phone preflight failures.
+- The quote migration adds nullable fields without speculative backfill. Legacy invitations without
+  a lease and complete quote must be revoked/reissued; conversion returns HTTP 409 with this instruction.
+- Existing invitations already linked to a lease still return that lease idempotently.
+- Persist/share the ASP.NET Data Protection key ring and application discriminator across API instances and restarts.
+- Configure FrontendUrl and SMTP before enabling invitation creation.
+- Do not automatically apply these migrations against production from local development.
+- Development startup already applies migrations, so complete phone preflight before restarting the development API.
+
+
+3) GET /api/listing/available?organizationId={organizationId}&startDate=YYYY-MM-DD&leaseTermMonths={months}
+Purpose:
+- Returns organization-scoped listings available for entire requested term.
+- Includes requested pricing and available lease-term options.
+
+
+4) GET /api/listing/{listingId}/availability?organizationId={organizationId}&startDate=YYYY-MM-DD&leaseTermMonths={months}
+Purpose:
+- Returns listing-specific availability result and conflicts.
+- Includes date boundary rule and blocking intervals.
+
+5) GET /api/tenantinvitation/{id}/for-me
+Purpose:
+- Authenticated User endpoint returns an ACCEPTED invitation only when its email matches the
+  signed-in database account. Missing/nonmatching invitations return HTTP 404.
+- Returns the saved quote even after conversion to a lease. Does not expose the invitation token hash.
+- Tenant setup shows these saved terms and blocks lease creation when no complete quote is available.
+
+6) POST /api/tenantinvitation/{id}/createLease
+Purpose:
+- Converts an accepted invitation after verifying tenant identity, payment readiness, expiry,
+  availability and the exact matching active hold.
+- New lease rent/currency/dates/term and the EXPECTED security-deposit ledger come from the quote,
+  not the current listing. Lease, deposit and hold conversion commit in one transaction.
+- Zero quoted deposit remains zero. Repeating conversion does not create another lease or deposit.
+- Invitation-backed contract listing-price/deposit/currency tokens use the saved quote.
+
+
+Email behavior added:
+- Persisted on successful createTenantInvitation in the encrypted invitation outbox.
+- Sent asynchronously by TenantInvitationEmailWorker.
+- Uses standard branded HTML template and dimensions.
+- Contains:
+  - Listing and organization details
+  - Start/end dates, lease term
+  - Monthly rent and security deposit
+  - Expiration timestamp
+  - Accept/Decline tokenized links

@@ -8,6 +8,9 @@ namespace Arcora.Api.DTOs;
 /// </summary>
 public class TenantInvitationDto
 {
+    public string? EmailDeliveryStatus { get; set; }
+    public int EmailDeliveryAttempts { get; set; }
+    public DateTime? EmailSentAt { get; set; }
     /// <summary>
     /// Key
     /// </summary>
@@ -37,6 +40,12 @@ public class TenantInvitationDto
     /// </summary>
     [MaxLength(255)]
     public string? Email { get; set; }
+
+    /// <summary>
+    /// Name of invitee
+    /// </summary>
+    [MaxLength(200)]
+    public string? Name { get; set; }
 
     /// <summary>
     /// Phone number of invitee
@@ -89,4 +98,26 @@ public class TenantInvitationDto
     /// FK to RentalApplication
     /// </summary>
     public RentalApplicationDto? RentalApplication { get; set; }
+    /// <summary>
+    /// FK to Organization.
+    /// </summary>
+    public Guid? OrganizationID { get; set; }
+
+    /// <summary>
+    /// Lease start date associated to this invitation.
+    /// </summary>
+    public DateTime? StartDate { get; set; }
+
+    /// <summary>
+    /// Requested lease term in months associated to this invitation.
+    /// </summary>
+    public short? LeaseTermMonths { get; set; }
+
+    /// <summary>
+    /// Quoted monthly price associated to this invitation.
+    /// </summary>
+    public decimal? Price { get; set; }
+    public decimal? SecurityDepositAmount { get; set; }
+    public string? Currency { get; set; }
+    public DateTime? EndDate { get; set; }
 }

@@ -33,6 +33,11 @@ namespace Arcora.Api.Middleware
             {
                 await _next(context);
             }
+            catch (Arcora.Api.Exceptions.ApiProblemException ex)
+            {
+                _logger.LogWarning(ex, "API problem {StatusCode}: {Title}", ex.StatusCode, ex.Title);
+                await WriteProblemResponse(context, ex);
+            }
             catch (UnauthorizedAccessException ex)
             {
                 _logger.LogWarning(ex, "Unauthorized access attempt");
@@ -63,6 +68,27 @@ namespace Arcora.Api.Middleware
                 _logger.LogError(ex, "An unhandled exception occurred");
                 await WriteErrorResponse(context, HttpStatusCode.InternalServerError, "An unexpected error occurred. Please try again later.");
             }
+        }
+
+        private static async Task WriteProblemResponse(HttpContext context, Arcora.Api.Exceptions.ApiProblemException ex)
+        {
+            if (context.Response.HasStarted)
+                return;
+
+            context.Response.Clear();
+            context.Response.ContentType = "application/problem+json";
+            context.Response.StatusCode = ex.StatusCode;
+            var problem = new Microsoft.AspNetCore.Mvc.ProblemDetails
+            {
+                Status = ex.StatusCode,
+                Title = ex.Title,
+                Detail = ex.Detail,
+                Instance = context.Request.Path
+            };
+            await context.Response.WriteAsync(JsonSerializer.Serialize(problem, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            }));
         }
 
         private static async Task WriteErrorResponse(HttpContext context, HttpStatusCode statusCode, string message)

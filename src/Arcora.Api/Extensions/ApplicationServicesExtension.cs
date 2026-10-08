@@ -57,6 +57,8 @@ namespace Arcora.Api.Extensions
         /// <param name="services"></param>
         public static IServiceCollection AddApplicationServices(this IServiceCollection services, IConfiguration configuration)
         {
+            services.AddDataProtection();
+            services.AddHostedService<Arcora.Api.Email.TenantInvitationEmailWorker>();
 
 
             #region===========================DBContext Registration===========================
@@ -383,11 +385,19 @@ namespace Arcora.Api.Extensions
             {
                 options.AddPolicy("EnableCORS", policyBuilder =>
                 {
+                    if (corsOrigins.Length > 0)
+                    {
+                        policyBuilder
+                            .WithOrigins(corsOrigins)
+                            .AllowAnyHeader()
+                            .AllowAnyMethod()
+                            .AllowCredentials();
+                        return;
+                    }
+
                     policyBuilder
-                        .WithOrigins(corsOrigins)
                         .AllowAnyHeader()
-                        .AllowAnyMethod()
-                        .AllowCredentials();
+                        .AllowAnyMethod();
                 });
             });
 

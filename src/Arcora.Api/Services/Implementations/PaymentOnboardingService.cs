@@ -157,7 +157,30 @@ namespace Arcora.Api.Services.Implementations
 
             if (kind == PaymentMethodKind.Pad)
             {
-                await CreateMandateAsync(tenant, entity, customerId!, cancellationToken);
+                var mandate = await CreateMandateAsync(tenant, entity, customerId!, cancellationToken);
+                if (string.Equals(mandate.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase))
+                {
+                    await EnsureSingleActiveMandateAsync(tenant.TenantID, mandate.AutopayMandateID, "PAYMENT_ONBOARDING");
+                }
+
+                if (IsStripeTestMode()
+                    && verificationStatus == "VERIFIED"
+                    && !string.Equals(mandate.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase))
+                {
+                    mandate.Status = "ACTIVE";
+                    mandate.ActivatedAt ??= DateTime.UtcNow;
+                    mandate.UpdatedDate = DateTime.UtcNow;
+                    mandate.UpdatedBy = "STRIPE_TEST_FALLBACK";
+                    await autopayMandateRepository.Update(mandate);
+                    await autopayMandateRepository.Save();
+                    await EnsureSingleActiveMandateAsync(tenant.TenantID, mandate.AutopayMandateID, "STRIPE_TEST_FALLBACK");
+
+                    logger.LogInformation(
+                        "Activated PAD mandate {MandateId} immediately because Stripe test mode is enabled and the PAD method {PaymentMethodId} is already verified.",
+                        mandate.AutopayMandateID,
+                        entity.PaymentMethodID);
+                }
+
                 tenant.IsPADRegistered = true;
             }
             else
@@ -176,7 +199,21 @@ namespace Arcora.Api.Services.Implementations
         public async Task<PaymentOnboardingStatusResponse> GetStatusAsync(Guid tenantId, CancellationToken cancellationToken = default)
         {
             var methods = await paymentMethodRepository.Find(x => x.TenantID == tenantId && x.IsActive);
-            var mandates = await autopayMandateRepository.Find(x => x.TenantID == tenantId && x.Status == "ACTIVE");
+            var activeMandates = (await autopayMandateRepository.Find(x => x.TenantID == tenantId && x.Status == "ACTIVE"))?.ToList()
+                ?? new List<AutopayMandate?>();
+
+            if (activeMandates.Count > 1)
+            {
+                var preferredMandateId = activeMandates
+                    .Where(x => x != null)
+                    .OrderByDescending(x => x!.ActivatedAt ?? x.CapturedDate ?? DateTime.MinValue)
+                    .Select(x => x!.AutopayMandateID)
+                    .First();
+
+                await EnsureSingleActiveMandateAsync(tenantId, preferredMandateId, "STATUS_NORMALIZATION");
+                activeMandates = (await autopayMandateRepository.Find(x => x.TenantID == tenantId && x.Status == "ACTIVE"))?.ToList()
+                    ?? new List<AutopayMandate?>();
+            }
 
             var list = methods?.ToList() ?? new List<PaymentMethod?>();
 
@@ -185,7 +222,7 @@ namespace Arcora.Api.Services.Implementations
                 TenantID = tenantId,
                 HasVerifiedPad = list.Any(m => m!.MethodRole == RolePrimary && m.VerificationStatus == "VERIFIED"),
                 HasVerifiedCard = list.Any(m => m!.MethodRole == RoleBackup && m.VerificationStatus == "VERIFIED"),
-                PadMandateActive = mandates != null && mandates.Any()
+                PadMandateActive = activeMandates.Any()
             };
         }
 
@@ -233,13 +270,32 @@ namespace Arcora.Api.Services.Implementations
                     mandate.UpdatedBy = "STRIPE_WEBHOOK";
                     await autopayMandateRepository.Update(mandate);
                     await autopayMandateRepository.Save();
+                    await EnsureSingleActiveMandateAsync(mandate.TenantID, mandate.AutopayMandateID, "STRIPE_WEBHOOK");
                 }
             }
 
             logger.LogInformation("Payment method {PaymentMethodId} verification updated to {Status} via webhook.", method.PaymentMethodID, newStatus);
         }
 
-        private async Task CreateMandateAsync(Tenant tenant, PaymentMethod padMethod, string customerId, CancellationToken cancellationToken)
+        private async Task EnsureSingleActiveMandateAsync(Guid tenantId, Guid activeMandateId, string updatedBy)
+        {
+            var activeMandates = (await autopayMandateRepository.Find(x => x.TenantID == tenantId && x.Status == "ACTIVE"))?.ToList()
+                ?? new List<AutopayMandate?>();
+
+            foreach (var mandate in activeMandates.Where(x => x != null && x.AutopayMandateID != activeMandateId))
+            {
+                mandate!.Status = "SUPERSEDED";
+                mandate.EndDate ??= DateTime.UtcNow;
+                mandate.UpdatedDate = DateTime.UtcNow;
+                mandate.UpdatedBy = updatedBy;
+                await autopayMandateRepository.Update(mandate);
+            }
+
+            if (activeMandates.Any(x => x != null && x.AutopayMandateID != activeMandateId))
+                await autopayMandateRepository.Save();
+        }
+
+        private async Task<AutopayMandate> CreateMandateAsync(Tenant tenant, PaymentMethod padMethod, string customerId, CancellationToken cancellationToken)
         {
             var mandateResult = await paymentProvider.CreatePadMandateAsync(customerId, padMethod.ProviderPaymentMethodID!, cancellationToken: cancellationToken);
 
@@ -265,6 +321,15 @@ namespace Arcora.Api.Services.Implementations
 
             await autopayMandateRepository.Create(mandate);
             await autopayMandateRepository.Save();
+            return mandate;
+        }
+
+        private bool IsStripeTestMode()
+        {
+            return (!string.IsNullOrWhiteSpace(stripeOptions.Value.SecretKey)
+                    && stripeOptions.Value.SecretKey.StartsWith("sk_test_", StringComparison.OrdinalIgnoreCase))
+                || (!string.IsNullOrWhiteSpace(stripeOptions.Value.PublishableKey)
+                    && stripeOptions.Value.PublishableKey.StartsWith("pk_test_", StringComparison.OrdinalIgnoreCase));
         }
 
         private async Task<string?> GetExistingCustomerIdAsync(Guid tenantId)

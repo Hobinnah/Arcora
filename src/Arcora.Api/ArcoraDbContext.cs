@@ -16,6 +16,7 @@ namespace Arcora.Api
 
         #region ========================================== Database Entities ==========================================
           public virtual DbSet<Preference> Preferences { get; set; }
+          public virtual DbSet<AccountSettings> AccountSettings { get; set; }
           public virtual DbSet<Tenant> Tenants { get; set; }
           public virtual DbSet<Property> Properties { get; set; }
           public virtual DbSet<Lease> Leases { get; set; }
@@ -30,6 +31,7 @@ namespace Arcora.Api
           public virtual DbSet<ListingAccessInstruction> ListingAccessInstructions { get; set; }
           public virtual DbSet<ListingPhoto> ListingPhotos { get; set; }
           public virtual DbSet<TenantInvitation> TenantInvitations { get; set; }
+          public virtual DbSet<TenantInvitationEmail> TenantInvitationEmails { get; set; }
           public virtual DbSet<TenantEmployment> TenantEmployments { get; set; }
           public virtual DbSet<TenantGuarantor> TenantGuarantors { get; set; }
           public virtual DbSet<TenantEmergencyContact> TenantEmergencyContacts { get; set; }
@@ -117,6 +119,30 @@ namespace Arcora.Api
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
+            var invitation = builder.Entity<TenantInvitation>();
+            invitation.Property(i => i.MonthlyRentAmount).HasPrecision(18, 2);
+            invitation.Property(i => i.SecurityDepositAmount).HasPrecision(18, 2);
+            foreach (var name in new[]
+            {
+                nameof(TenantInvitation.MonthlyRentAmount), nameof(TenantInvitation.SecurityDepositAmount),
+                nameof(TenantInvitation.Currency), nameof(TenantInvitation.StartDate), nameof(TenantInvitation.EndDate),
+                nameof(TenantInvitation.LeaseTermMonths), nameof(TenantInvitation.ReservationHoldID)
+            })
+                invitation.Property(name).Metadata.SetAfterSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Throw);
+            builder.Entity<User>().Property(user => user.PhoneNumber).HasMaxLength(16);
+            builder.Entity<User>().HasIndex(user => user.PhoneNumber)
+                .IsUnique().HasFilter("[PhoneNumber] IS NOT NULL");
+            builder.Entity<TenantInvitationEmail>()
+                .HasOne(email => email.TenantInvitation)
+                .WithOne()
+                .HasForeignKey<TenantInvitationEmail>(email => email.TenantInvitationID);
+            builder.Entity<TenantInvitationEmail>()
+                .HasIndex(email => new { email.Status, email.NextAttemptAt });
+            builder.Entity<AccountSettings>()
+                .HasOne(settings => settings.User)
+                .WithOne()
+                .HasForeignKey<AccountSettings>(settings => settings.UserID)
+                .OnDelete(DeleteBehavior.Cascade);
 
             // Use the DbSet property names (pluralized) as table names, overriding any
             // singular [Table(...)] attributes on the entities so the schema matches the context.
@@ -143,6 +169,11 @@ namespace Arcora.Api
             {
                 relationship.DeleteBehavior = DeleteBehavior.NoAction;
             }
+
+            builder.Entity<AutopayMandate>()
+                .HasIndex(x => x.TenantID)
+                .IsUnique()
+                .HasFilter("[Status] = 'ACTIVE'");
 
             builder.Entity<Inspection>()
                 .HasIndex(x => new { x.LeaseID, x.InspectionType })

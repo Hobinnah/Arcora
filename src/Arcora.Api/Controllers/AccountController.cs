@@ -10,6 +10,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Arcora.Api.Entities;
 using Arcora.Api.Accounts;
+using Arcora.Api.DTOs;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace Arcora.Api
 {
@@ -79,12 +82,166 @@ namespace Arcora.Api
 
         [Authorize(Roles = "User, Viewer, LandLord, Admin")]
         [HttpPost]
-        public async Task<IActionResult> ChangePassword([FromServices] IAccountService accountService, [FromQuery] string userId, [FromBody] ChangePasswordRequest request, CancellationToken ct)
+        [Route("/api/account/changePassword")]
+        public async Task<IActionResult> ChangePassword([FromServices] IAccountService accountService, [FromServices] UserManager<User> userManager, [FromBody] ChangePasswordRequest request, CancellationToken ct)
         {
-            var result = await accountService.ChangePasswordAsync(userId, request, ct);
+            var currentUser = await userManager.GetUserAsync(User);
+            if (currentUser is null)
+                return Unauthorized();
+            var result = await accountService.ChangePasswordAsync(currentUser.Id.ToString(), request, ct);
             if (!result.Succeeded)
                 return BadRequest(result.Errors);
             return Ok();
+        }
+
+        [Authorize]
+        [HttpGet("/api/account/profile")]
+        public async Task<IActionResult> GetProfile([FromServices] UserManager<User> userManager)
+        {
+            var user = await userManager.GetUserAsync(User);
+            if (user is null)
+                return Unauthorized();
+            return Ok(new
+            {
+                success = true,
+                message = "Profile loaded.",
+                data = new
+                {
+                    user.Id,
+                    user.FirstName,
+                    user.LastName,
+                    user.Email,
+                    phone = user.PhoneNumber,
+                    user.EmailConfirmed,
+                    user.PhoneNumberConfirmed
+                }
+            });
+        }
+
+        [Authorize]
+        [HttpPut("/api/account/profile")]
+        public async Task<IActionResult> UpdateProfile([FromServices] UserManager<User> userManager, [FromBody] AccountProfileUpdateDto request)
+        {
+            var user = await userManager.GetUserAsync(User);
+            if (user is null)
+                return Unauthorized();
+
+            if (request.FirstName is not null)
+                user.FirstName = request.FirstName.Trim();
+            if (request.LastName is not null)
+                user.LastName = request.LastName.Trim();
+            if (request.Phone is not null)
+            {
+                if (string.IsNullOrWhiteSpace(request.Phone))
+                {
+                    user.PhoneNumber = null;
+                }
+                else if (!PhoneNumberNormalizer.TryNormalize(request.Phone, out var normalizedPhoneNumber))
+                {
+                    return BadRequest(new[] { PhoneNumberNormalizer.InvalidPhoneNumberError });
+                }
+                else
+                {
+                    if (await userManager.Users.AnyAsync(
+                        otherUser => otherUser.Id != user.Id && otherUser.PhoneNumber == normalizedPhoneNumber))
+                        return Conflict(new[] { PhoneNumberNormalizer.DuplicatePhoneNumberError });
+
+                    user.PhoneNumber = normalizedPhoneNumber;
+                }
+            }
+            user.DisplayName = $"{user.FirstName} {user.LastName}".Trim();
+
+            IdentityResult result;
+            try
+            {
+                result = await userManager.UpdateAsync(user);
+            }
+            catch (DbUpdateException exception) when (PhoneNumberNormalizer.IsPhoneNumberUniqueConstraintViolation(exception))
+            {
+                return Conflict(new[] { PhoneNumberNormalizer.DuplicatePhoneNumberError });
+            }
+            if (!result.Succeeded)
+                return BadRequest(result.Errors);
+
+            return Ok(new
+            {
+                success = true,
+                message = "Profile updated.",
+                data = new
+                {
+                    user.Id,
+                    user.FirstName,
+                    user.LastName,
+                    user.Email,
+                    phone = user.PhoneNumber,
+                    user.EmailConfirmed,
+                    user.PhoneNumberConfirmed
+                }
+            });
+        }
+
+        [Authorize]
+        [HttpGet("/api/account/settings")]
+        public async Task<IActionResult> GetSettings([FromServices] ArcoraDbContext db, [FromServices] UserManager<User> userManager)
+        {
+            var user = await userManager.GetUserAsync(User);
+            if (user is null)
+                return Unauthorized();
+
+            var settings = await db.AccountSettings.AsNoTracking().SingleOrDefaultAsync(item => item.UserID == user.Id);
+            return Ok(new
+            {
+                success = true,
+                message = "Account settings loaded.",
+                data = settings is null
+                    ? new AccountSettingsDto()
+                    : new AccountSettingsDto
+                {
+                    EmailNotifications = settings.EmailNotifications,
+                    SmsNotifications = settings.SmsNotifications,
+                    Language = settings.Language,
+                    Timezone = settings.Timezone,
+                    Currency = settings.Currency
+                }
+            });
+        }
+
+        [Authorize]
+        [HttpPut("/api/account/settings")]
+        public async Task<IActionResult> UpdateSettings([FromServices] ArcoraDbContext db, [FromServices] UserManager<User> userManager, [FromBody] AccountSettingsDto request)
+        {
+            var user = await userManager.GetUserAsync(User);
+            if (user is null)
+                return Unauthorized();
+
+            var settings = await db.AccountSettings.SingleOrDefaultAsync(item => item.UserID == user.Id);
+            if (settings is null)
+            {
+                settings = new AccountSettings { UserID = user.Id };
+                db.AccountSettings.Add(settings);
+            }
+
+            settings.EmailNotifications = request.EmailNotifications;
+            settings.SmsNotifications = request.SmsNotifications;
+            settings.Language = request.Language.Trim();
+            settings.Timezone = request.Timezone.Trim();
+            settings.Currency = request.Currency.Trim().ToUpperInvariant();
+            settings.UpdatedAt = DateTime.UtcNow;
+
+            await db.SaveChangesAsync();
+            return Ok(new
+            {
+                success = true,
+                message = "Account settings updated.",
+                data = new AccountSettingsDto
+                {
+                    EmailNotifications = settings.EmailNotifications,
+                    SmsNotifications = settings.SmsNotifications,
+                    Language = settings.Language,
+                    Timezone = settings.Timezone,
+                    Currency = settings.Currency
+                }
+            });
         }
 
         [HttpPost]

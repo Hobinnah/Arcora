@@ -1,8 +1,10 @@
 // ===================================THIS FILE WAS AUTO GENERATED===================================
 using Arcora.Api.DTOs;
+using Arcora.Api.Entities;
 using Arcora.Api.Models;
 using Arcora.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Arcora.Api.Controllers
@@ -25,16 +27,22 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetRatingByID")]
-        public async Task<IActionResult> GetRatingByID([FromServices] IRatingService ratingService, Guid id)
+        public async Task<IActionResult> GetRatingByID([FromServices] IRatingService ratingService, [FromServices] UserManager<User> userManager, Guid id)
         {
             var result = await ratingService.GetID(id);
             if (result == null)
+                return NotFound(new { message = "Rating with the specified ID was not found." });
+            var currentUser = await userManager.GetUserAsync(User);
+            if (currentUser is null)
+                return Unauthorized();
+            var hasExpired = result.CapturedDate.HasValue && result.CapturedDate.Value <= DateTime.UtcNow.AddDays(-14);
+            if (!result.IsPublic && !hasExpired && result.ReviewerUserID != currentUser.Id)
                 return NotFound(new { message = "Rating with the specified ID was not found." });
             return Ok(result);
         }
 
         // POST api/<RatingController>
-        [Authorize(Roles = "User, LandLord, Admin")]
+        [Authorize(Roles = "Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateRating")]
@@ -49,7 +57,7 @@ namespace Arcora.Api.Controllers
         }
 
         // PUT api/<RatingController>/5
-        [Authorize(Roles = "User, LandLord, Admin")]
+        [Authorize(Roles = "Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateRating")]

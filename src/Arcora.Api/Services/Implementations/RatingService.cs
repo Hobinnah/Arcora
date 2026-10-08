@@ -55,10 +55,19 @@ namespace Arcora.Api.Services.Implementations
                 };
             }
 
-            IEnumerable<Rating> filteredEntities = entities!;
+            var now = DateTime.UtcNow;
+            var releaseBefore = now.AddDays(-14);
+            IEnumerable<Rating> filteredEntities = entities!.Where(rating =>
+                (rating.IsPublic && (rating.PublishedAt == null || rating.PublishedAt <= now)) ||
+                rating.CapturedDate <= releaseBefore);
+            foreach (var expiredRating in filteredEntities.Where(rating => !rating.IsPublic))
+            {
+                expiredRating.IsPublic = true;
+                expiredRating.PublishedAt = expiredRating.CapturedDate?.AddDays(14) ?? now;
+            }
             if (!string.IsNullOrEmpty(paging?.Search))
             {
-                filteredEntities = entities!.Where(x => !string.IsNullOrEmpty(x.ReviewBody) && x.ReviewBody.Contains(paging.Search, StringComparison.OrdinalIgnoreCase));
+                filteredEntities = filteredEntities.Where(x => !string.IsNullOrEmpty(x.ReviewBody) && x.ReviewBody.Contains(paging.Search, StringComparison.OrdinalIgnoreCase));
             }
 
             int totalCount = filteredEntities.Count();

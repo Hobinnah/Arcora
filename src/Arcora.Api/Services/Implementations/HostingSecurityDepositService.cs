@@ -49,6 +49,7 @@ namespace Arcora.Api.Services.Implementations
             var baseQuery = dbContext.SecurityDeposits
                 .AsNoTracking()
                 .Include(x => x.Lease)
+                    .ThenInclude(x => x!.Listing)
                 .Include(x => x.Tenant)
                     .ThenInclude(x => x!.User)
                 .Where(x => authorizedOrganizationIDs.Contains(x.OrganizationID));
@@ -454,7 +455,8 @@ namespace Arcora.Api.Services.Implementations
                 ClosedAt = deposit.ClosedAt,
                 TenantDisplayName = tenantName,
                 TenantEmail = deposit.Tenant?.User?.Email,
-                LeaseDisplay = deposit.Lease?.LeaseCode ?? deposit.Lease?.LeaseNumber
+                LeaseDisplay = deposit.Lease?.LeaseCode ?? deposit.Lease?.LeaseNumber,
+                ListingDisplay = deposit.Lease?.Listing?.Title
             };
         }
 

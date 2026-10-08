@@ -3,6 +3,7 @@ using Arcora.Api.TokenServices;
 using Arcora.Api.Middleware;
 using Arcora.Api;
 using Arcora.Api.Data;
+using Arcora.Api.Accounts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 
@@ -64,6 +65,35 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+
+if (args.Contains("--normalize-account-phones", StringComparer.Ordinal))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var db = scope.ServiceProvider.GetRequiredService<ArcoraDbContext>();
+    if (!db.Database.IsSqlServer())
+    {
+        Console.Error.WriteLine("Phone preflight is supported only for the configured SQL Server database.");
+        Environment.ExitCode = 1;
+        return;
+    }
+
+    var result = await AccountPhoneNormalizationPreflight.RunAsync(db);
+    if (!result.Succeeded)
+    {
+        Console.Error.WriteLine("Phone preflight made no changes. Correct invalid phone values or resolve duplicate accounts, then rerun.");
+        foreach (var issue in result.Issues)
+        {
+            var issueType = issue.IsDuplicate ? "Duplicate canonical number" : "Invalid phone number";
+            Console.Error.WriteLine($"{issueType}; account IDs: {string.Join(", ", issue.AccountIds)}");
+        }
+
+        Environment.ExitCode = 1;
+        return;
+    }
+
+    Console.WriteLine($"Phone preflight succeeded. Canonicalized {result.UpdatedCount} account phone number(s); no phone values were output.");
+    return;
+}
 
 if (app.Environment.IsDevelopment())
 {

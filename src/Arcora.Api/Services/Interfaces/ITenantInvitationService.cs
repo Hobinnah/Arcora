@@ -12,6 +12,7 @@ namespace Arcora.Api.Services.Interfaces
         /// <param name = "paging"></param>
         /// <returns></returns>
         Task<PagedResult<TenantInvitationDto>> GetAll(Paging paging);
+        Task<List<TenantInvitationDto>> GetByOrganizationAsync(Guid organizationID);
         /// <summary>
         /// Retrieves a tenant invitation by its ID.
         /// </summary>
@@ -46,5 +47,38 @@ namespace Arcora.Api.Services.Interfaces
         /// Returns <see cref = "TenantInvitationDto"/> with the updated tenantinvitation if successful, or null if not found.
         /// </returns>
         Task<TenantInvitationDto?> UpdateTenantInvitationStatus(Guid id, string status);
+
+        /// <summary>
+        /// Rechecks listing availability and, when available, creates the tenant invitation and
+        /// reservation hold in one transaction.
+        /// </summary>
+        Task<CreateTenantInvitationResultDto> CreateTenantInvitationWithHold(CreateTenantInvitationRequestDto request, long signedInUserID);
+        Task<TenantInvitationDto?> RetryInvitationEmailAsync(Guid id);
+        Task<TenantInvitationDto> GetAcceptedInvitationForUserAsync(Guid id, long userID);
+
+        /// <summary>
+        /// Creates or returns a lease from an accepted tenant invitation for the signed-in tenant.
+        /// </summary>
+        /// <param name="tenantInvitationID">Tenant invitation identifier.</param>
+        /// <param name="tenantID">Tenant identifier.</param>
+        /// <param name="signedInUserId">Identifier of the signed-in user.</param>
+        /// <param name="signedInEmail">Email of the signed-in user.</param>
+        /// <param name="capturedBy">Optional. Identifier for tracking who captured the request.</param>
+        /// <returns>
+        /// The created or existing lease mapped to <see cref="LeaseDto"/>, or null if invitation was not found.
+        /// </returns>
+        Task<CreateLeaseFromTenantInvitationResultDto?> CreateLeaseFromTenantInvitationAsync(Guid tenantInvitationID, Guid tenantID, long signedInUserId, string signedInEmail, string? capturedBy);
+
+        /// <summary>
+        /// Responds to a tenant invitation using a signed invitation token.
+        /// </summary>
+        Task<TenantInvitationTokenResponseDto> RespondToTenantInvitationAsync(string token, string response);
+
+        /// <summary>
+        /// Gets all accepted invitations for a signed-in tenant that don't have a lease yet.
+        /// </summary>
+        /// <param name="tenantId">The ID of the signed-in tenant.</param>
+        /// <returns>A list of accepted invitations without leases for the tenant.</returns>
+        Task<List<TenantInvitationDto>> GetPendingInvitationsForTenantAsync(Guid tenantId);
     }
 }

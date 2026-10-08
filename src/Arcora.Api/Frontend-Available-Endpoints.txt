@@ -1,0 +1,89 @@
+Arcora API - Listing Availability & Tenant Invitation Endpoints
+
+1) GET /api/listing/available?organizationId={organizationId}&startDate=YYYY-MM-DD&leaseTermMonths={months}
+   Purpose:
+   - Returns only listings for the provided organization (landlord) that are available for the full requested date range.
+   - Includes the requested term pricing and the list of available lease-term options.
+
+   Response highlights:
+   - listingID, organizationID, title
+   - startDate, endDate
+   - requestedLeaseTermMonths
+   - requestedMonthlyRentAmount
+   - requestedSecurityDepositAmount
+   - currency
+   - availableLeaseTerms[] (term, rent, deposit, currency)
+
+2) GET /api/listing/{listingId}/availability?organizationId={organizationId}&startDate=YYYY-MM-DD&leaseTermMonths={months}
+   Purpose:
+   - Checks availability for a specific listing within the provided organization.
+   - Returns whether the whole range is available and, if not, the blocking conflicts.
+
+   Response highlights:
+   - isAvailable
+   - dateBoundaryRule (start occupied, end exclusive)
+   - conflicts[] with sourceType/sourceId/date range/status/reason
+
+   Conflict sources considered:
+   - Active leases
+   - Active reservation holds
+   - Calendar events where blocksAvailability=true
+   - Cancelled/expired/released/deleted records are excluded from blockers.
+
+3) POST /api/tenantinvitation/createTenantInvitation
+   Purpose:
+   - Rechecks availability at write-time and creates tenant invitation + pending reservation hold in one transaction.
+   - Prevents overlapping successful invitations.
+   - Persists a Data Protection-encrypted invitation email job in the same transaction.
+   - Requires active primary-owner or Full access membership in the requested organization.
+   - Delivery pending/failed/sent status is exposed in the organization invitation list.
+   - Failed delivery retries automatically without creating another hold. SENT means SMTP accepted, not inbox delivery.
+   - Holds remain active during retries until invitation expiry.
+
+   Request body (key fields):
+   - organizationID (required)
+   - listingID (required)
+   - leaseID (optional; when present, lease rent/currency is sourced from lease record)
+   - startDate (required)
+   - leaseTermMonths (required)
+   - invitationPurpose (required)
+   - email (required; email is used for invitation delivery)
+   - phoneNumber / tokenHash / expiresAt / rentalApplicationID / tenantID / capturedBy
+
+   Pricing source rule:
+   - Monthly rent/currency are derived from:
+       a) lease record (if leaseID supplied and valid), otherwise
+       b) listing term price for requested term/date, otherwise
+       c) listing base monthly rent.
+   - Security deposit is derived from listing term price when available, else listing security deposit.
+   - The final rent, deposit, normalized currency, dates and term are persisted as an immutable quote.
+   - Returned price/securityDepositAmount/currency/startDate/endDate/leaseTermMonths reflect this quote,
+     not later listing edits. Changed quote fields are rejected; revoke/reissue to offer new terms.
+
+   Token + expiration rule:
+   - System generates a signed invitation token.
+   - Token hash is stored in the invitation record.
+   - Invitation/token expiration is fixed to DateTime.UtcNow.AddDays(3).
+
+4) POST /api/tenantinvitation/respond?token={token}&response=ACCEPT|DECLINE
+   Purpose:
+   - Lets the proposed tenant accept or decline using the signed token from email.
+   - Validates token signature, token hash, email match, and expiration.
+   - Updates invitation status to ACCEPTED/DECLINED (or EXPIRED when expired).
+
+Notes for frontend:
+- Always pass organizationID to ensure landlord-scoped filtering.
+- HTTP 409 from createTenantInvitation may indicate availability conflicts or invalid saved pricing.
+  Read ProblemDetails.detail and availability/conflicts when supplied.
+
+5) GET /api/tenantinvitation/{id}/for-me
+   - Requires User authentication and an accepted invitation matching the signed-in account email.
+   - Returns the original saved quote without tokenHash; other/missing invitations return 404.
+
+6) POST /api/tenantinvitation/{id}/createLease
+   - Uses the original quote for lease rent/currency/dates/term and security-deposit ledger.
+   - Validates the persisted matching hold; creates lease/deposit atomically and is idempotent.
+   - Contract rendering also uses the invitation quote for listing pricing tokens.
+   - Deploy AddTenantInvitationQuote (20261008000200) before using these fields.
+   - No price backfill: legacy lease-less invitations without a complete quote return 409 and must
+     be revoked/reissued. Invitations already linked to a lease continue returning that lease.

@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
@@ -86,13 +87,19 @@ namespace Arcora.Api.Accounts
         /// <inheritdoc/>
         public async Task<Result> RegisterAsync(RegisterRequest request, IEnumerable<string>? roles = null, bool signIn = false, CancellationToken ct = default)
         {
+            if (!PhoneNumberNormalizer.TryNormalize(request.PhoneNumber, out var normalizedPhoneNumber))
+                return Result.Fail(PhoneNumberNormalizer.InvalidPhoneNumberError);
+
+            if (await _userManager.Users.AnyAsync(user => user.PhoneNumber == normalizedPhoneNumber, ct))
+                return Result.Fail(PhoneNumberNormalizer.DuplicatePhoneNumberError);
+
             var user = new User
             {
                 FirstName = request.FirstName,
                 LastName = request.LastName,
                 UserName = request.EmailAddress,
                 Email = request.EmailAddress,
-                PhoneNumber = request.PhoneNumber,
+                PhoneNumber = normalizedPhoneNumber,
                 DateOfBirth = request.DateOfBirth,
                 TwoFactorEnabled = false,
                 EmailConfirmed = false,
@@ -104,12 +111,21 @@ namespace Arcora.Api.Accounts
                 BranchName = "HeadOffice"
             };
 
-            if (roles is null || !roles.Any())
-                roles = new List<string>
-                {
-                    "User"
-                };
-            var created = await _userManager.CreateAsync(user, request.Password);
+            var allowed = new[] { "User", "LandLord", "Viewer" };
+            if (roles == null || !roles.Any() || !roles.Intersect(allowed).Any())
+            {
+                roles = new List<string> { "User" };
+            }
+
+            IdentityResult created;
+            try
+            {
+                created = await _userManager.CreateAsync(user, request.Password);
+            }
+            catch (DbUpdateException exception) when (PhoneNumberNormalizer.IsPhoneNumberUniqueConstraintViolation(exception))
+            {
+                return Result.Fail(PhoneNumberNormalizer.DuplicatePhoneNumberError);
+            }
             if (!created.Succeeded)
                 return Result.FromIdentity(created);
             foreach (var roleName in roles)

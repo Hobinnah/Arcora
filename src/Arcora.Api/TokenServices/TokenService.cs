@@ -134,10 +134,10 @@ namespace Arcora.Api.TokenServices
             return System.Threading.Tasks.Task.FromResult<string?>(null);
         }
 
-        public Task<bool> ConfirmDeactivatedTokenAsync()
+        public async Task<bool> ConfirmDeactivatedTokenAsync()
         {
-            var res = GetDeactivatedTokenAsync(GetCurrentAsync()).Result;
-            return System.Threading.Tasks.Task.Run(() => res == "Deactivated");
+            var res = await GetDeactivatedTokenAsync(GetCurrentAsync());
+            return string.Equals(res, "deactivated", StringComparison.Ordinal);
         }
     }
 }

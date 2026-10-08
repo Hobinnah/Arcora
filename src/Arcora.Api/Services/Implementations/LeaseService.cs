@@ -10,6 +10,8 @@ using Arcora.Api.Configurations;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Configuration;
 
 namespace Arcora.Api.Services.Implementations
 {
@@ -21,13 +23,29 @@ namespace Arcora.Api.Services.Implementations
         private readonly ILeaseRepository leaseRepository;
         private readonly IListingPhotoService listingPhotoService;
         private readonly IOptions<CacheConfiguration> _options;
-        public LeaseService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<LeaseService> logger, ILeaseRepository leaseRepository, IListingPhotoService listingPhotoService)
+        private readonly IPaymentOnboardingService paymentOnboardingService;
+        private readonly IConfiguration configuration;
+        private readonly IHostEnvironment hostEnvironment;
+
+        public LeaseService(
+            IMapper mapper,
+            IMemoryCache cache,
+            IOptions<CacheConfiguration> options,
+            ILogger<LeaseService> logger,
+            ILeaseRepository leaseRepository,
+            IListingPhotoService listingPhotoService,
+            IPaymentOnboardingService paymentOnboardingService,
+            IConfiguration configuration,
+            IHostEnvironment hostEnvironment)
         {
             this.cache = cache;
             this.logger = logger;
             this.mapper = mapper;
             this.leaseRepository = leaseRepository;
             this.listingPhotoService = listingPhotoService;
+            this.paymentOnboardingService = paymentOnboardingService;
+            this.configuration = configuration;
+            this.hostEnvironment = hostEnvironment;
             this._options = options;
             if (this._options.Value.ExpirationTimeInMinutes <= 0)
                 this._options.Value.ExpirationTimeInMinutes = 15;
@@ -100,6 +118,8 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<Lease?> checkEntity;
             try
             {
+                await EnsurePaymentOnboardingReadyForLeaseAsync(leaseDto.TenantID);
+
                 checkEntity = await this.leaseRepository.Find(x => x.LeaseNumber!.ToLower().Trim() == leaseDto.LeaseNumber!.ToLower().Trim());
                 if (checkEntity == null || !checkEntity.Any())
                 {
@@ -119,6 +139,22 @@ namespace Arcora.Api.Services.Implementations
             }
 
             return this.mapper.Map<LeaseDto>(lease);
+        }
+
+        private async Task EnsurePaymentOnboardingReadyForLeaseAsync(Guid tenantId)
+        {
+            var bypassInTest = configuration.GetValue<bool>("LeaseCreation:BypassPaymentVerificationInTest");
+            if (bypassInTest && hostEnvironment.IsEnvironment("Test"))
+            {
+                logger.LogInformation("Skipping payment verification for lease creation in Test environment due to LeaseCreation:BypassPaymentVerificationInTest=true.");
+                return;
+            }
+
+            var onboardingStatus = await paymentOnboardingService.GetStatusAsync(tenantId);
+            if (!onboardingStatus.IsReady)
+            {
+                throw new InvalidOperationException("Your payment verification is still pending. Please wait until your bank account and backup card are fully verified, then try again.");
+            }
         }
 
         /// <inheritdoc/>

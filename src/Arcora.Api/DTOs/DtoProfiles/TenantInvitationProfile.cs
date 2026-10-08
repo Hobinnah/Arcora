@@ -9,7 +9,16 @@ namespace Arcora.Api.DTOs.DtoProfiles
     {
         public TenantInvitationProfile()
         {
-            CreateMap<TenantInvitation, TenantInvitationDto>().ReverseMap();
+            CreateMap<TenantInvitation, TenantInvitationDto>()
+                .ForMember(dto => dto.Price, options => options.MapFrom(entity => entity.MonthlyRentAmount))
+                .ReverseMap()
+                .ForMember(entity => entity.MonthlyRentAmount, options => options.Ignore())
+                .ForMember(entity => entity.SecurityDepositAmount, options => options.Ignore())
+                .ForMember(entity => entity.Currency, options => options.Ignore())
+                .ForMember(entity => entity.StartDate, options => options.Ignore())
+                .ForMember(entity => entity.EndDate, options => options.Ignore())
+                .ForMember(entity => entity.LeaseTermMonths, options => options.Ignore())
+                .ForMember(entity => entity.ReservationHoldID, options => options.Ignore());
         }
     }
 }

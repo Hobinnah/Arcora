@@ -68,6 +68,17 @@ namespace Arcora.Api.Services.Interfaces
         Task<ListingDto?> UpdateListingStatus(Guid id, string status);
 
         /// <summary>
+        /// Returns listings for an organization that are available for the full requested term,
+        /// including pricing and all available lease-term options.
+        /// </summary>
+        Task<List<AvailableListingForTermDto>> GetAvailableListings(Guid organizationId, DateTime startDate, short leaseTermMonths);
+
+        /// <summary>
+        /// Returns the availability result for a listing and requested term, including conflicts.
+        /// </summary>
+        Task<ListingAvailabilityResponseDto?> GetListingAvailability(Guid organizationId, Guid listingId, DateTime startDate, short leaseTermMonths);
+
+        /// <summary>
         /// Processes a frontend payload containing property/address/units/listings and
         /// creates the corresponding backend entities, resolving catalog lookups as needed.
         /// Returns created IDs for reconciliation on the client.

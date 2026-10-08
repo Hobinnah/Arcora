@@ -128,5 +128,37 @@ namespace Arcora.Api.Controllers
                 return NotFound($"Listing with ID {id} not found.");
             return Ok(listing);
         }
+
+        // GET /api/listing/available?organizationId=...&startDate=YYYY-MM-DD&leaseTermMonths=6
+        [Authorize(Roles = "User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [HttpGet("/api/listing/available", Name = "GetAvailableListingsForRequestedTerm")]
+        public async Task<IActionResult> GetAvailable([FromServices] IListingService listingService, [FromQuery] Guid organizationId, [FromQuery] DateTime startDate, [FromQuery] short leaseTermMonths)
+        {
+            if (organizationId == Guid.Empty || leaseTermMonths <= 0)
+                return BadRequest(new { message = "organizationId and a positive leaseTermMonths are required." });
+
+            var result = await listingService.GetAvailableListings(organizationId, startDate, leaseTermMonths);
+            return Ok(result);
+        }
+
+        // GET /api/listing/{listingId}/availability?organizationId=...&startDate=YYYY-MM-DD&leaseTermMonths=6
+        [Authorize(Roles = "User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [HttpGet("/api/listing/{listingId}/availability", Name = "GetListingAvailabilityForRequestedTerm")]
+        public async Task<IActionResult> GetAvailability([FromServices] IListingService listingService, [FromRoute] Guid listingId, [FromQuery] Guid organizationId, [FromQuery] DateTime startDate, [FromQuery] short leaseTermMonths)
+        {
+            if (listingId == Guid.Empty || organizationId == Guid.Empty || leaseTermMonths <= 0)
+                return BadRequest(new { message = "listingId, organizationId and a positive leaseTermMonths are required." });
+
+            var result = await listingService.GetListingAvailability(organizationId, listingId, startDate, leaseTermMonths);
+            if (result == null)
+                return NotFound(new { message = "Listing was not found for the provided organization." });
+
+            return Ok(result);
+        }
     }
 }

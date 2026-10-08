@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Rental invitation from {{Brand}}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f1ea;font-family:Georgia,'Times New Roman',serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f1ea;padding:32px 0;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="width:560px;max-width:100%;background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 16px rgba(15,58,52,0.08);">
+                    <tr>
+                        <td style="background:#0f3a34;padding:22px 28px;">
+                            <p style="margin:0;font-size:20px;line-height:24px;color:#ffffff;font-weight:700;">{{Brand}}</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:30px 40px 0;">
+                            <p style="margin:0 0 8px;font-family:Arial,sans-serif;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#0d9488;font-weight:700;">Tenant invitation</p>
+                            <h1 style="margin:0 0 14px;font-family:Arial,sans-serif;font-size:26px;line-height:32px;color:#0f3a34;">You have been invited to lease a property</h1>
+                            <p style="margin:0;font-family:Arial,sans-serif;font-size:15px;line-height:24px;color:#4b5563;">This invitation was sent to <strong style="color:#0f3a34;">{{TenantEmail}}</strong> by <strong style="color:#0f3a34;">{{OrganizationName}}</strong>.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:24px 40px 0;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                                <tr>
+                                    <td style="padding:10px 0;border-bottom:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:14px;color:#6b7280;width:42%;">Listing</td>
+                                    <td style="padding:10px 0;border-bottom:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:14px;color:#0f3a34;font-weight:600;">{{ListingTitle}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:10px 0;border-bottom:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:14px;color:#6b7280;">Purpose</td>
+                                    <td style="padding:10px 0;border-bottom:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:14px;color:#0f3a34;font-weight:600;">{{InvitationPurpose}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:10px 0;border-bottom:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:14px;color:#6b7280;">Lease term</td>
+                                    <td style="padding:10px 0;border-bottom:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:14px;color:#0f3a34;font-weight:600;">{{LeaseTerm}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:10px 0;border-bottom:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:14px;color:#6b7280;">Start date</td>
+                                    <td style="padding:10px 0;border-bottom:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:14px;color:#0f3a34;font-weight:600;">{{StartDate}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:10px 0;border-bottom:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:14px;color:#6b7280;">End date</td>
+                                    <td style="padding:10px 0;border-bottom:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:14px;color:#0f3a34;font-weight:600;">{{EndDate}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:10px 0;border-bottom:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:14px;color:#6b7280;">Monthly rent</td>
+                                    <td style="padding:10px 0;border-bottom:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:14px;color:#0f3a34;font-weight:600;">{{MonthlyRent}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:10px 0;font-family:Arial,sans-serif;font-size:14px;color:#6b7280;">Security deposit</td>
+                                    <td style="padding:10px 0;font-family:Arial,sans-serif;font-size:14px;color:#0f3a34;font-weight:600;">{{SecurityDeposit}}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    {{InvitationActionBlock}}
+                    {{DeclineActionBlock}}
+                    <tr>
+                        <td style="padding:20px 40px 0;">
+                            <p style="margin:0;font-family:Arial,sans-serif;font-size:13px;line-height:20px;color:#6b7280;">This invitation expires on <strong style="color:#0f3a34;">{{ExpiresAt}}</strong>.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:28px 40px 32px;">
+                            {{SupportLine}}
+                            <p style="margin:8px 0 0;font-family:Arial,sans-serif;font-size:12px;line-height:18px;color:#9ca3af;">&copy; {{Year}} {{Brand}}. All rights reserved.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

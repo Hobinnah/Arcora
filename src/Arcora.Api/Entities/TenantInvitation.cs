@@ -9,6 +9,15 @@ namespace Arcora.Api.Entities;
 [Table("TenantInvitation")]
 public class TenantInvitation
 {
+    public decimal? MonthlyRentAmount { get; set; }
+    public decimal? SecurityDepositAmount { get; set; }
+    [MaxLength(3)]
+    public string? Currency { get; set; }
+    public DateTime? StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public short? LeaseTermMonths { get; set; }
+    public Guid? ReservationHoldID { get; set; }
+
     /// <summary>
     /// Primary key
     /// </summary>
@@ -39,6 +48,12 @@ public class TenantInvitation
     /// </summary>
     [MaxLength(255)]
     public string? Email { get; set; }
+
+    /// <summary>
+    /// Name of invitee
+    /// </summary>
+    [MaxLength(200)]
+    public string? Name { get; set; }
 
     /// <summary>
     /// Phone number of invitee

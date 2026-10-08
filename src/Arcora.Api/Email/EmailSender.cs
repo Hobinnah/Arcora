@@ -23,7 +23,7 @@ namespace Arcora.Api
             if (string.IsNullOrWhiteSpace(_settings.SmtpHost))
             {
                 _logger.LogWarning("SMTP host is not configured. Email to {Recipient} was not sent.", to);
-                return;
+                throw new InvalidOperationException("SMTP host is not configured.");
             }
 
             using var message = new MailMessage
@@ -42,6 +42,7 @@ namespace Arcora.Api
             };
 
             await client.SendMailAsync(message);
+            _logger.LogInformation("Email sent successfully to {Recipient} with subject '{Subject}'.", to, subject);
         }
     }
 }

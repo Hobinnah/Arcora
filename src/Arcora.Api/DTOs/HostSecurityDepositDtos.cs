@@ -22,6 +22,7 @@ public class HostSecurityDepositListItemDto
     public string? TenantDisplayName { get; set; }
     public string? TenantEmail { get; set; }
     public string? LeaseDisplay { get; set; }
+    public string? ListingDisplay { get; set; }
 }
 
 public class HostSecurityDepositSummaryDto
