@@ -95,5 +95,8 @@ namespace Arcora.Payments.Abstractions
         string? FailureCode,
         string? FailureMessage,
         string? SetupIntentId = null,
-        string? PaymentMethodId = null);
+        string? PaymentMethodId = null,
+        string? RefundId = null,
+        string? RefundStatus = null,
+        string? SecurityDepositId = null);
 }

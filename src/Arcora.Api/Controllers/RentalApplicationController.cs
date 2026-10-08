@@ -4,6 +4,7 @@ using Arcora.Api.Models;
 using Arcora.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Arcora.Api.Controllers
 {
@@ -17,7 +18,11 @@ namespace Arcora.Api.Controllers
         [HttpGet(Name = "GetAllRentalApplications")]
         public async Task<IActionResult> Get([FromServices] IRentalApplicationService rentalapplicationService, [FromQuery] Paging paging)
         {
-            return Ok(await rentalapplicationService.GetAll(paging));
+            if (!TryGetActorUserId(out var actorUserID))
+                return Unauthorized(new { message = "Authenticated user context is invalid." });
+
+            var isAdmin = User.IsInRole("Admin");
+            return Ok(await rentalapplicationService.GetAllForActor(paging, actorUserID, isAdmin));
         }
 
         // GET api/<RentalApplicationController>/5
@@ -27,25 +32,42 @@ namespace Arcora.Api.Controllers
         [HttpGet("{id}", Name = "GetRentalApplicationByID")]
         public async Task<IActionResult> GetRentalApplicationByID([FromServices] IRentalApplicationService rentalapplicationService, Guid id)
         {
-            var result = await rentalapplicationService.GetID(id);
+            if (!TryGetActorUserId(out var actorUserID))
+                return Unauthorized(new { message = "Authenticated user context is invalid." });
+
+            var isAdmin = User.IsInRole("Admin");
+            var result = await rentalapplicationService.GetIDForActor(id, actorUserID, isAdmin);
             if (result == null)
                 return NotFound(new { message = "RentalApplication with the specified ID was not found." });
             return Ok(result);
         }
 
         // POST api/<RentalApplicationController>
-        [Authorize(Roles = "User, LandLord, Admin")]
+        [Authorize(Roles = "User, Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateRentalApplication")]
         public async Task<IActionResult> CreateRentalApplication([FromServices] IRentalApplicationService rentalapplicationService, [FromBody] RentalApplicationDto rentalapplicationDto)
         {
-            // var displayName = User.Identity?.Name ?? string.Empty;
-            // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
-            var result = await rentalapplicationService.CreateRentalApplication(rentalapplicationDto);
-            if (result.RentalApplicationID != null && result.RentalApplicationID != Guid.Empty)
-                return CreatedAtRoute("GetRentalApplicationByID", new { id = result.RentalApplicationID }, result);
-            return BadRequest(new { message = "Failed to create rentalapplication. A rentalapplication with the same name may already exist." });
+            if (!TryGetActorUserId(out var actorUserID))
+                return Unauthorized(new { message = "Authenticated user context is invalid." });
+
+            try
+            {
+                var result = await rentalapplicationService.CreateRentalApplicationForActor(
+                    rentalapplicationDto, actorUserID, User.IsInRole("Admin"));
+                if (result.RentalApplicationID != null && result.RentalApplicationID != Guid.Empty)
+                    return CreatedAtRoute("GetRentalApplicationByID", new { id = result.RentalApplicationID }, result);
+                return BadRequest(new { message = "Failed to create rental application." });
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         // PUT api/<RentalApplicationController>/5
@@ -55,12 +77,25 @@ namespace Arcora.Api.Controllers
         [HttpPut("{id}", Name = "UpdateRentalApplication")]
         public async Task<IActionResult> UpdateRentalApplication([FromServices] IRentalApplicationService rentalapplicationService, Guid id, [FromBody] RentalApplicationDto rentalapplicationDto)
         {
-            // var displayName = User.Identity?.Name ?? string.Empty;
-            // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
-            var result = await rentalapplicationService.UpdateRentalApplication(id, rentalapplicationDto);
-            if (result == null)
-                return NotFound(new { message = "RentalApplication with the specified ID was not found." });
-            return Ok(result);
+            if (!TryGetActorUserId(out var actorUserID))
+                return Unauthorized(new { message = "Authenticated user context is invalid." });
+
+            try
+            {
+                var result = await rentalapplicationService.UpdateRentalApplicationForActor(
+                    id, rentalapplicationDto, actorUserID, User.IsInRole("Admin"));
+                if (result == null)
+                    return NotFound(new { message = "RentalApplication with the specified ID was not found." });
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         // DELETE api/<RentalApplicationController>/5
@@ -86,10 +121,20 @@ namespace Arcora.Api.Controllers
         [HttpPost("{id}/{status}", Name = "UpdateRentalApplicationStatus")]
         public async Task<ActionResult> UpdateRentalApplicationStatus([FromServices] IRentalApplicationService rentalapplicationService, [FromRoute] Guid id, [FromRoute] string status)
         {
-            var rentalapplication = await rentalapplicationService.UpdateRentalApplicationStatus(id, status);
-            if (rentalapplication == null)
-                return NotFound($"RentalApplication with ID {id} not found.");
-            return Ok(rentalapplication);
+            if (!TryGetActorUserId(out var actorUserID))
+                return Unauthorized(new { message = "Authenticated user context is invalid." });
+
+            try
+            {
+                var rentalapplication = await rentalapplicationService.UpdateRentalApplicationStatusForActor(id, status, actorUserID, User.IsInRole("Admin"));
+                if (rentalapplication == null)
+                    return NotFound($"RentalApplication with ID {id} not found.");
+                return Ok(rentalapplication);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
+            }
         }
 
         // GET: api/RentalApplication/GetApplicationStages
@@ -99,6 +144,16 @@ namespace Arcora.Api.Controllers
         public ActionResult<IReadOnlyList<RentalApplicationStageDto>> GetApplicationStages([FromServices] IRentalApplicationService rentalapplicationService)
         {
             return Ok(rentalapplicationService.GetApplicationStages());
+        }
+
+        private bool TryGetActorUserId(out long actorUserId)
+        {
+            actorUserId = 0;
+            var claim = User.FindFirst("UserId")?.Value
+                ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? User.FindFirst("sub")?.Value;
+
+            return long.TryParse(claim, out actorUserId) && actorUserId > 0;
         }
     }
 }

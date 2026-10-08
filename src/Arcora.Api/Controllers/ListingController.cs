@@ -12,6 +12,7 @@ namespace Arcora.Api.Controllers
     public class ListingController : ControllerBase
     {
         // GET: api/<ListingController>
+        [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetAllListings")]
         public async Task<IActionResult> Get([FromServices] IListingService listingService, [FromQuery] Paging paging)
@@ -33,6 +34,7 @@ namespace Arcora.Api.Controllers
         }
 
         // GET: api/<ListingController>/Search
+        [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "SearchListings")]
         public async Task<IActionResult> Search([FromServices] IListingService listingService, [FromQuery] ListingSearchCriteria criteria)
@@ -59,6 +61,7 @@ namespace Arcora.Api.Controllers
         }
 
         // GET api/<ListingController>/5
+        [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetListingByID")]

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using System.Security.Claims;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +21,7 @@ namespace Arcora.Api
     [ApiController]
     public class AccountController : ControllerBase
     {
+        [AllowAnonymous]
         [HttpPost]
         [EnableRateLimiting("AuthPolicy")]
         public async Task<IActionResult> Login([FromServices] IAccountService accountService, [FromBody] LoginRequest request, CancellationToken ct)
@@ -30,6 +32,7 @@ namespace Arcora.Api
             return Ok(result.Value);
         }
 
+        [AllowAnonymous]
         [HttpPost]
         public async Task<IActionResult> Logout([FromServices] IAccountService accountService, CancellationToken ct)
         {
@@ -37,6 +40,7 @@ namespace Arcora.Api
             return NoContent();
         }
 
+        [AllowAnonymous]
         [HttpPost]
         [EnableRateLimiting("AuthPolicy")]
         public async Task<IActionResult> Register([FromServices] IAccountService accountService, [FromBody] RegisterRequest request, [FromQuery] bool signIn = false, CancellationToken ct = default)
@@ -244,6 +248,7 @@ namespace Arcora.Api
             });
         }
 
+        [AllowAnonymous]
         [HttpPost]
         [EnableRateLimiting("AuthPolicy")]
         public async Task<IActionResult> ForgotPassword([FromServices] IAccountService accountService, [FromQuery] string email, CancellationToken ct)
@@ -254,6 +259,7 @@ namespace Arcora.Api
             return Ok();
         }
 
+        [AllowAnonymous]
         [HttpPost]
         [EnableRateLimiting("AuthPolicy")]
         public async Task<IActionResult> ResetPassword([FromServices] IAccountService accountService, [FromBody] ResetPasswordRequest request, CancellationToken ct)
@@ -264,6 +270,7 @@ namespace Arcora.Api
             return Ok();
         }
 
+        [AllowAnonymous]
         [HttpPost]
         public async Task<IActionResult> ConfirmEmail([FromServices] IAccountService accountService, [FromQuery] string userId, [FromQuery] string token, CancellationToken ct)
         {
@@ -273,9 +280,14 @@ namespace Arcora.Api
             return Ok();
         }
 
+        [Authorize]
         [HttpGet]
         public async Task<IActionResult> GenerateEmailConfirmationToken([FromServices] IAccountService accountService, [FromQuery] string userId, CancellationToken ct)
         {
+            var callerUserID = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!User.IsInRole("Admin") && !string.Equals(callerUserID, userId, StringComparison.Ordinal))
+                return Forbid();
+
             var result = await accountService.GenerateEmailConfirmationTokenAsync(userId, ct);
             if (!result.Succeeded)
                 return BadRequest(result.Errors);
@@ -286,6 +298,7 @@ namespace Arcora.Api
         /// Checks whether the supplied email is already registered. When the email is new,
         /// a short-lived verification code is emailed to begin the sign-up workflow.
         /// </summary>
+        [AllowAnonymous]
         [HttpPost]
         [EnableRateLimiting("AuthPolicy")]
         public async Task<IActionResult> RequestLoginCode([FromServices] IAccountService accountService, [FromBody] RequestLoginCodeRequest request, CancellationToken ct)
@@ -299,6 +312,7 @@ namespace Arcora.Api
         /// <summary>
         /// Verifies the code emailed to the user and, on success, returns an authenticated token.
         /// </summary>
+        [AllowAnonymous]
         [HttpPost]
         [EnableRateLimiting("AuthPolicy")]
         public async Task<IActionResult> VerifyLoginCode([FromServices] IAccountService accountService, [FromBody] VerifyLoginCodeRequest request, CancellationToken ct)
@@ -312,6 +326,7 @@ namespace Arcora.Api
         /// <summary>
         /// Initiates Google OAuth login flow
         /// </summary>
+        [AllowAnonymous]
         [HttpGet("google-login")]
         public IActionResult GoogleLogin([FromQuery] string? returnUrl = null)
         {
@@ -325,6 +340,7 @@ namespace Arcora.Api
         /// <summary>
         /// Handles the callback from Google OAuth
         /// </summary>
+        [AllowAnonymous]
         [HttpGet("google-callback")]
         public async Task<IActionResult> GoogleCallback([FromServices] IAccountService accountService, [FromQuery] string? returnUrl = null, CancellationToken ct = default)
         {

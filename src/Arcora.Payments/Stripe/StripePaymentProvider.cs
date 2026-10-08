@@ -255,6 +255,9 @@ namespace Arcora.Payments.Stripe
             string? failureMessage = null;
             string? setupIntentId = null;
             string? paymentMethodId = null;
+            string? refundId = null;
+            string? refundStatus = null;
+            string? securityDepositId = null;
 
             switch (stripeEvent.Data.Object)
             {
@@ -285,6 +288,14 @@ namespace Arcora.Payments.Stripe
                     failureCode = setupIntent.LastSetupError?.Code ?? setupIntent.LastSetupError?.DeclineCode;
                     failureMessage = setupIntent.LastSetupError?.Message;
                     break;
+                case Refund refund:
+                    refundId = refund.Id;
+                    refundStatus = refund.Status;
+                    status = refund.Status;
+                    failureMessage = refund.FailureReason;
+                    if (refund.Metadata != null)
+                        refund.Metadata.TryGetValue("security_deposit_id", out securityDepositId);
+                    break;
             }
 
             return new ProviderWebhookEvent(
@@ -300,7 +311,10 @@ namespace Arcora.Payments.Stripe
                 failureCode,
                 failureMessage,
                 setupIntentId,
-                paymentMethodId);
+                paymentMethodId,
+                refundId,
+                refundStatus,
+                securityDepositId);
         }
 
         private static ProviderPaymentMethodResult MapPaymentMethod(PaymentMethodKind kind, PaymentMethod pm, string verificationStatus)

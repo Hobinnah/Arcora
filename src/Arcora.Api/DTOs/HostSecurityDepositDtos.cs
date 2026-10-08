@@ -107,6 +107,8 @@ public class SecurityDepositReturnResponseDto
     public Guid RefundID { get; set; }
     public Guid SecurityDepositTransactionID { get; set; }
     public decimal ReturnedAmount { get; set; }
+    public decimal HeldAmount { get; set; }
     public string? Status { get; set; }
+    public string? RefundStatus { get; set; }
     public bool IdempotentReplay { get; set; }
 }

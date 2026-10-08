@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using Arcora.Api.Models;
 using Arcora.Api.Services.Interfaces;
@@ -5,12 +6,14 @@ using Arcora.Api.Signing;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.DTOs;
 using Arcora.Api.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Arcora.Api.Controllers
 {
     [ApiController]
+    [Authorize(Roles = "User, LandLord, Admin")]
     [Route("api/leases/{leaseId:guid}/signing-requests")]
     public class LeaseSigningController : ControllerBase
     {
@@ -49,6 +52,13 @@ namespace Arcora.Api.Controllers
             var lease = await _leaseRepository.GetByID(leaseId);
             if (lease == null)
                 return NotFound();
+
+            if (!TryGetActorUserId(out var actorUserId))
+                return Unauthorized();
+
+            var isAdmin = User.IsInRole("Admin");
+            if (!await CanAccessLeaseAsync(lease, actorUserId, isAdmin))
+                return Forbid();
 
             var effectiveSignatories = request.Signatories.ToList();
 
@@ -241,6 +251,13 @@ namespace Arcora.Api.Controllers
             if (lease == null)
                 return NotFound();
 
+            if (!TryGetActorUserId(out var actorUserId))
+                return Unauthorized();
+
+            var isAdmin = User.IsInRole("Admin");
+            if (!await CanAccessLeaseAsync(lease, actorUserId, isAdmin, cancellationToken))
+                return Forbid();
+
             var leaseDocument = await _dbContext.LeaseDocuments
                 .Where(x => x.LeaseID == leaseId)
                 .OrderByDescending(x => x.CapturedDate ?? x.GeneratedAt)
@@ -416,6 +433,39 @@ namespace Arcora.Api.Controllers
                 return "SENT_FOR_SIGNATURE";
 
             return providerStatus;
+        }
+
+        private bool TryGetActorUserId(out long actorUserId)
+        {
+            actorUserId = 0;
+            var claim = User.FindFirst("UserId")?.Value
+                ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? User.FindFirst("sub")?.Value;
+
+            return long.TryParse(claim, out actorUserId) && actorUserId > 0;
+        }
+
+        private async Task<bool> CanAccessLeaseAsync(Lease lease, long actorUserId, bool isAdmin, CancellationToken cancellationToken = default)
+        {
+            if (isAdmin)
+                return true;
+
+            var isTenantOwner = await _dbContext.Tenants
+                .AsNoTracking()
+                .AnyAsync(t => t.TenantID == lease.TenantID && t.UserID == actorUserId, cancellationToken);
+
+            if (isTenantOwner)
+                return true;
+
+            return await _dbContext.OrganizationMembers
+                .AsNoTracking()
+                .AnyAsync(m =>
+                    m.OrganizationID == lease.OrganizationID &&
+                    m.UserID == actorUserId &&
+                    !string.Equals(m.Status, "INVITED", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(m.Status, "REJECTED", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(m.Status, "DEACTIVATED", StringComparison.OrdinalIgnoreCase),
+                    cancellationToken);
         }
     }
 }

@@ -1,9 +1,11 @@
 using AutoMapper;
 using Arcora.Api.DTOs;
 using Arcora.Api.Entities;
+using Arcora.Api;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Payments.Abstractions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Arcora.Api.Services.Implementations
@@ -24,6 +26,7 @@ namespace Arcora.Api.Services.Implementations
         private readonly IPaymentMethodRepository paymentMethodRepository;
         private readonly IPaymentRepository paymentRepository;
         private readonly IAutopayMandateRepository autopayMandateRepository;
+        private readonly ArcoraDbContext dbContext;
 
         public RentCollectionOrchestrator(
             IMapper mapper,
@@ -33,7 +36,8 @@ namespace Arcora.Api.Services.Implementations
             IPaymentAttemptRepository paymentAttemptRepository,
             IPaymentMethodRepository paymentMethodRepository,
             IPaymentRepository paymentRepository,
-            IAutopayMandateRepository autopayMandateRepository)
+            IAutopayMandateRepository autopayMandateRepository,
+            ArcoraDbContext dbContext)
         {
             this.mapper = mapper;
             this.logger = logger;
@@ -43,6 +47,7 @@ namespace Arcora.Api.Services.Implementations
             this.paymentMethodRepository = paymentMethodRepository;
             this.paymentRepository = paymentRepository;
             this.autopayMandateRepository = autopayMandateRepository;
+            this.dbContext = dbContext;
         }
 
         /// <inheritdoc/>
@@ -250,7 +255,11 @@ namespace Arcora.Api.Services.Implementations
 
             var existing = await paymentRepository.Find(x => x.PaymentIntentID == intent.PaymentIntentID);
             if (existing != null && existing.Any())
+            {
+                await RecordFirstChargeDepositFundingAsync(intent, existing.First().PaymentID, cancellationToken);
+                await ActivateLeaseIfEligibleAsync(intent.LeaseID, cancellationToken);
                 return;
+            }
 
             var payment = new Payment
             {
@@ -267,6 +276,81 @@ namespace Arcora.Api.Services.Implementations
             };
             await paymentRepository.Create(payment);
             await paymentRepository.Save();
+
+            await RecordFirstChargeDepositFundingAsync(intent, payment.PaymentID, cancellationToken);
+            await ActivateLeaseIfEligibleAsync(intent.LeaseID, cancellationToken);
+        }
+
+        private async Task RecordFirstChargeDepositFundingAsync(PaymentIntent intent, Guid paymentID, CancellationToken cancellationToken)
+        {
+            var idempotencyKey = intent.IdempotencyKey;
+            if (!intent.LeaseID.HasValue || string.IsNullOrWhiteSpace(idempotencyKey)
+                || !idempotencyKey.StartsWith("pi_firstcharge_", StringComparison.Ordinal))
+                return;
+
+            var deposit = await dbContext.SecurityDeposits
+                .FirstOrDefaultAsync(x => x.LeaseID == intent.LeaseID && x.RequiredAmount > x.ReceivedAmount, cancellationToken);
+            if (deposit == null)
+                return;
+
+            var alreadyLinked = await dbContext.SecurityDepositTransactions.AnyAsync(
+                x => x.SecurityDepositID == deposit.SecurityDepositID && x.PaymentID == paymentID
+                    && x.TransactionType == "FUNDING",
+                cancellationToken);
+            if (alreadyLinked)
+                return;
+
+            var amount = Math.Min(deposit.RequiredAmount - deposit.ReceivedAmount, intent.Amount);
+            if (amount <= 0m)
+                return;
+
+            var now = DateTime.UtcNow;
+            deposit.ReceivedAmount += amount;
+            deposit.Status = deposit.ReceivedAmount >= deposit.RequiredAmount ? "HELD" : "PARTIALLY_RECEIVED";
+            deposit.HeldAt ??= now;
+            if (deposit.ReceivedAmount >= deposit.RequiredAmount)
+                deposit.FullyFundedAt ??= now;
+            deposit.UpdatedDate = now;
+            deposit.UpdatedBy = "PAYMENT_ORCHESTRATOR";
+
+            dbContext.SecurityDepositTransactions.Add(new SecurityDepositTransaction
+            {
+                SecurityDepositTransactionID = Guid.NewGuid(),
+                SecurityDepositID = deposit.SecurityDepositID,
+                PaymentID = paymentID,
+                TransactionType = "FUNDING",
+                Amount = amount,
+                Currency = deposit.Currency,
+                Description = "Security deposit funding",
+                OccurredAt = now,
+                CapturedDate = now,
+                CapturedBy = "PAYMENT_ORCHESTRATOR"
+            });
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        private async Task ActivateLeaseIfEligibleAsync(Guid? leaseID, CancellationToken cancellationToken)
+        {
+            if (!leaseID.HasValue || leaseID.Value == Guid.Empty)
+                return;
+
+            var lease = await dbContext.Leases.FirstOrDefaultAsync(x => x.LeaseID == leaseID.Value, cancellationToken);
+            if (lease == null)
+                return;
+
+            if (string.Equals(lease.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (!string.Equals(lease.Status, "PENDING_FIRST_PAYMENT", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(lease.Status, "PENDING_TENANT_SIGNATURE", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            lease.Status = "ACTIVE";
+            lease.ActivatedAt ??= DateTime.UtcNow;
+            lease.UpdatedDate = DateTime.UtcNow;
+            lease.UpdatedBy = "PAYMENT_ORCHESTRATOR";
+
+            await dbContext.SaveChangesAsync(cancellationToken);
         }
 
         private async Task UpdateIntentAsync(PaymentIntent intent)

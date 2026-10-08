@@ -7,6 +7,7 @@ namespace Arcora.Api.Controllers
     [ApiController]
     public class MiscelleanousController : ControllerBase
     {
+        [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetPhotoLocations")]
         public IActionResult GetPhotoLocations()
@@ -22,6 +23,7 @@ namespace Arcora.Api.Controllers
             });
         }
 
+        [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetRuleTypes")]
         public IActionResult GetRuleTypes()
@@ -42,6 +44,7 @@ namespace Arcora.Api.Controllers
             });
         }
 
+        [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetLeaseContractEditableSections")]
         public IActionResult GetLeaseContractEditableSections()

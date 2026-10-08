@@ -7,6 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -38,7 +39,8 @@ namespace Arcora.Api.Services.Implementations
         private readonly IEmailSender? emailSender;
         private readonly Arcora.Api.Email.IEmailQueue? emailQueue;
         private readonly IOptions<CacheConfiguration> _options;
-        public RentalApplicationService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<RentalApplicationService> logger, IRentalApplicationRepository rentalapplicationRepository, IRentCollectionOrchestrator rentCollectionOrchestrator, IListingRepository listingRepository, IFeeRepository feeRepository, ISecurityDepositRepository securityDepositRepository, ILeaseRepository leaseRepository, ITenancyTypeRepository tenancyTypeRepository, IApplicationOccupantRepository applicationOccupantRepository, ILeaseDocumentsRepository leaseDocumentsRepository, ITenantGuarantorService tenantGuarantorService, ITenantRepository tenantRepository, IListingPhotoRepository listingPhotoRepository, IOrganizationMemberRepository organizationMemberRepository, IPreferenceService preferenceService, IConfiguration configuration, IEmailSender? emailSender = null, Arcora.Api.Email.IEmailQueue? emailQueue = null)
+        private readonly ArcoraDbContext dbContext;
+        public RentalApplicationService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<RentalApplicationService> logger, IRentalApplicationRepository rentalapplicationRepository, IRentCollectionOrchestrator rentCollectionOrchestrator, IListingRepository listingRepository, IFeeRepository feeRepository, ISecurityDepositRepository securityDepositRepository, ILeaseRepository leaseRepository, ITenancyTypeRepository tenancyTypeRepository, IApplicationOccupantRepository applicationOccupantRepository, ILeaseDocumentsRepository leaseDocumentsRepository, ITenantGuarantorService tenantGuarantorService, ITenantRepository tenantRepository, IListingPhotoRepository listingPhotoRepository, IOrganizationMemberRepository organizationMemberRepository, IPreferenceService preferenceService, IConfiguration configuration, ArcoraDbContext dbContext, IEmailSender? emailSender = null, Arcora.Api.Email.IEmailQueue? emailQueue = null)
         {
             this.cache = cache;
             this.logger = logger;
@@ -58,6 +60,7 @@ namespace Arcora.Api.Services.Implementations
             this.organizationMemberRepository = organizationMemberRepository;
             this.preferenceService = preferenceService;
             this.configuration = configuration;
+            this.dbContext = dbContext;
             this.emailSender = emailSender;
             this.emailQueue = emailQueue;
             this._options = options;
@@ -172,6 +175,57 @@ namespace Arcora.Api.Services.Implementations
             }
 
             return this.mapper.Map<RentalApplicationDto>(rentalApplication);
+        }
+
+        public async Task<RentalApplicationDto> CreateRentalApplicationForActor(RentalApplicationDto request, long actorUserID, bool isAdmin)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+
+            var tenant = await dbContext.Tenants.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.TenantID == request.TenantID);
+            var listing = await dbContext.Listings.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.ListingID == request.ListingID);
+
+            if (tenant == null || listing == null)
+                throw new ArgumentException("A valid tenant and listing are required.");
+            if (!isAdmin && tenant.UserID != actorUserID)
+                throw new UnauthorizedAccessException("A tenant can only submit an application for their own account.");
+            if (request.OrganizationID != Guid.Empty && request.OrganizationID != listing.OrganizationID)
+                throw new ArgumentException("The organization must match the selected listing.");
+
+            var now = DateTime.UtcNow;
+            request.RentalApplicationID = null;
+            request.ApplicationCode = Guid.NewGuid().ToString("N");
+            request.OrganizationID = listing.OrganizationID;
+            request.Status = "SUBMITTED";
+            request.ScreeningStatus = "PENDING";
+            request.SubmittedAt = now;
+            request.ReviewedAt = null;
+            request.ReviewedByOrganizationMemberID = null;
+            request.ApprovedAt = null;
+            request.DeclinedAt = null;
+            request.DeclineReason = null;
+            request.CapturedDate = now;
+            request.CapturedBy = actorUserID.ToString(CultureInfo.InvariantCulture);
+            request.UpdatedDate = null;
+            request.UpdatedBy = null;
+            request.Listing = null;
+            request.Tenant = null;
+            request.Organization = null;
+            request.ReviewedByOrganizationMember = null;
+            request.ApplicationOccupants = null;
+            request.LeaseDocuments = null;
+            request.TenantGuarantors = null;
+            request.TenantEmergencyContacts = null;
+            request.TenantEmployments = null;
+            request.TenantScreeningChecks = null;
+            request.TenantInvitations = null;
+            request.ReservationHolds = null;
+            request.ViewingAppointments = null;
+            request.CalendarEvents = null;
+            request.Leases = null;
+
+            return await CreateRentalApplication(request);
         }
 
         /// <summary>
@@ -359,7 +413,7 @@ namespace Arcora.Api.Services.Implementations
                         companyName: brand,
                         supportEmail: companyEmail);
 
-                    await DispatchEmailAsync(tenantEmail, $"Your application for {listingTitle} — {brand}", tenantHtml);
+                    await DispatchEmailAsync(tenantEmail, $"Your application for {listingTitle} ï¿½ {brand}", tenantHtml);
                 }
 
                 // ----- Host / landlord notification -----
@@ -391,7 +445,7 @@ namespace Arcora.Api.Services.Implementations
                         companyName: brand,
                         supportEmail: companyEmail);
 
-                    await DispatchEmailAsync(hostEmail, $"New application for {listingTitle} — {brand}", hostHtml);
+                    await DispatchEmailAsync(hostEmail, $"New application for {listingTitle} ï¿½ {brand}", hostHtml);
                 }
             }
             catch (Exception er)
@@ -475,6 +529,88 @@ namespace Arcora.Api.Services.Implementations
             return rentalapplicationDto;
         }
 
+        public async Task<RentalApplicationDto?> UpdateRentalApplicationForActor(Guid id, RentalApplicationDto request, long actorUserID, bool isAdmin)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+
+            if (isAdmin)
+            {
+                request.RentalApplicationID = id;
+                return await UpdateRentalApplication(id, request);
+            }
+
+            var application = await dbContext.RentalApplications
+                .SingleOrDefaultAsync(x => x.RentalApplicationID == id);
+            if (application == null)
+                return null;
+
+            var ownsApplication = await dbContext.Tenants.AsNoTracking()
+                .AnyAsync(x => x.TenantID == application.TenantID && x.UserID == actorUserID);
+            var canManageOrganization = await InvitationAuthorization.CanManageAsync(
+                dbContext, application.OrganizationID, actorUserID);
+
+            if (!ownsApplication && !canManageOrganization)
+                throw new UnauthorizedAccessException("You are not authorized to update this application.");
+
+            var now = DateTime.UtcNow;
+            if (canManageOrganization)
+            {
+                var status = request.Status?.Trim().ToUpperInvariant();
+                if (status is not ("UNDER_REVIEW" or "APPROVED" or "DECLINED" or "CHANGES_REQUESTED"))
+                    throw new ArgumentException("The requested application review status is invalid.");
+
+                var reviewer = await dbContext.OrganizationMembers.AsNoTracking()
+                    .Where(x => x.OrganizationID == application.OrganizationID && x.UserID == actorUserID
+                        && x.DeactivatedAt == null && x.Status == "ACTIVE"
+                        && (x.IsPrimaryOwner || x.RoleName == "FULL ACCESS"))
+                    .Select(x => (Guid?)x.OrganizationMemberID)
+                    .FirstOrDefaultAsync();
+                if (reviewer == null)
+                    throw new UnauthorizedAccessException("An active organization manager is required to review applications.");
+
+                application.Status = status;
+                application.ReviewedAt = now;
+                application.ReviewedByOrganizationMemberID = reviewer;
+                application.ApprovedAt = status == "APPROVED" ? now : null;
+                application.DeclinedAt = status == "DECLINED" ? now : null;
+                application.DeclineReason = status is "DECLINED" or "CHANGES_REQUESTED"
+                    ? request.DeclineReason
+                    : null;
+            }
+            else
+            {
+                if (application.Status is not ("DRAFT" or "CHANGES_REQUESTED"))
+                    throw new UnauthorizedAccessException("Only draft applications or applications returned for changes can be edited by the tenant.");
+
+                application.DesiredMoveInDate = request.DesiredMoveInDate;
+                application.DesiredMoveOutDate = request.DesiredMoveOutDate;
+                application.RequestedLeaseTermMonths = request.RequestedLeaseTermMonths;
+                application.AdultOccupantCount = request.AdultOccupantCount;
+                application.ChildOccupantCount = request.ChildOccupantCount;
+                application.PetCount = request.PetCount;
+                application.ProposedMonthlyRentAmount = request.ProposedMonthlyRentAmount;
+                application.Notes = request.Notes;
+                application.LeaseContractReviewed = request.LeaseContractReviewed;
+                application.VerificationAuthorization = request.VerificationAuthorization;
+                application.AttestationProvidedInfoIsCorrect = request.AttestationProvidedInfoIsCorrect;
+                if (string.Equals(request.Status, "SUBMITTED", StringComparison.OrdinalIgnoreCase))
+                {
+                    application.Status = "SUBMITTED";
+                    application.SubmittedAt = now;
+                }
+            }
+
+            application.UpdatedDate = now;
+            application.UpdatedBy = actorUserID.ToString(CultureInfo.InvariantCulture);
+            await dbContext.SaveChangesAsync();
+            cache.Remove(Cache.RENTALAPPLICATIONS.ToString());
+
+            if (string.Equals(application.Status, "APPROVED", StringComparison.OrdinalIgnoreCase))
+                await EnsureLeasePreparedForSignatureAsync(application);
+
+            return await GetIDForActor(id, actorUserID, isAdmin);
+        }
+
         /// <inheritdoc/>
         public async Task DeleteRentalApplication(Guid ID)
         {
@@ -518,7 +654,7 @@ namespace Arcora.Api.Services.Implementations
             if (rentalApplication.Status != null &&
                 rentalApplication.Status.Equals("APPROVED", StringComparison.OrdinalIgnoreCase))
             {
-                await TryInitiateFirstChargeAsync(rentalApplication);
+                await EnsureLeasePreparedForSignatureAsync(rentalApplication);
             }
 
             return this.mapper.Map<RentalApplicationDto>(rentalApplication);
@@ -546,6 +682,20 @@ namespace Arcora.Api.Services.Implementations
                 })
                 .OrderBy(s => s.Order)
                 .ToList();
+        }
+
+        private async Task EnsureLeasePreparedForSignatureAsync(RentalApplication application)
+        {
+            var lease = await CreateLeaseForApprovalAsync(application);
+            if (lease == null)
+                return;
+
+            var listing = application.Listing ?? await listingRepository.GetByID(application.ListingID);
+            var securityDeposit = listing?.SecurityDepositAmount ?? 0m;
+            if (securityDeposit > 0m)
+            {
+                await RecordSecurityDepositAsync(application, lease, securityDeposit);
+            }
         }
 
         /// <summary>
@@ -612,7 +762,7 @@ namespace Arcora.Api.Services.Implementations
                     return null;
                 }
 
-                var rent = application.ProposedMonthlyRentAmount ?? 0m;
+                var rent = ResolveMonthlyRentWithDiscount(listing, application);
                 var startDate = application.DesiredMoveInDate;
                 var termMonths = application.RequestedLeaseTermMonths;
                 var tenancyType = (await tenancyTypeRepository.GetAll())?.FirstOrDefault();
@@ -628,7 +778,7 @@ namespace Arcora.Api.Services.Implementations
                     RentalApplicationID = application.RentalApplicationID,
                     LeaseCode = $"L-{application.ApplicationCode}",
                     LeaseNumber = $"LN-{application.RentalApplicationID:N}".Substring(0, Math.Min(100, 3 + 32)),
-                    Status = "DRAFT",
+                    Status = "PENDING_TENANT_SIGNATURE",
                     StartDate = startDate,
                     EndDate = termMonths > 0 ? startDate.AddMonths(termMonths) : application.DesiredMoveOutDate,
                     LeaseTermMonths = termMonths,
@@ -654,13 +804,9 @@ namespace Arcora.Api.Services.Implementations
             }
         }
 
-        /// <summary>
-        /// Computes the total amount for the first payment at approval time:
-        /// first month's rent + security deposit + any active platform/booking fees.
-        /// </summary>
         private async Task<decimal> CalculateFirstPaymentAmountAsync(RentalApplication application, Lease? lease)
         {
-            var rent = application.ProposedMonthlyRentAmount ?? 0m;
+            var rent = lease?.BaseRentAmount ?? application.ProposedMonthlyRentAmount ?? 0m;
             if (rent <= 0m)
             {
                 return 0m;
@@ -784,6 +930,146 @@ namespace Arcora.Api.Services.Implementations
             }
 
             return amount < 0m ? 0m : amount;
+        }
+
+        public async Task<PagedResult<RentalApplicationDto>> GetAllForActor(Paging paging, long actorUserID, bool isAdmin)
+        {
+            var pageSize = paging?.PageSize > 0 ? paging.PageSize : 20;
+            var pageNumber = paging?.PageNumber > 0 ? paging.PageNumber : 1;
+
+            var query = await BuildScopedRentalApplicationQueryAsync(actorUserID, isAdmin);
+
+            if (!string.IsNullOrWhiteSpace(paging?.Search))
+            {
+                query = query.Where(x => x.ApplicationCode != null && x.ApplicationCode.Contains(paging.Search));
+            }
+
+            var totalCount = await query.CountAsync();
+            var entities = await query
+                .OrderByDescending(x => x.CapturedDate ?? DateTime.MinValue)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return new PagedResult<RentalApplicationDto>
+            {
+                Data = mapper.Map<IEnumerable<RentalApplicationDto>>(entities),
+                TotalCount = totalCount
+            };
+        }
+
+        public async Task<RentalApplicationDto?> GetIDForActor(Guid ID, long actorUserID, bool isAdmin)
+        {
+            var query = await BuildScopedRentalApplicationQueryAsync(actorUserID, isAdmin);
+            var entity = await query.FirstOrDefaultAsync(x => x.RentalApplicationID == ID);
+            return entity == null ? null : mapper.Map<RentalApplicationDto>(entity);
+        }
+
+        public async Task<RentalApplicationDto?> UpdateRentalApplicationStatusForActor(Guid id, string status, long actorUserID, bool isAdmin)
+        {
+            var rentalApplication = await dbContext.RentalApplications
+                .FirstOrDefaultAsync(x => x.RentalApplicationID == id);
+            if (rentalApplication == null)
+                return null;
+
+            var normalizedStatus = status.Trim().ToUpperInvariant();
+            if (!isAdmin)
+            {
+                var canManage = await InvitationAuthorization.CanManageAsync(
+                    dbContext, rentalApplication.OrganizationID, actorUserID);
+                var ownsApplication = await dbContext.Tenants.AsNoTracking()
+                    .AnyAsync(x => x.TenantID == rentalApplication.TenantID && x.UserID == actorUserID);
+
+                if (canManage)
+                {
+                    if (normalizedStatus is not ("UNDER_REVIEW" or "APPROVED" or "DECLINED" or "CHANGES_REQUESTED"))
+                        throw new ArgumentException("The requested application review status is invalid.");
+                }
+                else if (!ownsApplication || normalizedStatus != "SUBMITTED"
+                    || rentalApplication.Status is not ("DRAFT" or "CHANGES_REQUESTED"))
+                {
+                    throw new UnauthorizedAccessException("You are not authorized to set this application status.");
+                }
+            }
+
+            rentalApplication.Status = normalizedStatus;
+            rentalApplication.UpdatedDate = DateTime.UtcNow;
+            rentalApplication.UpdatedBy = actorUserID.ToString(CultureInfo.InvariantCulture);
+
+            await rentalapplicationRepository.Update(rentalApplication);
+            await rentalapplicationRepository.Save();
+            cache.Remove(Cache.RENTALAPPLICATIONS.ToString());
+
+            if (rentalApplication.Status != null && rentalApplication.Status.Equals("APPROVED", StringComparison.OrdinalIgnoreCase))
+            {
+                await EnsureLeasePreparedForSignatureAsync(rentalApplication);
+            }
+
+            return mapper.Map<RentalApplicationDto>(rentalApplication);
+        }
+
+        private async Task<IQueryable<RentalApplication>> BuildScopedRentalApplicationQueryAsync(long actorUserID, bool isAdmin)
+        {
+            var query = dbContext.RentalApplications
+                .AsNoTracking()
+                .Include(x => x.Listing)!.ThenInclude(l => l!.ListingPhotos)
+                .Include(x => x.Tenant)!.ThenInclude(t => t!.User)
+                .Include(x => x.Organization)
+                .Include(x => x.ReviewedByOrganizationMember)
+                .Include(x => x.ApplicationOccupants)
+                .Include(x => x.LeaseDocuments)
+                .Include(x => x.TenantGuarantors)
+                .Include(x => x.TenantEmergencyContacts)
+                .Include(x => x.TenantEmployments)
+                .Include(x => x.TenantScreeningChecks)
+                .Include(x => x.TenantInvitations)
+                .Include(x => x.ReservationHolds)
+                .Include(x => x.ViewingAppointments)
+                .Include(x => x.CalendarEvents)
+                .Include(x => x.Leases)
+                .AsSplitQuery();
+
+            if (isAdmin)
+                return query;
+
+            var managedOrgIds = await dbContext.OrganizationMembers
+                .AsNoTracking()
+                .Where(m => m.UserID == actorUserID &&
+                    m.Status != null && m.Status.ToUpper() == "ACTIVE" && m.DeactivatedAt == null &&
+                    (m.IsPrimaryOwner || (m.RoleName != null && m.RoleName.Trim().ToUpper() == "FULL ACCESS")))
+                .Select(m => m.OrganizationID)
+                .ToListAsync();
+
+            var tenantIds = await dbContext.Tenants
+                .AsNoTracking()
+                .Where(t => t.UserID == actorUserID)
+                .Select(t => t.TenantID)
+                .ToListAsync();
+
+            return query.Where(x => managedOrgIds.Contains(x.OrganizationID) || tenantIds.Contains(x.TenantID));
+        }
+
+        private static decimal ResolveMonthlyRentWithDiscount(Listing listing, RentalApplication application)
+        {
+            var baseRent = application.ProposedMonthlyRentAmount.GetValueOrDefault(listing.BaseMonthlyRentAmount);
+            if (baseRent <= 0m)
+                return 0m;
+
+            var termMonths = application.RequestedLeaseTermMonths;
+            var discountRate = 0m;
+
+            if (termMonths >= 12)
+                discountRate = listing.YearlyDiscountRate;
+            else if (termMonths >= 6)
+                discountRate = listing.SemiAnnualDiscountRate;
+            else if (termMonths >= 3)
+                discountRate = listing.QuarterlyDiscountRate;
+
+            if (discountRate <= 0m)
+                return baseRent;
+
+            var discounted = baseRent * (1 - (discountRate / 100m));
+            return discounted < 0m ? 0m : Math.Round(discounted, 2, MidpointRounding.AwayFromZero);
         }
     }
 }

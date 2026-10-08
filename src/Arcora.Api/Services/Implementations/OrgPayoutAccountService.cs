@@ -195,6 +195,13 @@ namespace Arcora.Api.Services.Implementations
             return account == null ? null : MapStatus(account);
         }
 
+        public async Task<PayoutAccountStatusDto?> GetOrganizationPayoutAccountStatus(Guid organizationID, long actorUserID, bool requireManageAccess = false)
+        {
+            await EnsureUserCanAccessOrganization(organizationID, actorUserID, requireManageAccess);
+            var account = await GetPreferredActiveOrgAccount(organizationID);
+            return account == null ? null : MapStatus(account);
+        }
+
         /// <inheritdoc/>
         public async Task<OrgPayoutOnboardingLinkResponseDto> CreateOnboardingLink(OrgPayoutOnboardingLinkRequestDto request, long actorUserID)
         {
@@ -232,6 +239,23 @@ namespace Arcora.Api.Services.Implementations
         /// <inheritdoc/>
         public async Task<PayoutAccountStatusDto?> RefreshOrganizationPayoutAccountStatus(Guid organizationID)
         {
+            var account = await GetPreferredActiveOrgAccount(organizationID);
+            if (account == null)
+                return null;
+
+            var stripeAccountID = account.StripeAccountID ?? account.ProviderAccountID;
+            if (!string.IsNullOrWhiteSpace(stripeAccountID))
+            {
+                await UpdateFromStripeAccount(account, stripeAccountID);
+            }
+
+            return MapStatus(account);
+        }
+
+        public async Task<PayoutAccountStatusDto?> RefreshOrganizationPayoutAccountStatus(Guid organizationID, long actorUserID)
+        {
+            await EnsureUserCanAccessOrganization(organizationID, actorUserID, requireManageAccess: true);
+
             var account = await GetPreferredActiveOrgAccount(organizationID);
             if (account == null)
                 return null;
@@ -324,17 +348,25 @@ namespace Arcora.Api.Services.Implementations
 
         private async Task EnsureUserCanManageOrganization(Guid organizationID, long actorUserID)
         {
+            await EnsureUserCanAccessOrganization(organizationID, actorUserID, requireManageAccess: true);
+        }
+
+        private async Task EnsureUserCanAccessOrganization(Guid organizationID, long actorUserID, bool requireManageAccess)
+        {
             var members = await organizationMemberRepository.GetOrganizationMembersByOrgIDAsync(organizationID);
             var hasAccess = members.Any(x =>
                 x.UserID == actorUserID &&
+                !string.Equals(x.Status, "INVITED", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(x.Status, "REJECTED", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(x.Status, "DEACTIVATED", StringComparison.OrdinalIgnoreCase) &&
-                (x.IsPrimaryOwner ||
+                (!requireManageAccess ||
+                 x.IsPrimaryOwner ||
                  string.Equals(x.RoleName, "OWNER", StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(x.RoleName, "ADMIN", StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(x.RoleName, "LANDLORD", StringComparison.OrdinalIgnoreCase)));
 
             if (!hasAccess)
-                throw new UnauthorizedAccessException("User is not authorized to manage this organization.");
+                throw new UnauthorizedAccessException("User is not authorized to access this organization payout account.");
         }
 
         private async Task<OrgPayoutAccount> GetOrCreateStripeAccount(Guid organizationID, long actorUserID)

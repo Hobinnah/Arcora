@@ -43,6 +43,7 @@ namespace Arcora.Api.Services.Interfaces
         /// <param name="organizationID"></param>
         /// <returns></returns>
         Task<PayoutAccountStatusDto?> GetOrganizationPayoutAccountStatus(Guid organizationID);
+        Task<PayoutAccountStatusDto?> GetOrganizationPayoutAccountStatus(Guid organizationID, long actorUserID, bool requireManageAccess = false);
         /// <summary>
         /// Creates a Stripe-hosted onboarding link for an organization's payout account.
         /// </summary>
@@ -56,6 +57,7 @@ namespace Arcora.Api.Services.Interfaces
         /// <param name="organizationID"></param>
         /// <returns></returns>
         Task<PayoutAccountStatusDto?> RefreshOrganizationPayoutAccountStatus(Guid organizationID);
+        Task<PayoutAccountStatusDto?> RefreshOrganizationPayoutAccountStatus(Guid organizationID, long actorUserID);
         /// <summary>
         /// Synchronizes organization payout account fields from Stripe for webhook updates.
         /// </summary>

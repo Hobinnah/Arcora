@@ -303,6 +303,66 @@ namespace Arcora.Api
                 .Replace("{{SupportLine}}", supportLine);
         }
 
+        /// <summary>
+        /// Builds the branded HTML body for a check-in details email.
+        /// </summary>
+        public static string BuildLeaseCheckInDetailsEmail(
+            string tenantName,
+            string listingTitle,
+            string moveInDate,
+            string fullAddress,
+            string checkInInstructions,
+            string? wifiNetwork,
+            string? wifiPassword,
+            IEnumerable<string>? suiteRules,
+            string actionUrl,
+            string companyName,
+            string? supportEmail = null)
+        {
+            var brand = string.IsNullOrWhiteSpace(companyName) ? "Arcora" : companyName;
+            var supportLine = string.IsNullOrWhiteSpace(supportEmail)
+                ? string.Empty
+                : $"<p style=\"margin:0 0 8px;font-family:Arial,sans-serif;font-size:13px;line-height:20px;color:#6b7280;\">Need help? Contact us at <a href=\"mailto:{supportEmail}\" style=\"color:#0d9488;text-decoration:none;\">{supportEmail}</a>.</p>";
+
+            var normalizedRules = (suiteRules ?? Enumerable.Empty<string>())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(8)
+                .ToList();
+
+            var rulesBlock = string.Empty;
+            if (normalizedRules.Count > 0)
+            {
+                var rulesItems = string.Join(string.Empty,
+                    normalizedRules.Select(rule =>
+                        $"<li style=\"margin:0 0 8px;\">{System.Net.WebUtility.HtmlEncode(rule)}</li>"));
+
+                rulesBlock =
+                    "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin-top:16px;background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;\">" +
+                    "<tr><td style=\"padding:14px 16px;\">" +
+                    "<p style=\"margin:0 0 10px;font-family:Arial,sans-serif;font-size:14px;line-height:22px;color:#0f3a34;font-weight:700;\">Suite rules</p>" +
+                    $"<ul style=\"margin:0;padding-left:18px;font-family:Arial,sans-serif;font-size:14px;line-height:22px;color:#374151;\">{rulesItems}</ul>" +
+                    "</td></tr></table>";
+            }
+
+            var template = LoadTemplate("LeaseCheckInDetails.html");
+
+            return template
+                .Replace("{{Brand}}", brand)
+                .Replace("{{TenantName}}", System.Net.WebUtility.HtmlEncode(tenantName))
+                .Replace("{{ListingTitle}}", System.Net.WebUtility.HtmlEncode(listingTitle))
+                .Replace("{{MoveInDate}}", System.Net.WebUtility.HtmlEncode(moveInDate))
+                .Replace("{{FullAddress}}", System.Net.WebUtility.HtmlEncode(fullAddress))
+                .Replace("{{CheckInInstructions}}", System.Net.WebUtility.HtmlEncode(checkInInstructions))
+                .Replace("{{WifiNetwork}}", System.Net.WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(wifiNetwork) ? "Not provided" : wifiNetwork))
+                .Replace("{{WifiPassword}}", System.Net.WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(wifiPassword) ? "Not provided" : wifiPassword))
+                .Replace("{{RulesBlock}}", rulesBlock)
+                .Replace("{{ActionUrl}}", string.IsNullOrWhiteSpace(actionUrl) ? "#" : actionUrl)
+                .Replace("{{Year}}", DateTime.UtcNow.Year.ToString())
+                .Replace("{{SupportLine}}", supportLine);
+        }
+
         private static readonly string TemplatesRoot = Path.Combine(AppContext.BaseDirectory, "Templates");
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _templateCache = new();
 

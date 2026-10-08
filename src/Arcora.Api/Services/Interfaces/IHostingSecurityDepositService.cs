@@ -10,5 +10,6 @@ namespace Arcora.Api.Services.Interfaces
         Task<SecurityDepositEvidenceUploadResponseDto> UploadEvidence(Guid securityDepositID, long actorUserID, IFormFile file, CancellationToken cancellationToken);
         Task<SecurityDepositSettlementNoticeResponseDto> SendSettlementNotice(Guid securityDepositID, long actorUserID, string? idempotencyKey, SecurityDepositSettlementNoticeRequestDto request);
         Task<SecurityDepositReturnResponseDto> ReturnDeposit(Guid securityDepositID, long actorUserID, SecurityDepositReturnRequestDto request);
+        Task ReconcileRefundAsync(string providerRefundID, string status, string? failureReason = null, CancellationToken cancellationToken = default);
     }
 }

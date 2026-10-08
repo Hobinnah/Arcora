@@ -12,6 +12,7 @@ namespace Arcora.Api.Controllers
     public class UnitTypeController : ControllerBase
     {
         // GET: api/<UnitTypeController>
+        [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetAllUnitTypes")]
         public async Task<IActionResult> Get([FromServices] IUnitTypeService unittypeService, [FromQuery] Paging paging)
@@ -20,6 +21,7 @@ namespace Arcora.Api.Controllers
         }
 
         // GET api/<UnitTypeController>/5
+        [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetUnitTypeByID")]

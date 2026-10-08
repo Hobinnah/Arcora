@@ -222,6 +222,7 @@ namespace Arcora.Api.Extensions
              services.AddTransient<ISecurityDepositTransactionService, SecurityDepositTransactionService>();
              services.AddTransient<ISecurityDepositTransactionRepository, SecurityDepositTransactionRepository>();
              services.AddTransient<IHostingSecurityDepositService, HostingSecurityDepositService>();
+             services.AddTransient<ISecurityDepositRefundProcessor, StripeSecurityDepositRefundProcessor>();
              services.AddTransient<ISecurityDepositService, SecurityDepositService>();
              services.AddTransient<ISecurityDepositRepository, SecurityDepositRepository>();
              services.AddTransient<IReservationHoldService, ReservationHoldService>();
@@ -603,6 +604,10 @@ namespace Arcora.Api.Extensions
             #region===========================Authorization Registrations===========================
             services.AddAuthorization(options =>
             {
+                options.FallbackPolicy = new AuthorizationPolicyBuilder()
+                    .RequireAuthenticatedUser()
+                    .Build();
+
                 options.AddPolicy("RequireUserRole", policy =>
                     policy.RequireAssertion(context =>
                         context.User.IsInRole("User") ||
@@ -638,6 +643,7 @@ namespace Arcora.Api.Extensions
 
             services.Configure<RentCollectionOptions>(configuration.GetSection(RentCollectionOptions.SectionName));
             services.AddHostedService<RecurringRentCollectionService>();
+            services.AddHostedService<LeaseCheckInDetailsEmailService>();
 services.AddTransient<ILeaseCheckInService, LeaseCheckInService>();
 services.AddHostedService<LeaseCheckInDraftCleanupBackgroundService>();
 

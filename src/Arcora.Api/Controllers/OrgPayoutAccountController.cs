@@ -4,6 +4,7 @@ using Arcora.Api.Models;
 using Arcora.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Arcora.Api.Controllers
 {
@@ -12,7 +13,7 @@ namespace Arcora.Api.Controllers
     public class OrgPayoutAccountController : ControllerBase
     {
         // GET: api/<OrgPayoutAccountController>
-        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
+        [Authorize(Roles = "Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetAllOrgPayoutAccounts")]
         public async Task<IActionResult> Get([FromServices] IOrgPayoutAccountService orgpayoutaccountService, [FromQuery] Paging paging)
@@ -21,7 +22,7 @@ namespace Arcora.Api.Controllers
         }
 
         // GET api/<OrgPayoutAccountController>/5
-        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
+        [Authorize(Roles = "Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetOrgPayoutAccountByID")]
@@ -39,10 +40,20 @@ namespace Arcora.Api.Controllers
         [HttpGet("{organizationID:guid}", Name = "GetOrgPayoutAccountStatusByOrganization")]
         public async Task<IActionResult> GetOrganizationPayoutAccountStatus([FromServices] IOrgPayoutAccountService orgpayoutaccountService, Guid organizationID)
         {
-            var result = await orgpayoutaccountService.GetOrganizationPayoutAccountStatus(organizationID);
-            if (result == null)
-                return NotFound(new { message = "No active payout account found for this organization." });
-            return Ok(result);
+            if (!TryGetActorUserId(out var actorUserID))
+                return Forbid();
+
+            try
+            {
+                var result = await orgpayoutaccountService.GetOrganizationPayoutAccountStatus(organizationID, actorUserID);
+                if (result == null)
+                    return NotFound(new { message = "No active payout account found for this organization." });
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
+            }
         }
 
         [Authorize(Roles = "User, LandLord, Admin")]
@@ -79,21 +90,29 @@ namespace Arcora.Api.Controllers
         [HttpPost("{organizationID:guid}", Name = "RefreshOrgPayoutAccountStatus")]
         public async Task<IActionResult> RefreshStatus([FromServices] IOrgPayoutAccountService orgpayoutaccountService, Guid organizationID)
         {
-            var result = await orgpayoutaccountService.RefreshOrganizationPayoutAccountStatus(organizationID);
-            if (result == null)
-                return NotFound(new { message = "No active payout account found for this organization." });
-            return Ok(result);
+            if (!TryGetActorUserId(out var actorUserID))
+                return Forbid();
+
+            try
+            {
+                var result = await orgpayoutaccountService.RefreshOrganizationPayoutAccountStatus(organizationID, actorUserID);
+                if (result == null)
+                    return NotFound(new { message = "No active payout account found for this organization." });
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
+            }
         }
 
         // POST api/<OrgPayoutAccountController>
-        [Authorize(Roles = "User, LandLord, Admin")]
+        [Authorize(Roles = "Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateOrgPayoutAccount")]
         public async Task<IActionResult> CreateOrgPayoutAccount([FromServices] IOrgPayoutAccountService orgpayoutaccountService, [FromBody] OrgPayoutAccountDto orgpayoutaccountDto)
         {
-            // var displayName = User.Identity?.Name ?? string.Empty;
-            // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
             var result = await orgpayoutaccountService.CreateOrgPayoutAccount(orgpayoutaccountDto);
             if (result != null && result.OrgPayoutAccountID != 0)
                 return CreatedAtRoute("GetOrgPayoutAccountByID", new { id = result.OrgPayoutAccountID }, result);
@@ -101,14 +120,12 @@ namespace Arcora.Api.Controllers
         }
 
         // PUT api/<OrgPayoutAccountController>/5
-        [Authorize(Roles = "User, LandLord, Admin")]
+        [Authorize(Roles = "Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateOrgPayoutAccount")]
         public async Task<IActionResult> UpdateOrgPayoutAccount([FromServices] IOrgPayoutAccountService orgpayoutaccountService, long id, [FromBody] OrgPayoutAccountDto orgpayoutaccountDto)
         {
-            // var displayName = User.Identity?.Name ?? string.Empty;
-            // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
             var result = await orgpayoutaccountService.UpdateOrgPayoutAccount(id, orgpayoutaccountDto);
             if (result == null)
                 return NotFound(new { message = "OrgPayoutAccount with the specified ID was not found." });
@@ -131,6 +148,16 @@ namespace Arcora.Api.Controllers
             {
                 return NotFound(new { message = "OrgPayoutAccount with the specified ID was not found." });
             }
+        }
+
+        private bool TryGetActorUserId(out long actorUserId)
+        {
+            actorUserId = 0;
+            var claim = User.FindFirst("UserId")?.Value
+                ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? User.FindFirst("sub")?.Value;
+
+            return long.TryParse(claim, out actorUserId) && actorUserId > 0;
         }
     }
 }

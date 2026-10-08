@@ -24,6 +24,7 @@ namespace Arcora.Api.Controllers
         private readonly IRentCollectionOrchestrator orchestrator;
         private readonly IPaymentOnboardingService paymentOnboardingService;
         private readonly IOrgPayoutAccountService orgPayoutAccountService;
+        private readonly IHostingSecurityDepositService hostingSecurityDepositService;
         private readonly ILogger<StripeWebhookController> logger;
 
         public StripeWebhookController(
@@ -33,6 +34,7 @@ namespace Arcora.Api.Controllers
             IRentCollectionOrchestrator orchestrator,
             IPaymentOnboardingService paymentOnboardingService,
             IOrgPayoutAccountService orgPayoutAccountService,
+            IHostingSecurityDepositService hostingSecurityDepositService,
             ILogger<StripeWebhookController> logger)
         {
             this.paymentProvider = paymentProvider;
@@ -41,6 +43,7 @@ namespace Arcora.Api.Controllers
             this.orchestrator = orchestrator;
             this.paymentOnboardingService = paymentOnboardingService;
             this.orgPayoutAccountService = orgPayoutAccountService;
+            this.hostingSecurityDepositService = hostingSecurityDepositService;
             this.logger = logger;
         }
 
@@ -68,24 +71,39 @@ namespace Arcora.Api.Controllers
 
             // Idempotency: ignore events we have already stored.
             var existing = await eventRepository.Find(x => x.ProviderEventID == webhookEvent.EventId);
-            if (existing != null && existing.Any())
+            var providerEvent = existing?.FirstOrDefault();
+            if (providerEvent != null && string.Equals(providerEvent.ProcessingStatus, "PROCESSED", StringComparison.OrdinalIgnoreCase))
             {
                 return Ok(new { received = true, duplicate = true });
             }
 
-            var providerEvent = new PaymentProviderEvent
+            if (providerEvent == null)
             {
-                PaymentProviderEventID = Guid.NewGuid(),
-                ProviderName = paymentProvider.ProviderName,
-                ProviderEventID = webhookEvent.EventId,
-                EventType = webhookEvent.EventType,
-                ProcessingStatus = "RECEIVED",
-                Payload = webhookEvent.RawPayload,
-                ReceivedAt = DateTime.UtcNow,
-                CapturedDate = DateTime.UtcNow
-            };
-            await eventRepository.Create(providerEvent);
-            await eventRepository.Save();
+                providerEvent = new PaymentProviderEvent
+                {
+                    PaymentProviderEventID = Guid.NewGuid(),
+                    ProviderName = paymentProvider.ProviderName,
+                    ProviderEventID = webhookEvent.EventId,
+                    EventType = webhookEvent.EventType,
+                    ProcessingStatus = "RECEIVED",
+                    Payload = webhookEvent.RawPayload,
+                    ReceivedAt = DateTime.UtcNow,
+                    CapturedDate = DateTime.UtcNow,
+                    RetryCount = 0
+                };
+                await eventRepository.Create(providerEvent);
+                await eventRepository.Save();
+            }
+            else
+            {
+                providerEvent.EventType = webhookEvent.EventType;
+                providerEvent.Payload = webhookEvent.RawPayload;
+                providerEvent.ProcessingStatus = "RECEIVED";
+                providerEvent.FailureReason = null;
+                providerEvent.RetryCount += 1;
+                await eventRepository.Update(providerEvent);
+                await eventRepository.Save();
+            }
 
             try
             {
@@ -102,6 +120,9 @@ namespace Arcora.Api.Controllers
 
             await eventRepository.Update(providerEvent);
             await eventRepository.Save();
+
+            if (string.Equals(providerEvent.ProcessingStatus, "FAILED", StringComparison.OrdinalIgnoreCase))
+                return StatusCode(StatusCodes.Status500InternalServerError, new { received = true, retryable = true });
 
             return Ok(new { received = true });
         }
@@ -155,6 +176,19 @@ namespace Arcora.Api.Controllers
                     {
                         await orgPayoutAccountService.SyncStripePayoutEvent(webhookEvent.ConnectedAccountId, webhookEvent.RawPayload);
                         await orgPayoutAccountService.SyncStripeAccountByStripeAccountID(webhookEvent.ConnectedAccountId);
+                    }
+                    break;
+
+                case "refund.updated":
+                case "refund.failed":
+                case "refund.succeeded":
+                    if (!string.IsNullOrWhiteSpace(webhookEvent.RefundId)
+                        && !string.IsNullOrWhiteSpace(webhookEvent.SecurityDepositId))
+                    {
+                        await hostingSecurityDepositService.ReconcileRefundAsync(
+                            webhookEvent.RefundId,
+                            webhookEvent.RefundStatus ?? webhookEvent.Status ?? string.Empty,
+                            webhookEvent.FailureMessage);
                     }
                     break;
 

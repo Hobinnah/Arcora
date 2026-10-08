@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+</head>
+<body style="margin:0;padding:0;background:#f3f4f6;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:24px 0;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                    <tr>
+                        <td style="background:#0f3a34;padding:20px 28px;">
+                            <span style="font-family:Arial,sans-serif;font-size:18px;font-weight:700;color:#ffffff;">{{Brand}}</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:28px;">
+                            <p style="margin:0 0 6px;font-family:Arial,sans-serif;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#0d9488;font-weight:700;">Move-in details</p>
+                            <h1 style="margin:0 0 12px;font-family:Arial,sans-serif;font-size:22px;line-height:28px;color:#0f3a34;">Hi {{TenantName}}, you're all set for check-in</h1>
+                            <p style="margin:0 0 16px;font-family:Arial,sans-serif;font-size:14px;line-height:22px;color:#374151;">Your lease for <strong>{{ListingTitle}}</strong> starts on <strong>{{MoveInDate}}</strong>. Here are your arrival details.</p>
+
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-family:Arial,sans-serif;font-size:14px;color:#4b5563;">
+                                <tr>
+                                    <td style="padding:8px 0;color:#6b7280;width:34%;">Property address</td>
+                                    <td style="padding:8px 0;color:#0f3a34;font-weight:600;">{{FullAddress}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:8px 0;color:#6b7280;">Check-in details</td>
+                                    <td style="padding:8px 0;color:#0f3a34;font-weight:600;">{{CheckInInstructions}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:8px 0;color:#6b7280;">Wi-Fi network</td>
+                                    <td style="padding:8px 0;color:#0f3a34;font-weight:600;">{{WifiNetwork}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:8px 0;color:#6b7280;">Wi-Fi password</td>
+                                    <td style="padding:8px 0;color:#0f3a34;font-weight:600;">{{WifiPassword}}</td>
+                                </tr>
+                            </table>
+
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">
+                                <tr>
+                                    <td style="padding:14px 16px;font-family:Arial,sans-serif;font-size:14px;line-height:22px;color:#374151;">
+                                        Please enjoy the property with care, keep the suite clean, and avoid any damage. Follow all house and suite rules throughout your stay.
+                                    </td>
+                                </tr>
+                            </table>
+
+                            {{RulesBlock}}
+
+                            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0 8px;">
+                                <tr>
+                                    <td style="border-radius:8px;background:#0d9488;">
+                                        <a href="{{ActionUrl}}" style="display:inline-block;padding:12px 24px;font-family:Arial,sans-serif;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">Open lease details</a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:20px 28px;border-top:1px solid #e5e7eb;">
+                            {{SupportLine}}
+                            <p style="margin:0;font-family:Arial,sans-serif;font-size:12px;line-height:18px;color:#9ca3af;">&copy; {{Year}} {{Brand}}. All rights reserved.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

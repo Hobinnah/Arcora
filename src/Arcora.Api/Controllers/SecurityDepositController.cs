@@ -30,7 +30,7 @@ namespace Arcora.Api.Controllers
         }
 
         // GET api/<SecurityDepositController>/5
-        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
+        [Authorize(Roles = "Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetSecurityDepositByID")]
@@ -43,7 +43,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST api/<SecurityDepositController>
-        [Authorize(Roles = "User, LandLord, Admin")]
+        [Authorize(Roles = "Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateSecurityDeposit")]
@@ -58,7 +58,7 @@ namespace Arcora.Api.Controllers
         }
 
         // PUT api/<SecurityDepositController>/5
-        [Authorize(Roles = "User, LandLord, Admin")]
+        [Authorize(Roles = "Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateSecurityDeposit")]
@@ -91,7 +91,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST: api/securitydeposit/{id}/{status}
-        [Authorize(Roles = "User, LandLord, Admin")]
+        [Authorize(Roles = "Admin")]
         [HttpPost("{id}/{status}", Name = "UpdateSecurityDepositStatus")]
         public async Task<ActionResult> UpdateSecurityDepositStatus([FromServices] ISecurityDepositService securitydepositService, [FromRoute] Guid id, [FromRoute] string status)
         {

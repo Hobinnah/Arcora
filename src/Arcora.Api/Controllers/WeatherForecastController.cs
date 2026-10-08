@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Arcora.Api.Controllers;
 
@@ -18,6 +19,7 @@ public class WeatherForecastController : ControllerBase
         _logger = logger;
     }
 
+    [Authorize]
     [HttpGet(Name = "GetWeatherForecast")]
     public IEnumerable<WeatherForecast> Get()
     {
