@@ -9,7 +9,11 @@ namespace Arcora.Api.DTOs.DtoProfiles
     {
         public ConversationParticipantProfile()
         {
-            CreateMap<ConversationParticipant, ConversationParticipantDto>().ReverseMap();
+            CreateMap<ConversationParticipant, ConversationParticipantDto>().ReverseMap()
+                .ForMember(x => x.Conversation, options => options.Ignore())
+                .ForMember(x => x.User, options => options.Ignore())
+                .ForMember(x => x.Tenant, options => options.Ignore())
+                .ForMember(x => x.OrganizationMember, options => options.Ignore());
         }
     }
 }

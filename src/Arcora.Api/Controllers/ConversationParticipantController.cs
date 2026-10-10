@@ -35,8 +35,10 @@ namespace Arcora.Api.Controllers
 
         // POST api/<ConversationParticipantController>
         [Authorize(Roles = "User, LandLord, Admin")]
-        [ProducesResponseType(StatusCodes.Status201Created)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ConversationParticipantDto), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         [HttpPost(Name = "CreateConversationParticipant")]
         public async Task<IActionResult> CreateConversationParticipant([FromServices] IConversationParticipantService conversationparticipantService, [FromBody] ConversationParticipantDto conversationparticipantDto)
         {
@@ -45,13 +47,16 @@ namespace Arcora.Api.Controllers
             var result = await conversationparticipantService.CreateConversationParticipant(conversationparticipantDto);
             if (result.ConversationParticipantID != null && result.ConversationParticipantID != Guid.Empty)
                 return CreatedAtRoute("GetConversationParticipantByID", new { id = result.ConversationParticipantID }, result);
-            return BadRequest(new { message = "Failed to create conversationparticipant. A conversationparticipant with the same name may already exist." });
+            return Problem(statusCode: StatusCodes.Status500InternalServerError,
+                title: "Participant creation failed", detail: "The participant could not be saved.");
         }
 
         // PUT api/<ConversationParticipantController>/5
         [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
         [HttpPut("{id}", Name = "UpdateConversationParticipant")]
         public async Task<IActionResult> UpdateConversationParticipant([FromServices] IConversationParticipantService conversationparticipantService, Guid id, [FromBody] ConversationParticipantDto conversationparticipantDto)
         {

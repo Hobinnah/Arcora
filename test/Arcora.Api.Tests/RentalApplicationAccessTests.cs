@@ -53,7 +53,8 @@ public sealed class RentalApplicationAccessTests : IAsyncLifetime
             Options.Create(new CacheConfiguration()),
             NullLogger<RentalApplicationService>.Instance,
             null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
-            configuration,
+            preferenceService: null!,
+            configuration: configuration,
             db);
     }
 

@@ -1,5 +1,5 @@
 ================================================================================
-ARCORA — MESSAGING (CHAT) FRONTEND INTEGRATION GUIDE
+ARCORA ï¿½ MESSAGING (CHAT) FRONTEND INTEGRATION GUIDE
 ================================================================================
 Audience : Frontend engineers integrating the direct host-to-tenant chat.
 Backend  : ASP.NET Core (.NET 8) Web API + SignalR
@@ -7,6 +7,43 @@ Base URL : {API_BASE_URL}            e.g. https://api.arcora.app
 Auth     : All endpoints require a Bearer JWT (Authorization: Bearer <token>)
 --------------------------------------------------------------------------------
 
+
+APPLICATION CONVERSATION PARTICIPANTS
+--------------------------------------------------------------------------------
+Rental-application threads use the Conversation/ConversationParticipant APIs,
+not the DIRECT-thread StartThread flow documented below.
+
+POST /api/ConversationParticipant/CreateConversationParticipant
+Required payload: conversationID (non-empty UUID), joinedAt (ISO timestamp),
+isMuted (boolean), and at least one of userID, tenantID, organizationMemberID.
+Optional identities and timestamps may be null; participantRole is a label,
+NOT an identity. Do not send navigation objects when creating participants.
+
+A retry reuses a participant only when the supplied identities match within
+the same conversation. Different people may share the same participantRole.
+Conflicting identities return 409 ProblemDetails; missing identities return
+400 ProblemDetails. Database failures are not reported as an empty list or
+a misleading duplicate-name error.
+
+Deployment: apply migration
+20261009000100_AddConversationParticipantIdentityUniqueness before relying on
+concurrent retry protection. It adds filtered unique indexes for the pairs
+(ConversationID, UserID), (ConversationID, TenantID), and
+(ConversationID, OrganizationMemberID). It does not delete or merge data.
+Check each identity for duplicate non-null values within a conversation first:
+  SELECT ConversationID, TenantID, COUNT(*) AS DuplicateCount
+  FROM ConversationParticipants WHERE TenantID IS NOT NULL
+  GROUP BY ConversationID, TenantID HAVING COUNT(*) > 1;
+Repeat for UserID and OrganizationMemberID. Resolve any duplicates explicitly
+before migrating; do not delete participant history automatically.
+Development startup applies migrations automatically, so perform this check
+before restarting the development API. Restart/redeploy the API after building
+the updated backend to load the new service and Swagger response definitions.
+
+The client pages through conversation, participant, and message lists and
+repairs a missing application card when retrying partial setup. The unique
+indexes guard participant identity only: conversation creation and message
+seeding across separate clients are not an atomic application-thread operation.
 
 1. CONCEPT OVERVIEW
 --------------------------------------------------------------------------------
@@ -33,7 +70,7 @@ BUSINESS RULES
   - Deletes are soft-deletes (message disappears from the thread).
   - On every new message, notification emails are queued to the tenant and to
     all active organization members EXCEPT the sender. (No frontend action
-    needed — handled by the backend.)
+    needed ï¿½ handled by the backend.)
 
 
 2. IDENTIFIERS THE FRONTEND MUST SUPPLY (THE "ACTOR")
@@ -102,7 +139,7 @@ Request body (SendMessageRequest):
     "messageType": "TEXT",                 // default "TEXT"
     "replyToMessageID": null,              // optional GUID to reply to a message
 
-    // sender — populate the ONE that matches context:
+    // sender ï¿½ populate the ONE that matches context:
     "senderTenantID": "e2b9...guid",       // tenant sending
     "senderOrganizationMemberID": null,    // OR host member sending
     "senderUserID": 1024                   // optional app user id

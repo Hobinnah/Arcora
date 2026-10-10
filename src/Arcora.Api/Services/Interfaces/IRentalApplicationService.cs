@@ -13,6 +13,7 @@ namespace Arcora.Api.Services.Interfaces
         /// <returns></returns>
         Task<PagedResult<RentalApplicationDto>> GetAll(Paging paging);
         Task<PagedResult<RentalApplicationDto>> GetAllForActor(Paging paging, long actorUserID, bool isAdmin);
+        Task<PagedResult<RentalApplicationDto>> GetAllForOrganizationForActor(Paging paging, Guid organizationID, long actorUserID, bool isAdmin);
         /// <summary>
         /// Retrieves a rental application by its ID.
         /// </summary>

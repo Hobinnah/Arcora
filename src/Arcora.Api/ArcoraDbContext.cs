@@ -187,6 +187,13 @@ namespace Arcora.Api
 
             builder.Entity<InspectionReview>()
                 .HasIndex(x => new { x.InspectionID, x.ReviewedAt });
+            var participant = builder.Entity<ConversationParticipant>();
+            participant.HasIndex(x => new { x.ConversationID, x.UserID })
+                .IsUnique().HasFilter("[UserID] IS NOT NULL");
+            participant.HasIndex(x => new { x.ConversationID, x.TenantID })
+                .IsUnique().HasFilter("[TenantID] IS NOT NULL");
+            participant.HasIndex(x => new { x.ConversationID, x.OrganizationMemberID })
+                .IsUnique().HasFilter("[OrganizationMemberID] IS NOT NULL");
             // You can seed the tables in your database, after this commented line, 
         }
     }

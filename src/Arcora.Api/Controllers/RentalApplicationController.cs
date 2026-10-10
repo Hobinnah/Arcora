@@ -25,6 +25,35 @@ namespace Arcora.Api.Controllers
             return Ok(await rentalapplicationService.GetAllForActor(paging, actorUserID, isAdmin));
         }
 
+        [Authorize(Roles = "Viewer, User, LandLord, Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [HttpGet("by-organization", Name = "GetRentalApplicationsByOrganization")]
+        public async Task<IActionResult> GetByOrganization(
+            [FromServices] IRentalApplicationService rentalapplicationService,
+            [FromQuery] Guid organizationID,
+            [FromQuery] Paging paging)
+        {
+            if (!TryGetActorUserId(out var actorUserID))
+                return Unauthorized(new { message = "Authenticated user context is invalid." });
+
+            try
+            {
+                var result = await rentalapplicationService.GetAllForOrganizationForActor(
+                    paging, organizationID, actorUserID, User.IsInRole("Admin"));
+
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         // GET api/<RentalApplicationController>/5
         [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]

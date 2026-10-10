@@ -47,12 +47,8 @@ namespace Arcora.Api.Services.Implementations
             }
             catch (Exception er)
             {
-                logger.LogError(er, "An error occurred while fetching ConversationMessage by ID. Timestamp: {Timestamp}", DateTime.UtcNow);
-                return new PagedResult<ConversationMessageDto>
-                {
-                    Data = new List<ConversationMessageDto>(),
-                    TotalCount = 0
-                };
+                logger.LogError(er, "An error occurred while fetching conversation messages. Timestamp: {Timestamp}", DateTime.UtcNow);
+                throw;
             }
 
             IEnumerable<ConversationMessage> filteredEntities = entities!;

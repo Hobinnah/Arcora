@@ -33,6 +33,7 @@ namespace Arcora.Api.Services.Implementations
         private readonly ITenantGuarantorService tenantGuarantorService;
         private readonly ITenantRepository tenantRepository;
         private readonly IListingPhotoRepository listingPhotoRepository;
+        private readonly IFileStorageService fileStorageService;
         private readonly IOrganizationMemberRepository organizationMemberRepository;
         private readonly IPreferenceService preferenceService;
         private readonly IConfiguration configuration;
@@ -40,7 +41,7 @@ namespace Arcora.Api.Services.Implementations
         private readonly Arcora.Api.Email.IEmailQueue? emailQueue;
         private readonly IOptions<CacheConfiguration> _options;
         private readonly ArcoraDbContext dbContext;
-        public RentalApplicationService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<RentalApplicationService> logger, IRentalApplicationRepository rentalapplicationRepository, IRentCollectionOrchestrator rentCollectionOrchestrator, IListingRepository listingRepository, IFeeRepository feeRepository, ISecurityDepositRepository securityDepositRepository, ILeaseRepository leaseRepository, ITenancyTypeRepository tenancyTypeRepository, IApplicationOccupantRepository applicationOccupantRepository, ILeaseDocumentsRepository leaseDocumentsRepository, ITenantGuarantorService tenantGuarantorService, ITenantRepository tenantRepository, IListingPhotoRepository listingPhotoRepository, IOrganizationMemberRepository organizationMemberRepository, IPreferenceService preferenceService, IConfiguration configuration, ArcoraDbContext dbContext, IEmailSender? emailSender = null, Arcora.Api.Email.IEmailQueue? emailQueue = null)
+        public RentalApplicationService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<RentalApplicationService> logger, IRentalApplicationRepository rentalapplicationRepository, IRentCollectionOrchestrator rentCollectionOrchestrator, IListingRepository listingRepository, IFeeRepository feeRepository, ISecurityDepositRepository securityDepositRepository, ILeaseRepository leaseRepository, ITenancyTypeRepository tenancyTypeRepository, IApplicationOccupantRepository applicationOccupantRepository, ILeaseDocumentsRepository leaseDocumentsRepository, ITenantGuarantorService tenantGuarantorService, ITenantRepository tenantRepository, IListingPhotoRepository listingPhotoRepository, IFileStorageService fileStorageService, IOrganizationMemberRepository organizationMemberRepository, IPreferenceService preferenceService, IConfiguration configuration, ArcoraDbContext dbContext, IEmailSender? emailSender = null, Arcora.Api.Email.IEmailQueue? emailQueue = null)
         {
             this.cache = cache;
             this.logger = logger;
@@ -57,6 +58,7 @@ namespace Arcora.Api.Services.Implementations
             this.tenantGuarantorService = tenantGuarantorService;
             this.tenantRepository = tenantRepository;
             this.listingPhotoRepository = listingPhotoRepository;
+            this.fileStorageService = fileStorageService;
             this.organizationMemberRepository = organizationMemberRepository;
             this.preferenceService = preferenceService;
             this.configuration = configuration;
@@ -378,7 +380,7 @@ namespace Arcora.Api.Services.Implementations
                 var (companyName, companyEmail) = await GetCompanyInfoAsync();
                 var brand = string.IsNullOrWhiteSpace(companyName) ? "Arcora" : companyName;
                 var frontendUrl = (configuration["FrontendUrl"] ?? string.Empty).TrimEnd('/');
-
+               
                 // Resolve the tenant (with User for name/email).
                 var tenant = await tenantRepository.GetByID(application.TenantID);
                 if (tenant != null)
@@ -938,6 +940,46 @@ namespace Arcora.Api.Services.Implementations
             var pageNumber = paging?.PageNumber > 0 ? paging.PageNumber : 1;
 
             var query = await BuildScopedRentalApplicationQueryAsync(actorUserID, isAdmin);
+            query = ApplyMaterializationSafetyFilter(query);
+
+            if (!string.IsNullOrWhiteSpace(paging?.Search))
+            {
+                query = query.Where(x => x.ApplicationCode != null && x.ApplicationCode.Contains(paging.Search));
+            }
+
+            var totalCount = await query.CountAsync();
+            var entities = await query
+                .OrderByDescending(x => x.CapturedDate ?? DateTime.MinValue)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return new PagedResult<RentalApplicationDto>
+            {
+                Data = mapper.Map<IEnumerable<RentalApplicationDto>>(entities),
+                TotalCount = totalCount
+            };
+        }
+
+        public async Task<PagedResult<RentalApplicationDto>> GetAllForOrganizationForActor(Paging paging, Guid organizationID, long actorUserID, bool isAdmin)
+        {
+            if (organizationID == Guid.Empty)
+                throw new ArgumentException("organizationID is required.", nameof(organizationID));
+
+            if (!isAdmin)
+            {
+                var canManage = await InvitationAuthorization.CanManageAsync(dbContext, organizationID, actorUserID);
+                if (!canManage)
+                    throw new UnauthorizedAccessException("You are not authorized to access applications for this organization.");
+            }
+
+            var pageSize = paging?.PageSize > 0 ? paging.PageSize : 20;
+            var pageNumber = paging?.PageNumber > 0 ? paging.PageNumber : 1;
+
+            IQueryable<RentalApplication> query = dbContext.RentalApplications
+                .AsNoTracking()
+                .Where(x => x.OrganizationID == organizationID);
+            query = ApplyMaterializationSafetyFilter(query);
 
             if (!string.IsNullOrWhiteSpace(paging?.Search))
             {
@@ -961,8 +1003,43 @@ namespace Arcora.Api.Services.Implementations
         public async Task<RentalApplicationDto?> GetIDForActor(Guid ID, long actorUserID, bool isAdmin)
         {
             var query = await BuildScopedRentalApplicationQueryAsync(actorUserID, isAdmin);
+            query = ApplyMaterializationSafetyFilter(query);
             var entity = await query.FirstOrDefaultAsync(x => x.RentalApplicationID == ID);
-            return entity == null ? null : mapper.Map<RentalApplicationDto>(entity);
+            if (entity == null)
+                return null;
+
+            if (entity.Listing is not null)
+            {
+                var photos = await dbContext.ListingPhotos
+                    .AsNoTracking()
+                    .Where(p => p.ListingID == entity.ListingID
+                        && p.Url != string.Empty
+                        && p.StorageProvider != string.Empty
+                        && p.StorageReference != string.Empty)
+                    .OrderBy(p => p.DisplayOrder)
+                    .ToListAsync();
+
+                foreach (var photo in photos)
+                {
+                    if (string.IsNullOrWhiteSpace(photo.StorageReference))
+                        continue;
+
+                    try
+                    {
+                        var sasUrl = await fileStorageService.GetReadSasUrlAsync(StorageCategory.Image, photo.StorageReference);
+                        if (!string.IsNullOrWhiteSpace(sasUrl))
+                            photo.Url = sasUrl;
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to generate read SAS URL for ListingPhoto {ListingPhotoID}. Timestamp: {Timestamp}", photo.ListingPhotoID, DateTime.UtcNow);
+                    }
+                }
+
+                entity.Listing.ListingPhotos = photos;
+            }
+
+            return mapper.Map<RentalApplicationDto>(entity);
         }
 
         public async Task<RentalApplicationDto?> UpdateRentalApplicationStatusForActor(Guid id, string status, long actorUserID, bool isAdmin)
@@ -1012,7 +1089,7 @@ namespace Arcora.Api.Services.Implementations
         {
             var query = dbContext.RentalApplications
                 .AsNoTracking()
-                .Include(x => x.Listing)!.ThenInclude(l => l!.ListingPhotos)
+                .Include(x => x.Listing)
                 .Include(x => x.Tenant)!.ThenInclude(t => t!.User)
                 .Include(x => x.Organization)
                 .Include(x => x.ReviewedByOrganizationMember)
@@ -1047,6 +1124,17 @@ namespace Arcora.Api.Services.Implementations
                 .ToListAsync();
 
             return query.Where(x => managedOrgIds.Contains(x.OrganizationID) || tenantIds.Contains(x.TenantID));
+        }
+
+        private static IQueryable<RentalApplication> ApplyMaterializationSafetyFilter(IQueryable<RentalApplication> query)
+        {
+            return query.Where(x =>
+                x.ApplicationCode != null &&
+                x.Currency != null &&
+                x.Status != null &&
+                x.ScreeningStatus != null &&
+                x.DesiredMoveInDate != default &&
+                x.RequestedLeaseTermMonths > 0);
         }
 
         private static decimal ResolveMonthlyRentWithDiscount(Listing listing, RentalApplication application)

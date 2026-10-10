@@ -1085,6 +1085,18 @@ namespace Arcora.Api.Migrations
 
                     b.HasIndex("UserID");
 
+                    b.HasIndex("ConversationID", "OrganizationMemberID")
+                        .IsUnique()
+                        .HasFilter("[OrganizationMemberID] IS NOT NULL");
+
+                    b.HasIndex("ConversationID", "TenantID")
+                        .IsUnique()
+                        .HasFilter("[TenantID] IS NOT NULL");
+
+                    b.HasIndex("ConversationID", "UserID")
+                        .IsUnique()
+                        .HasFilter("[UserID] IS NOT NULL");
+
                     b.ToTable("ConversationParticipants");
                 });
 
