@@ -18,7 +18,10 @@ namespace Arcora.Api
         }
 
         /// <inheritdoc/>
-        public async Task SendEmailAsync(string to, string subject, string htmlBody)
+        public Task SendEmailAsync(string to, string subject, string htmlBody) =>
+            SendEmailAsync(to, subject, htmlBody, CancellationToken.None);
+
+        public async Task SendEmailAsync(string to, string subject, string htmlBody, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(_settings.SmtpHost))
             {
@@ -41,7 +44,7 @@ namespace Arcora.Api
                 Credentials = new NetworkCredential(_settings.Username, _settings.Password)
             };
 
-            await client.SendMailAsync(message);
+            await client.SendMailAsync(message, cancellationToken);
             _logger.LogInformation("Email sent successfully to {Recipient} with subject '{Subject}'.", to, subject);
         }
     }

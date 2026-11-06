@@ -12,8 +12,9 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -22,7 +23,8 @@ namespace Arcora.Api.Tests;
 public sealed class ConversationParticipantTests : IAsyncLifetime
 {
     private readonly SqliteConnection connection = new("Data Source=:memory:;Foreign Keys=False");
-    private readonly MemoryCache cache = new(new MemoryCacheOptions());
+    private readonly ServiceProvider cacheProvider = CreateCacheProvider();
+    private HybridCache cache = null!;
     private ArcoraDbContext db = null!;
     private ConversationParticipantService service = null!;
     private IMapper mapper = null!;
@@ -30,6 +32,7 @@ public sealed class ConversationParticipantTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await connection.OpenAsync();
+        cache = cacheProvider.GetRequiredService<HybridCache>();
         db = new TestContext(new DbContextOptionsBuilder<ArcoraDbContext>().UseSqlite(connection).Options,
             new ConfigurationBuilder().Build());
         await db.Database.EnsureCreatedAsync();
@@ -41,7 +44,7 @@ public sealed class ConversationParticipantTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        cache.Dispose();
+        await cacheProvider.DisposeAsync();
         await db.DisposeAsync();
         await connection.DisposeAsync();
     }
@@ -254,6 +257,15 @@ public sealed class ConversationParticipantTests : IAsyncLifetime
             }
             return result;
         }
+    }
+
+    private static ServiceProvider CreateCacheProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddMemoryCache();
+        services.AddHybridCache();
+        return services.BuildServiceProvider();
     }
 
     private sealed class TestContext(DbContextOptions<ArcoraDbContext> options, IConfiguration configuration)

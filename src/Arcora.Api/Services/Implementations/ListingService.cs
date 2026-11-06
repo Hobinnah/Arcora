@@ -8,7 +8,7 @@ using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Security.Cryptography.Xml;
@@ -18,7 +18,7 @@ namespace Arcora.Api.Services.Implementations
     public class ListingService : IListingService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<ListingService> logger;
         private readonly IListingRepository listingRepository;
         private readonly IRatingRepository ratingRepository;
@@ -36,7 +36,7 @@ namespace Arcora.Api.Services.Implementations
         private static readonly string[] NonBlockingHoldStatuses = ArcoraDbContext.NonBlockingHoldStatuses;
         private static readonly string[] NonBlockingEventStatuses = ArcoraDbContext.NonBlockingCalendarEventStatuses;
 
-        public ListingService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<ListingService> logger, IListingRepository listingRepository, IRatingRepository ratingRepository,
+        public ListingService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<ListingService> logger, IListingRepository listingRepository, IRatingRepository ratingRepository,
             IAddressService addressService, IPropertyService propertyService, IRentalUnitService rentalUnitService, IUnitTypeService unitTypeService, IListingTypeService listingTypeService,
             IAmenityCatalogService amenityCatalogService, IListingAmenityService listingAmenityService, IListingPhotoService listingPhotoService, ArcoraDbContext dbContext)
         {
@@ -473,10 +473,16 @@ namespace Arcora.Api.Services.Implementations
                 };
             }
 
-            IEnumerable<Listing> filteredEntities = entities!;
+            IEnumerable<Listing> filteredEntities = entities!.Where(x => IsMarketplaceVisible(x.Status));
+            if (!string.IsNullOrWhiteSpace(paging?.Status))
+            {
+                filteredEntities = paging.Status.Equals("PUBLISHED", StringComparison.OrdinalIgnoreCase)
+                    ? filteredEntities.Where(x => IsMarketplaceVisible(x.Status))
+                    : filteredEntities.Where(x => string.Equals(x.Status, paging.Status, StringComparison.OrdinalIgnoreCase));
+            }
             if (!string.IsNullOrEmpty(paging?.Search))
             {
-                filteredEntities = entities!.Where(x => !string.IsNullOrEmpty(x.Title) && x.Title.Contains(paging.Search, StringComparison.OrdinalIgnoreCase));
+                filteredEntities = filteredEntities.Where(x => !string.IsNullOrEmpty(x.Title) && x.Title.Contains(paging.Search, StringComparison.OrdinalIgnoreCase));
             }
 
             int totalCount = filteredEntities.Count();
@@ -503,6 +509,12 @@ namespace Arcora.Api.Services.Implementations
                     filteredEntities = filteredEntities.Where(x =>
                         !string.IsNullOrWhiteSpace(x.Title) &&
                         x.Title.Contains(paging.Search, StringComparison.OrdinalIgnoreCase));
+                }
+                if (!string.IsNullOrWhiteSpace(paging?.Status))
+                {
+                    filteredEntities = paging.Status.Equals("PUBLISHED", StringComparison.OrdinalIgnoreCase)
+                        ? filteredEntities.Where(x => IsMarketplaceVisible(x.Status))
+                        : filteredEntities.Where(x => string.Equals(x.Status, paging.Status, StringComparison.OrdinalIgnoreCase));
                 }
 
                 var totalCount = filteredEntities.Count();
@@ -566,11 +578,7 @@ namespace Arcora.Api.Services.Implementations
             catch (Exception er)
             {
                 logger.LogError(er, "An error occurred while searching Listings. Timestamp: {Timestamp}", DateTime.UtcNow);
-                return new PagedResult<ListingDto>
-                {
-                    Data = new List<ListingDto>(),
-                    TotalCount = 0
-                };
+                throw;
             }
         }
 
@@ -696,6 +704,12 @@ namespace Arcora.Api.Services.Implementations
             return startA < endB && endA > startB;
         }
 
+        private static bool IsMarketplaceVisible(string? status)
+        {
+            return string.Equals(status, "APPROVED", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(status, "PUBLISHED", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static ListingLeaseTermOptionDto ResolveLeaseTermOption(Listing listing, short leaseTermMonths, DateTime effectiveDate)
         {
             var activeTermPrice = listing.ListingTermPrices?
@@ -794,7 +808,7 @@ namespace Arcora.Api.Services.Implementations
                 .Include(l => l.ListingTermPrices)
                 .Where(l => l.OrganizationID == organizationId
                     && l.Status != null
-                    && l.Status.ToUpper() == "PUBLISHED"
+                    && (l.Status.ToUpper() == "APPROVED" || l.Status.ToUpper() == "PUBLISHED")
                     && l.MinimumLeaseMonths <= leaseTermMonths
                     && l.MaximumLeaseMonths >= leaseTermMonths
                     && (!l.AvailableFrom.HasValue || l.AvailableFrom.Value.Date <= requestedStart)

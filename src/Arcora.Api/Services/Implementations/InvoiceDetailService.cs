@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class InvoiceDetailService : IInvoiceDetailService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<InvoiceDetailService> logger;
         private readonly IInvoiceDetailRepository invoicedetailRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public InvoiceDetailService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<InvoiceDetailService> logger, IInvoiceDetailRepository invoicedetailRepository)
+        public InvoiceDetailService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<InvoiceDetailService> logger, IInvoiceDetailRepository invoicedetailRepository)
         {
             this.cache = cache;
             this.logger = logger;

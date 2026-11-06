@@ -24,6 +24,7 @@ public static class AccountPhoneNormalizationPreflight
 
         var users = await db.Users
             .Where(user => user.PhoneNumber != null)
+            .Select(user => new { user.Id, user.PhoneNumber })
             .ToListAsync(cancellationToken);
         var normalizedByUserId = new Dictionary<long, string>();
         var invalidAccountIds = new List<long>();
@@ -63,11 +64,11 @@ public static class AccountPhoneNormalizationPreflight
             if (string.Equals(user.PhoneNumber, normalized, StringComparison.Ordinal))
                 continue;
 
-            user.PhoneNumber = normalized;
+            await db.Users.Where(account => account.Id == user.Id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(account => account.PhoneNumber, normalized), cancellationToken);
             updatedCount++;
         }
 
-        await db.SaveChangesAsync(cancellationToken);
         if (db.Database.IsSqlServer())
         {
             await db.Database.ExecuteSqlRawAsync(

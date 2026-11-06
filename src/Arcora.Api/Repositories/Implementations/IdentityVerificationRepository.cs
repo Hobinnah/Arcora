@@ -18,6 +18,12 @@ namespace Arcora.Api.Repositories.Implementations
             return await ApplyDefaultOrder(this.context.IdentityVerifications.AsNoTracking().Include(x => x.User)).ToListAsync();
         }
 
+        public async Task<List<IdentityVerification>> GetByUserIDAsync(long userID)
+        {
+            return await ApplyDefaultOrder(this.context.IdentityVerifications.AsNoTracking()
+                .Where(verification => verification.UserID == userID)).ToListAsync();
+        }
+
         public async Task<bool> HasIdentityVerificationsAsync()
         {
             return await this.context.Set<IdentityVerification>().AnyAsync();

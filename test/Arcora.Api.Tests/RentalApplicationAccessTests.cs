@@ -6,8 +6,9 @@ using Arcora.Api.Services.Implementations;
 using AutoMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -16,6 +17,7 @@ namespace Arcora.Api.Tests;
 public sealed class RentalApplicationAccessTests : IAsyncLifetime
 {
     private readonly SqliteConnection connection = new("Data Source=:memory:;Foreign Keys=False");
+    private readonly ServiceProvider cacheProvider = CreateCacheProvider();
     private ArcoraDbContext db = null!;
     private RentalApplicationService service = null!;
     private readonly Guid organizationID = Guid.NewGuid();
@@ -49,7 +51,7 @@ public sealed class RentalApplicationAccessTests : IAsyncLifetime
             NullLoggerFactory.Instance).CreateMapper();
         service = new RentalApplicationService(
             mapper,
-            new MemoryCache(new MemoryCacheOptions()),
+            cacheProvider.GetRequiredService<HybridCache>(),
             Options.Create(new CacheConfiguration()),
             NullLogger<RentalApplicationService>.Instance,
             null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
@@ -60,6 +62,7 @@ public sealed class RentalApplicationAccessTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
+        await cacheProvider.DisposeAsync();
         await db.DisposeAsync();
         await connection.DisposeAsync();
     }
@@ -112,6 +115,15 @@ public sealed class RentalApplicationAccessTests : IAsyncLifetime
                 isAdmin: false));
 
         Assert.Equal("SUBMITTED", (await db.RentalApplications.SingleAsync()).Status);
+    }
+
+    private static ServiceProvider CreateCacheProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddMemoryCache();
+        services.AddHybridCache();
+        return services.BuildServiceProvider();
     }
 
     private sealed class TestContext(DbContextOptions<ArcoraDbContext> options, IConfiguration configuration)

@@ -59,6 +59,9 @@ namespace Arcora.Api
           public virtual DbSet<PaymentIntent> PaymentIntents { get; set; }
           public virtual DbSet<PaymentAttempt> PaymentAttempts { get; set; }
           public virtual DbSet<Payment> Payments { get; set; }
+          public virtual DbSet<RentPaymentAccounting> RentPaymentAccountings { get; set; }
+          public virtual DbSet<RentDisbursement> RentDisbursements { get; set; }
+          public virtual DbSet<OperationsIncident> OperationsIncidents { get; set; }
           public virtual DbSet<Chargeback> ChargeBacks { get; set; }
           public virtual DbSet<PaymentProviderEvent> PaymentProviderEvents { get; set; }
           public virtual DbSet<Refund> Refunds { get; set; }
@@ -81,6 +84,8 @@ namespace Arcora.Api
           public virtual DbSet<Conversation> Conversations { get; set; }
           public virtual DbSet<ConversationParticipant> ConversationParticipants { get; set; }
           public virtual DbSet<ConversationMessage> ConversationMessages { get; set; }
+          public virtual DbSet<ConversationMessageReaction> ConversationMessageReactions { get; set; }
+          public virtual DbSet<ConversationNote> ConversationNotes { get; set; }
           public virtual DbSet<Rating> Ratings { get; set; }
           public virtual DbSet<FraudCase> FraudCases { get; set; }
           public virtual DbSet<IdentityVerification> IdentityVerifications { get; set; }
@@ -130,6 +135,7 @@ namespace Arcora.Api
             })
                 invitation.Property(name).Metadata.SetAfterSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Throw);
             builder.Entity<User>().Property(user => user.PhoneNumber).HasMaxLength(16);
+            builder.Entity<User>().Property(user => user.SmsCode).HasMaxLength(10);
             builder.Entity<User>().HasIndex(user => user.PhoneNumber)
                 .IsUnique().HasFilter("[PhoneNumber] IS NOT NULL");
             builder.Entity<TenantInvitationEmail>()
@@ -175,15 +181,68 @@ namespace Arcora.Api
                 .IsUnique()
                 .HasFilter("[Status] = 'ACTIVE'");
 
+            builder.Entity<IdentityVerification>()
+                .HasIndex(x => new { x.UserID, x.ProviderName, x.VerificationType })
+                .IsUnique()
+                .HasFilter("[ProviderName] IS NOT NULL AND [VerificationType] IS NOT NULL AND [Status] IN ('NOT_STARTED','PENDING','SUBMITTED','UNDER_REVIEW')");
+
             builder.Entity<Inspection>()
                 .HasIndex(x => new { x.LeaseID, x.InspectionType })
                 .IsUnique()
                 .HasFilter("[LeaseID] IS NOT NULL AND [InspectionType] = 'MOVE_IN'");
+            builder.Entity<Inspection>()
+                .HasIndex(x => x.LeaseID)
+                .IsUnique()
+                .HasFilter("[LeaseID] IS NOT NULL AND [InspectionType] = 'TENANT_MOVE_OUT'")
+                .HasDatabaseName("IX_Inspections_LeaseID_TenantMoveOut");
+
+            builder.Entity<PaymentIntent>()
+                .HasIndex(x => x.IdempotencyKey)
+                .IsUnique();
+
+            var rentAccounting = builder.Entity<RentPaymentAccounting>();
+            builder.Entity<OperationsIncident>().HasIndex(x => new { x.InstanceId, x.CheckId })
+                .IsUnique().HasFilter("[ResolvedAt] IS NULL");
+            builder.Entity<RentDisbursement>().Property(x => x.Amount).HasPrecision(18, 2);
+            builder.Entity<RentDisbursement>().Property(x => x.CollectedAmount).HasPrecision(18, 2);
+            builder.Entity<RentDisbursement>().HasOne<Payment>().WithOne()
+                .HasForeignKey<RentDisbursement>(x => x.PaymentID).OnDelete(DeleteBehavior.Restrict);
+            builder.Entity<RentDisbursement>().HasOne<Payout>().WithOne()
+                .HasForeignKey<RentDisbursement>(x => x.PayoutID).OnDelete(DeleteBehavior.Restrict);
+            rentAccounting.HasOne(x => x.PaymentIntent).WithOne()
+                .HasForeignKey<RentPaymentAccounting>(x => x.PaymentIntentID).OnDelete(DeleteBehavior.Restrict);
+            rentAccounting.HasOne(x => x.Payment).WithMany()
+                .HasForeignKey(x => x.PaymentID).OnDelete(DeleteBehavior.Restrict);
+            rentAccounting.HasIndex(x => x.PaymentID).IsUnique().HasFilter("[PaymentID] IS NOT NULL");
+            rentAccounting.HasIndex(x => x.LeaseID).IsUnique()
+                .HasFilter("[SettledAt] IS NOT NULL AND [HostPlacementFee] > 0")
+                .HasDatabaseName("IX_RentPaymentAccountings_PlacementOnce");
+            rentAccounting.HasIndex(x => new { x.RentalUnitID, x.RentPeriod }).IsUnique()
+                .HasFilter("[SettledAt] IS NOT NULL AND [HostMonthlyFee] > 0")
+                .HasDatabaseName("IX_RentPaymentAccountings_MonthlyOnce");
+            foreach (var property in rentAccounting.Metadata.GetProperties()
+                .Where(x => x.ClrType == typeof(decimal)))
+                rentAccounting.Property<decimal>(property.Name).HasPrecision(18, 2);
+
+            builder.Entity<PaymentProviderEvent>()
+                .HasIndex(x => new { x.ProviderName, x.ProviderEventID })
+                .IsUnique()
+                .HasFilter("[ProviderName] = 'INTERNAL_SECURITY_DEPOSIT'")
+                .HasDatabaseName("IX_PaymentProviderEvents_InternalSecurityDeposit_Idempotency");
 
             builder.Entity<Attachment>()
                 .HasIndex(x => new { x.EntityType, x.EntityID, x.ClientUploadID })
                 .IsUnique()
                 .HasFilter("[ClientUploadID] IS NOT NULL");
+
+            builder.Entity<Conversation>()
+                .HasOne(x => x.Listing).WithMany()
+                .HasForeignKey(x => x.ListingID).OnDelete(DeleteBehavior.NoAction);
+            builder.Entity<Conversation>()
+                .HasIndex(x => new { x.TenantID, x.OrganizationID, x.ListingID })
+                .IsUnique()
+                .HasFilter("[ConversationType] = 'DIRECT' AND [TenantID] IS NOT NULL AND [OrganizationID] IS NOT NULL AND [ListingID] IS NOT NULL")
+                .HasDatabaseName("IX_Conversations_DirectTenantOrganizationListing");
 
             builder.Entity<InspectionReview>()
                 .HasIndex(x => new { x.InspectionID, x.ReviewedAt });
@@ -194,6 +253,14 @@ namespace Arcora.Api
                 .IsUnique().HasFilter("[TenantID] IS NOT NULL");
             participant.HasIndex(x => new { x.ConversationID, x.OrganizationMemberID })
                 .IsUnique().HasFilter("[OrganizationMemberID] IS NOT NULL");
+            builder.Entity<ConversationNote>().HasIndex(x => x.ConversationID).IsUnique();
+            var reaction = builder.Entity<ConversationMessageReaction>();
+            reaction.HasIndex(x => new { x.ConversationMessageID, x.ReactorTenantID })
+                .IsUnique().HasFilter("[ReactorTenantID] IS NOT NULL");
+            reaction.HasIndex(x => new { x.ConversationMessageID, x.ReactorOrganizationMemberID })
+                .IsUnique().HasFilter("[ReactorOrganizationMemberID] IS NOT NULL");
+            reaction.ToTable(table => table.HasCheckConstraint("CK_ConversationMessageReactions_SingleReactor",
+                "([ReactorTenantID] IS NULL AND [ReactorOrganizationMemberID] IS NOT NULL) OR ([ReactorTenantID] IS NOT NULL AND [ReactorOrganizationMemberID] IS NULL)"));
             // You can seed the tables in your database, after this commented line, 
         }
     }

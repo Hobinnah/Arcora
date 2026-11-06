@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class AmenityCatalogService : IAmenityCatalogService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<AmenityCatalogService> logger;
         private readonly IAmenityCatalogRepository amenitycatalogRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public AmenityCatalogService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<AmenityCatalogService> logger, IAmenityCatalogRepository amenitycatalogRepository)
+        public AmenityCatalogService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<AmenityCatalogService> logger, IAmenityCatalogRepository amenitycatalogRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,16 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<AmenityCatalog> entities;
             try
             {
-                entities = cache.Get<IEnumerable<AmenityCatalog>>(Cache.AMENITYCATALOGS.ToString()) ?? new List<AmenityCatalog>();
-                if (entities == null || !entities.Any())
+                var cacheOptions = new HybridCacheEntryOptions
                 {
-                    entities = (await this.amenitycatalogRepository.GetAll())?.Where(x => x != null).Cast<AmenityCatalog>().ToList() ?? new List<AmenityCatalog>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<AmenityCatalog>>(Cache.AMENITYCATALOGS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                    Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes)
+                };
+
+                entities = await cache.GetOrCreateAsync(
+                    Cache.AMENITYCATALOGS.ToString(),
+                    async cancel =>
+                        (await this.amenitycatalogRepository.GetAll())?.Where(x => x != null).Cast<AmenityCatalog>().ToList() ?? new List<AmenityCatalog>(),
+                    cacheOptions);
             }
             catch (Exception er)
             {
@@ -76,16 +79,18 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<AmenityCatalog> entities = cache.Get<IEnumerable<AmenityCatalog>>(Cache.AMENITYCATALOGS.ToString()) ?? new List<AmenityCatalog>();
-                AmenityCatalog? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.AmenityID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.AMENITYCATALOGS.ToString(),
+                    async cancel =>
+                        (await this.amenitycatalogRepository.GetAll())?.Where(x => x != null).Cast<AmenityCatalog>().ToList() ?? new List<AmenityCatalog>(),
+                    new HybridCacheEntryOptions
+                    {
+                        Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes)
+                    });
+
+                var match = entities.FirstOrDefault(x => x.AmenityID == ID);
+                if (match == null)
                     match = await this.amenitycatalogRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<AmenityCatalogDto>(match);
             }
@@ -112,7 +117,7 @@ namespace Arcora.Api.Services.Implementations
                     amenityCatalog.CapturedDate = DateTime.UtcNow;
                     amenityCatalog = await amenitycatalogRepository.Create(amenityCatalog) ?? new AmenityCatalog();
                     await amenitycatalogRepository.Save();
-                    cache.Remove(Cache.AMENITYCATALOGS.ToString());
+                    await cache.RemoveAsync(Cache.AMENITYCATALOGS.ToString());
                 }
             }
             catch (Exception er)
@@ -135,7 +140,7 @@ namespace Arcora.Api.Services.Implementations
                 AmenityCatalog amenityCatalog = this.mapper.Map<AmenityCatalog>(amenitycatalogDto);
                 amenityCatalog = await amenitycatalogRepository.Update(amenityCatalog) ?? new AmenityCatalog();
                 await amenitycatalogRepository.Save();
-                cache.Remove(Cache.AMENITYCATALOGS.ToString());
+                await cache.RemoveAsync(Cache.AMENITYCATALOGS.ToString());
                 amenitycatalogDto = this.mapper.Map<AmenityCatalogDto>(amenityCatalog);
             }
             catch (Exception er)
@@ -157,7 +162,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("AmenityCatalog with the specified ID was not found.");
                 await amenitycatalogRepository.Delete(amenityCatalog);
                 await amenitycatalogRepository.Save();
-                cache.Remove(Cache.AMENITYCATALOGS.ToString());
+                await cache.RemoveAsync(Cache.AMENITYCATALOGS.ToString());
             }
             catch (Exception er)
             {

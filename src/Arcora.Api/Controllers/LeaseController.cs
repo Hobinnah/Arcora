@@ -4,6 +4,7 @@ using Arcora.Api.Models;
 using Arcora.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Arcora.Api.Services.Implementations;
 
 namespace Arcora.Api.Controllers
 {
@@ -38,8 +39,11 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateLease")]
-        public async Task<IActionResult> CreateLease([FromServices] ILeaseService leaseService, [FromBody] LeaseDto leaseDto)
+        public async Task<IActionResult> CreateLease([FromServices] ILeaseService leaseService,
+            [FromServices] PropertyLocationAccess access, [FromBody] LeaseDto leaseDto)
         {
+            if (!await access.CanManageOrganizationAsync(User, leaseDto.OrganizationID, HttpContext.RequestAborted) ||
+                (!User.IsInRole("Admin") && leaseDto.Status != "DRAFT")) return Forbid();
             // var displayName = User.Identity?.Name ?? string.Empty;
             // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
             var result = await leaseService.CreateLease(leaseDto);
@@ -53,8 +57,15 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateLease")]
-        public async Task<IActionResult> UpdateLease([FromServices] ILeaseService leaseService, Guid id, [FromBody] LeaseDto leaseDto)
+        public async Task<IActionResult> UpdateLease([FromServices] ILeaseService leaseService,
+            [FromServices] PropertyLocationAccess access, Guid id, [FromBody] LeaseDto leaseDto)
         {
+            var existing = await leaseService.GetID(id);
+            if (existing == null) return NotFound(new { message = "Lease was not found." });
+            if (!await access.CanManageOrganizationAsync(User, existing.OrganizationID, HttpContext.RequestAborted) ||
+                (!User.IsInRole("Admin") && (leaseDto.Status != existing.Status || leaseDto.TenantID != existing.TenantID ||
+                    leaseDto.ListingID != existing.ListingID || leaseDto.RentalUnitID != existing.RentalUnitID ||
+                    leaseDto.OrganizationID != existing.OrganizationID))) return Forbid();
             // var displayName = User.Identity?.Name ?? string.Empty;
             // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
             var result = await leaseService.UpdateLease(id, leaseDto);
@@ -82,7 +93,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST: api/lease/{id}/{status}
-        [Authorize(Roles = "User, LandLord, Admin")]
+        [Authorize(Roles = "Admin")]
         [HttpPost("{id}/{status}", Name = "UpdateLeaseStatus")]
         public async Task<ActionResult> UpdateLeaseStatus([FromServices] ILeaseService leaseService, [FromRoute] Guid id, [FromRoute] string status)
         {

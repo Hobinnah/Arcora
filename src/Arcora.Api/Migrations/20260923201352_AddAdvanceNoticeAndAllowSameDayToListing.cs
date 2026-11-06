@@ -1,5 +1,4 @@
 ﻿using Microsoft.EntityFrameworkCore.Migrations;
-using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -11,31 +10,42 @@ namespace Arcora.Api.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "AdvanceNotice",
-                table: "Listings",
-                type: "nvarchar(100)",
-                maxLength: 100,
-                nullable: true);
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[Listings]', N'U') IS NOT NULL
+   AND COL_LENGTH(N'[dbo].[Listings]', N'AdvanceNotice') IS NULL
+BEGIN
+    ALTER TABLE [dbo].[Listings] ADD [AdvanceNotice] nvarchar(100) NULL;
+END
+");
 
-            migrationBuilder.AddColumn<bool>(
-                name: "AllowSameDay",
-                table: "Listings",
-                type: "bit",
-                nullable: false,
-                defaultValue: false);
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[Listings]', N'U') IS NOT NULL
+   AND COL_LENGTH(N'[dbo].[Listings]', N'AllowSameDay') IS NULL
+BEGIN
+    ALTER TABLE [dbo].[Listings] ADD [AllowSameDay] bit NOT NULL CONSTRAINT [DF_Listings_AllowSameDay] DEFAULT (0);
+END
+");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "AdvanceNotice",
-                table: "Listings");
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[Listings]', N'U') IS NOT NULL
+   AND COL_LENGTH(N'[dbo].[Listings]', N'AdvanceNotice') IS NOT NULL
+BEGIN
+    ALTER TABLE [dbo].[Listings] DROP COLUMN [AdvanceNotice];
+END
+");
 
-            migrationBuilder.DropColumn(
-                name: "AllowSameDay",
-                table: "Listings");
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[Listings]', N'U') IS NOT NULL
+   AND COL_LENGTH(N'[dbo].[Listings]', N'AllowSameDay') IS NOT NULL
+BEGIN
+    ALTER TABLE [dbo].[Listings] DROP CONSTRAINT IF EXISTS [DF_Listings_AllowSameDay];
+    ALTER TABLE [dbo].[Listings] DROP COLUMN [AllowSameDay];
+END
+");
         }
     }
 }

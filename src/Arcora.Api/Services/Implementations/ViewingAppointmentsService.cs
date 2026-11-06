@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class ViewingAppointmentsService : IViewingAppointmentsService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<ViewingAppointmentsService> logger;
         private readonly IViewingAppointmentsRepository viewingappointmentsRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public ViewingAppointmentsService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<ViewingAppointmentsService> logger, IViewingAppointmentsRepository viewingappointmentsRepository)
+        public ViewingAppointmentsService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<ViewingAppointmentsService> logger, IViewingAppointmentsRepository viewingappointmentsRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<ViewingAppointments> entities;
             try
             {
-                entities = cache.Get<IEnumerable<ViewingAppointments>>(Cache.VIEWINGAPPOINTMENTS.ToString()) ?? new List<ViewingAppointments>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.viewingappointmentsRepository.GetViewingAppointmentsAsync())?.Where(x => x != null) ?? new List<ViewingAppointments>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<ViewingAppointments>>(Cache.VIEWINGAPPOINTMENTS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.VIEWINGAPPOINTMENTS.ToString(),
+                    async cancel =>
+                        (await this.viewingappointmentsRepository.GetViewingAppointmentsAsync())?.Where(x => x != null).ToList() ?? new List<ViewingAppointments>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
@@ -76,16 +74,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<ViewingAppointments> entities = cache.Get<IEnumerable<ViewingAppointments>>(Cache.VIEWINGAPPOINTMENTS.ToString()) ?? new List<ViewingAppointments>();
-                ViewingAppointments? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.ViewingAppointmentID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.VIEWINGAPPOINTMENTS.ToString(),
+                    async cancel =>
+                        (await this.viewingappointmentsRepository.GetViewingAppointmentsAsync())?.Where(x => x != null).ToList() ?? new List<ViewingAppointments>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.ViewingAppointmentID == ID);
+                if (match == null)
                     match = await this.viewingappointmentsRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<ViewingAppointmentsDto>(match);
             }
@@ -113,7 +110,7 @@ namespace Arcora.Api.Services.Implementations
                     viewingAppointments.CapturedDate = DateTime.UtcNow;
                     viewingAppointments = await viewingappointmentsRepository.Create(viewingAppointments) ?? new ViewingAppointments();
                     await viewingappointmentsRepository.Save();
-                    cache.Remove(Cache.VIEWINGAPPOINTMENTS.ToString());
+                    await cache.RemoveAsync(Cache.VIEWINGAPPOINTMENTS.ToString());
                 }
             }
             catch (Exception er)
@@ -136,7 +133,7 @@ namespace Arcora.Api.Services.Implementations
                 ViewingAppointments viewingAppointments = this.mapper.Map<ViewingAppointments>(viewingappointmentsDto);
                 viewingAppointments = await viewingappointmentsRepository.Update(viewingAppointments) ?? new ViewingAppointments();
                 await viewingappointmentsRepository.Save();
-                cache.Remove(Cache.VIEWINGAPPOINTMENTS.ToString());
+                await cache.RemoveAsync(Cache.VIEWINGAPPOINTMENTS.ToString());
                 viewingappointmentsDto = this.mapper.Map<ViewingAppointmentsDto>(viewingAppointments);
             }
             catch (Exception er)
@@ -158,7 +155,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("ViewingAppointments with the specified ID was not found.");
                 await viewingappointmentsRepository.Delete(viewingAppointments);
                 await viewingappointmentsRepository.Save();
-                cache.Remove(Cache.VIEWINGAPPOINTMENTS.ToString());
+                await cache.RemoveAsync(Cache.VIEWINGAPPOINTMENTS.ToString());
             }
             catch (Exception er)
             {
@@ -184,7 +181,7 @@ namespace Arcora.Api.Services.Implementations
 
             await viewingappointmentsRepository.Update(viewingAppointments);
             await viewingappointmentsRepository.Save();
-            cache.Remove(Cache.VIEWINGAPPOINTMENTS.ToString());
+            await cache.RemoveAsync(Cache.VIEWINGAPPOINTMENTS.ToString());
             return this.mapper.Map<ViewingAppointmentsDto>(viewingAppointments);
         }
     }

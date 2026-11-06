@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class InspectionItemService : IInspectionItemService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<InspectionItemService> logger;
         private readonly IInspectionItemRepository inspectionitemRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public InspectionItemService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<InspectionItemService> logger, IInspectionItemRepository inspectionitemRepository)
+        public InspectionItemService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<InspectionItemService> logger, IInspectionItemRepository inspectionitemRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,14 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<InspectionItem> entities;
             try
             {
-                entities = cache.Get<IEnumerable<InspectionItem>>(Cache.INSPECTIONITEMS.ToString()) ?? new List<InspectionItem>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.inspectionitemRepository.GetInspectionItemAsync())?.Where(x => x != null) ?? new List<InspectionItem>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<InspectionItem>>(Cache.INSPECTIONITEMS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.INSPECTIONITEMS.ToString(),
+                    async cancel =>
+                        (await this.inspectionitemRepository.GetInspectionItemAsync())?.Where(x => x != null).ToList() ?? new List<InspectionItem>(),
+                    new HybridCacheEntryOptions
+                    {
+                        Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes)
+                    });
             }
             catch (Exception er)
             {
@@ -76,16 +77,18 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<InspectionItem> entities = cache.Get<IEnumerable<InspectionItem>>(Cache.INSPECTIONITEMS.ToString()) ?? new List<InspectionItem>();
-                InspectionItem? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.InspectionItemID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.INSPECTIONITEMS.ToString(),
+                    async cancel =>
+                        (await this.inspectionitemRepository.GetInspectionItemAsync())?.Where(x => x != null).ToList() ?? new List<InspectionItem>(),
+                    new HybridCacheEntryOptions
+                    {
+                        Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes)
+                    });
+
+                var match = entities.FirstOrDefault(x => x.InspectionItemID == ID);
+                if (match == null)
                     match = await this.inspectionitemRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<InspectionItemDto>(match);
             }
@@ -111,7 +114,7 @@ namespace Arcora.Api.Services.Implementations
                     inspectionItem.CapturedDate = DateTime.UtcNow;
                     inspectionItem = await inspectionitemRepository.Create(inspectionItem) ?? new InspectionItem();
                     await inspectionitemRepository.Save();
-                    cache.Remove(Cache.INSPECTIONITEMS.ToString());
+                    await cache.RemoveAsync(Cache.INSPECTIONITEMS.ToString());
                 }
             }
             catch (Exception er)
@@ -134,7 +137,7 @@ namespace Arcora.Api.Services.Implementations
                 InspectionItem inspectionItem = this.mapper.Map<InspectionItem>(inspectionitemDto);
                 inspectionItem = await inspectionitemRepository.Update(inspectionItem) ?? new InspectionItem();
                 await inspectionitemRepository.Save();
-                cache.Remove(Cache.INSPECTIONITEMS.ToString());
+                await cache.RemoveAsync(Cache.INSPECTIONITEMS.ToString());
                 inspectionitemDto = this.mapper.Map<InspectionItemDto>(inspectionItem);
             }
             catch (Exception er)
@@ -156,7 +159,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("InspectionItem with the specified ID was not found.");
                 await inspectionitemRepository.Delete(inspectionItem);
                 await inspectionitemRepository.Save();
-                cache.Remove(Cache.INSPECTIONITEMS.ToString());
+                await cache.RemoveAsync(Cache.INSPECTIONITEMS.ToString());
             }
             catch (Exception er)
             {

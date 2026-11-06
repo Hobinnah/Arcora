@@ -5,52 +5,56 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Arcora.Api.Migrations
 {
+    [Migration("20260912090000_AddPostalLookupSuggestion")]
     public partial class AddPostalLookupSuggestion : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: "PostalLookupSuggestions",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Text = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: true),
-                    Line1 = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: true),
-                    Line2 = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: true),
-                    City = table.Column<string>(type: "nvarchar(120)", maxLength: 120, nullable: true),
-                    ProvinceCode = table.Column<string>(type: "nvarchar(10)", maxLength: 10, nullable: true),
-                    PostalCode = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: true),
-                    CountryCode = table.Column<string>(type: "nvarchar(2)", maxLength: 2, nullable: true),
-                    PlaceProvider = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
-                    PlaceProviderReferenceID = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: true),
-                    LookupKey = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
-                    CapturedDate = table.Column<DateTime>(type: "datetime2", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_PostalLookupSuggestions", x => x.Id);
-                });
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[PostalLookupSuggestions]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[PostalLookupSuggestions] (
+        [Id] uniqueidentifier NOT NULL,
+        [Text] nvarchar(255) NULL,
+        [Line1] nvarchar(255) NULL,
+        [Line2] nvarchar(255) NULL,
+        [City] nvarchar(120) NULL,
+        [ProvinceCode] nvarchar(10) NULL,
+        [PostalCode] nvarchar(20) NULL,
+        [CountryCode] nvarchar(2) NULL,
+        [PlaceProvider] nvarchar(50) NULL,
+        [PlaceProviderReferenceID] nvarchar(255) NULL,
+        [LookupKey] nvarchar(50) NULL,
+        [CapturedDate] datetime2 NULL,
+        CONSTRAINT [PK_PostalLookupSuggestions] PRIMARY KEY ([Id])
+    );
+END
 
-            migrationBuilder.CreateIndex(
-                name: "IX_PostalLookupSuggestions_LookupKey",
-                table: "PostalLookupSuggestions",
-                column: "LookupKey");
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PostalLookupSuggestions_LookupKey' AND object_id = OBJECT_ID(N'[dbo].[PostalLookupSuggestions]'))
+BEGIN
+    CREATE INDEX [IX_PostalLookupSuggestions_LookupKey] ON [dbo].[PostalLookupSuggestions] ([LookupKey]);
+END
 
-            migrationBuilder.CreateIndex(
-                name: "IX_PostalLookupSuggestions_PlaceProviderReferenceID",
-                table: "PostalLookupSuggestions",
-                column: "PlaceProviderReferenceID");
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PostalLookupSuggestions_PlaceProviderReferenceID' AND object_id = OBJECT_ID(N'[dbo].[PostalLookupSuggestions]'))
+BEGIN
+    CREATE INDEX [IX_PostalLookupSuggestions_PlaceProviderReferenceID] ON [dbo].[PostalLookupSuggestions] ([PlaceProviderReferenceID]);
+END
 
-            migrationBuilder.CreateIndex(
-                name: "IX_PostalLookupSuggestions_Line1_City_PostalCode",
-                table: "PostalLookupSuggestions",
-                columns: new[] { "Line1", "City", "PostalCode" });
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PostalLookupSuggestions_Line1_City_PostalCode' AND object_id = OBJECT_ID(N'[dbo].[PostalLookupSuggestions]'))
+BEGIN
+    CREATE INDEX [IX_PostalLookupSuggestions_Line1_City_PostalCode] ON [dbo].[PostalLookupSuggestions] ([Line1], [City], [PostalCode]);
+END
+");
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "PostalLookupSuggestions");
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[PostalLookupSuggestions]', N'U') IS NOT NULL
+BEGIN
+    DROP TABLE [dbo].[PostalLookupSuggestions];
+END
+");
         }
     }
 }

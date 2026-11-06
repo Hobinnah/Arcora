@@ -10,6 +10,11 @@ namespace Arcora.Api.DTOs.DtoProfiles
         public ListingProfile()
         {
             CreateMap<Listing, ListingDto>()
+                .ForMember(dest => dest.PublicLocation, opt => opt.MapFrom(src =>
+                    Helpers.PublicMapLocation.From(src.RentalUnit == null || src.RentalUnit.Property == null || src.RentalUnit.Property.Address == null
+                        ? null : src.RentalUnit.Property.Address.Latitude,
+                        src.RentalUnit == null || src.RentalUnit.Property == null || src.RentalUnit.Property.Address == null
+                        ? null : src.RentalUnit.Property.Address.Longitude)))
                 .ForMember(dest => dest.ReviewList, opt => opt.MapFrom(src =>
                     src.Leases == null
                         ? new List<Rating>()

@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class ChargebackService : IChargebackService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<ChargebackService> logger;
         private readonly IChargebackRepository chargebackRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public ChargebackService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<ChargebackService> logger, IChargebackRepository chargebackRepository)
+        public ChargebackService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<ChargebackService> logger, IChargebackRepository chargebackRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<Chargeback> entities;
             try
             {
-                entities = cache.Get<IEnumerable<Chargeback>>(Cache.CHARGEBACKS.ToString()) ?? new List<Chargeback>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.chargebackRepository.GetChargebackAsync())?.Where(x => x != null) ?? new List<Chargeback>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<Chargeback>>(Cache.CHARGEBACKS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.CHARGEBACKS.ToString(),
+                    async cancel =>
+                        (await this.chargebackRepository.GetChargebackAsync())?.Where(x => x != null).ToList() ?? new List<Chargeback>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
@@ -76,16 +74,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<Chargeback> entities = cache.Get<IEnumerable<Chargeback>>(Cache.CHARGEBACKS.ToString()) ?? new List<Chargeback>();
-                Chargeback? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.ChargebackID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.CHARGEBACKS.ToString(),
+                    async cancel =>
+                        (await this.chargebackRepository.GetChargebackAsync())?.Where(x => x != null).ToList() ?? new List<Chargeback>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.ChargebackID == ID);
+                if (match == null)
                     match = await this.chargebackRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<ChargebackDto>(match);
             }
@@ -113,7 +110,7 @@ namespace Arcora.Api.Services.Implementations
                     chargeback.CapturedDate = DateTime.UtcNow;
                     chargeback = await chargebackRepository.Create(chargeback) ?? new Chargeback();
                     await chargebackRepository.Save();
-                    cache.Remove(Cache.CHARGEBACKS.ToString());
+                    await cache.RemoveAsync(Cache.CHARGEBACKS.ToString());
                 }
             }
             catch (Exception er)
@@ -136,7 +133,7 @@ namespace Arcora.Api.Services.Implementations
                 Chargeback chargeback = this.mapper.Map<Chargeback>(chargebackDto);
                 chargeback = await chargebackRepository.Update(chargeback) ?? new Chargeback();
                 await chargebackRepository.Save();
-                cache.Remove(Cache.CHARGEBACKS.ToString());
+                await cache.RemoveAsync(Cache.CHARGEBACKS.ToString());
                 chargebackDto = this.mapper.Map<ChargebackDto>(chargeback);
             }
             catch (Exception er)
@@ -158,7 +155,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("Chargeback with the specified ID was not found.");
                 await chargebackRepository.Delete(chargeback);
                 await chargebackRepository.Save();
-                cache.Remove(Cache.CHARGEBACKS.ToString());
+                await cache.RemoveAsync(Cache.CHARGEBACKS.ToString());
             }
             catch (Exception er)
             {
@@ -184,7 +181,7 @@ namespace Arcora.Api.Services.Implementations
 
             await chargebackRepository.Update(chargeback);
             await chargebackRepository.Save();
-            cache.Remove(Cache.CHARGEBACKS.ToString());
+            await cache.RemoveAsync(Cache.CHARGEBACKS.ToString());
             return this.mapper.Map<ChargebackDto>(chargeback);
         }
     }

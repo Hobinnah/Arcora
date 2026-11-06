@@ -14,4 +14,6 @@ public interface ILeaseCheckInService
     Task<bool> CanAccessMoveInInspectionAsync(Guid inspectionId, ClaimsPrincipal user, CancellationToken cancellationToken = default);
     Task<bool> CanAccessMoveInAttachmentAsync(Guid attachmentId, ClaimsPrincipal user, CancellationToken cancellationToken = default);
     Task<int> CleanupExpiredDraftEvidenceAsync(CancellationToken cancellationToken = default);
+    Task<LeaseCheckOutResponseDto> GetCheckOutAsync(Guid leaseId, ClaimsPrincipal user, CancellationToken cancellationToken = default);
+    Task<(LeaseCheckOutInspectionDto Inspection, bool Created)> SubmitCheckOutAsync(Guid leaseId, SubmitLeaseCheckOutRequestDto request, string idempotencyKey, ClaimsPrincipal user, CancellationToken cancellationToken = default);
 }

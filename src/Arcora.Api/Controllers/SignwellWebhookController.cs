@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Arcora.Api.Entities;
 using Arcora.Api.Services.Interfaces;
+using Arcora.Api.Signing;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -16,18 +17,18 @@ namespace Arcora.Api.Controllers
     {
         private readonly ArcoraDbContext _dbContext;
         private readonly ILogger<SignwellWebhookController> _logger;
-        private readonly IRentCollectionOrchestrator _rentCollectionOrchestrator;
+        private readonly ILeaseFirstPaymentService _firstPaymentService;
         private readonly string? _webhookSecret;
 
         public SignwellWebhookController(
             ArcoraDbContext dbContext,
             IConfiguration configuration,
-            IRentCollectionOrchestrator rentCollectionOrchestrator,
+            ILeaseFirstPaymentService firstPaymentService,
             ILogger<SignwellWebhookController> logger)
         {
             _dbContext = dbContext;
             _logger = logger;
-            _rentCollectionOrchestrator = rentCollectionOrchestrator;
+            _firstPaymentService = firstPaymentService;
             _webhookSecret = configuration["Signwell:WebhookSecret"];
         }
 
@@ -159,25 +160,9 @@ namespace Arcora.Api.Controllers
                                 var lease = await _dbContext.Leases.FirstOrDefaultAsync(x => x.LeaseID == leaseDocument.LeaseID.Value, cancellationToken);
                                 if (lease != null)
                                 {
-                                    lease.SignedAt ??= now;
-
-                                    var existingPaidIntent = await _dbContext.PaymentIntents
-                                        .AsNoTracking()
-                                        .AnyAsync(x => x.LeaseID == lease.LeaseID && x.Status == "PAID", cancellationToken);
-
-                                    if (existingPaidIntent)
+                                    if (await LeaseSigningCompletion.ReconcileAsync(_dbContext, lease,
+                                        leaseDocument.FullySignedAt.Value, "SIGNWELL_WEBHOOK", cancellationToken))
                                     {
-                                        lease.Status = "ACTIVE";
-                                        lease.ActivatedAt ??= now;
-                                        lease.UpdatedDate = now;
-                                        lease.UpdatedBy = "SIGNWELL_WEBHOOK";
-                                    }
-                                    else
-                                    {
-                                        lease.Status = "PENDING_FIRST_PAYMENT";
-                                        lease.UpdatedDate = now;
-                                        lease.UpdatedBy = "SIGNWELL_WEBHOOK";
-
                                         leaseToInitiateFirstCharge = lease.LeaseID;
                                     }
                                  }
@@ -197,7 +182,7 @@ namespace Arcora.Api.Controllers
 
                     if (lease != null)
                     {
-                        await TryInitiateFirstChargeAfterSigningAsync(lease, cancellationToken);
+                        await _firstPaymentService.CollectAsync(lease, cancellationToken: cancellationToken);
                     }
                 }
 
@@ -310,97 +295,6 @@ namespace Arcora.Api.Controllers
 
             value = default;
             return false;
-        }
-
-        private async Task TryInitiateFirstChargeAfterSigningAsync(Lease lease, CancellationToken cancellationToken)
-        {
-            var firstChargeKey = $"pi_firstcharge_lease_{lease.LeaseID:N}";
-            var existingIntent = await _dbContext.PaymentIntents
-                .AsNoTracking()
-                .Where(x => x.LeaseID == lease.LeaseID && x.IdempotencyKey == firstChargeKey)
-                .OrderByDescending(x => x.CapturedDate ?? x.StartedAt)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (existingIntent != null)
-                return;
-
-            var firstChargeAmount = await CalculateFirstChargeAmountAsync(lease, cancellationToken);
-            if (firstChargeAmount <= 0m)
-            {
-                _logger.LogWarning("Skipping first charge for lease {LeaseId} after signing because amount resolved to zero.", lease.LeaseID);
-                return;
-            }
-
-            try
-            {
-                await _rentCollectionOrchestrator.InitiateCollectionAsync(
-                    leaseId: lease.LeaseID,
-                    tenantId: lease.TenantID,
-                    invoiceMasterId: Guid.Empty,
-                    amount: firstChargeAmount,
-                    idempotencyKey: firstChargeKey,
-                    cancellationToken: cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed initiating first charge for lease {LeaseId} after signing.", lease.LeaseID);
-            }
-        }
-
-        private async Task<decimal> CalculateFirstChargeAmountAsync(Lease lease, CancellationToken cancellationToken)
-        {
-            var rent = lease.BaseRentAmount;
-            if (rent <= 0m)
-                return 0m;
-
-            var securityDeposit = await _dbContext.SecurityDeposits
-                .AsNoTracking()
-                .Where(x => x.LeaseID == lease.LeaseID)
-                .OrderByDescending(x => x.CapturedDate)
-                .Select(x => x.RequiredAmount)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            var now = DateTime.UtcNow;
-            var fees = await _dbContext.Fees
-                .AsNoTracking()
-                .Include(f => f.FeeType)
-                .Where(f =>
-                    f.IsActive &&
-                    f.FeeType != null &&
-                    f.FeeType.IsPlatformFee == true &&
-                    (f.OrganizationID == null || f.OrganizationID == lease.OrganizationID) &&
-                    (f.EffectiveFrom == null || f.EffectiveFrom <= now) &&
-                    (f.EffectiveTo == null || f.EffectiveTo >= now))
-                .ToListAsync(cancellationToken);
-
-            var platformFees = 0m;
-            foreach (var fee in fees)
-            {
-                platformFees += CalculateFeeAmount(fee, rent);
-            }
-
-            return rent + securityDeposit + platformFees;
-        }
-
-        private static decimal CalculateFeeAmount(Fee fee, decimal baseAmount)
-        {
-            var amount = fee.CalculationType?.Trim().ToUpperInvariant() switch
-            {
-                "PERCENTAGE" => baseAmount * ((fee.PercentageRate ?? 0m) / 100m),
-                _ => fee.FixedAmount ?? 0m
-            };
-
-            if (fee.MinimumFeeAmount.HasValue && amount < fee.MinimumFeeAmount.Value)
-            {
-                amount = fee.MinimumFeeAmount.Value;
-            }
-
-            if (fee.MaximumFeeAmount.HasValue && amount > fee.MaximumFeeAmount.Value)
-            {
-                amount = fee.MaximumFeeAmount.Value;
-            }
-
-            return amount < 0m ? 0m : amount;
         }
 
         private static bool IsValidWebhookSignature(string payload, string? signatureHeader, string secret)

@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class TenantEmploymentService : ITenantEmploymentService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<TenantEmploymentService> logger;
         private readonly ITenantEmploymentRepository tenantemploymentRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public TenantEmploymentService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<TenantEmploymentService> logger, ITenantEmploymentRepository tenantemploymentRepository)
+        public TenantEmploymentService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<TenantEmploymentService> logger, ITenantEmploymentRepository tenantemploymentRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<TenantEmployment> entities;
             try
             {
-                entities = cache.Get<IEnumerable<TenantEmployment>>(Cache.TENANTEMPLOYMENTS.ToString()) ?? new List<TenantEmployment>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.tenantemploymentRepository.GetTenantEmploymentAsync())?.Where(x => x != null) ?? new List<TenantEmployment>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<TenantEmployment>>(Cache.TENANTEMPLOYMENTS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.TENANTEMPLOYMENTS.ToString(),
+                    async cancel =>
+                        (await this.tenantemploymentRepository.GetTenantEmploymentAsync())?.Where(x => x != null).ToList() ?? new List<TenantEmployment>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
@@ -76,16 +74,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<TenantEmployment> entities = cache.Get<IEnumerable<TenantEmployment>>(Cache.TENANTEMPLOYMENTS.ToString()) ?? new List<TenantEmployment>();
-                TenantEmployment? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.TenantEmploymentID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.TENANTEMPLOYMENTS.ToString(),
+                    async cancel =>
+                        (await this.tenantemploymentRepository.GetTenantEmploymentAsync())?.Where(x => x != null).ToList() ?? new List<TenantEmployment>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.TenantEmploymentID == ID);
+                if (match == null)
                     match = await this.tenantemploymentRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<TenantEmploymentDto>(match);
             }
@@ -113,7 +110,7 @@ namespace Arcora.Api.Services.Implementations
                     tenantEmployment.UpdatedDate = null;
                     tenantEmployment = await tenantemploymentRepository.Create(tenantEmployment) ?? new TenantEmployment();
                     await tenantemploymentRepository.Save();
-                    cache.Remove(Cache.TENANTEMPLOYMENTS.ToString());
+                    await cache.RemoveAsync(Cache.TENANTEMPLOYMENTS.ToString());
                 }
             }
             catch (Exception er)
@@ -136,7 +133,7 @@ namespace Arcora.Api.Services.Implementations
                 TenantEmployment tenantEmployment = this.mapper.Map<TenantEmployment>(tenantemploymentDto);
                 tenantEmployment = await tenantemploymentRepository.Update(tenantEmployment) ?? new TenantEmployment();
                 await tenantemploymentRepository.Save();
-                cache.Remove(Cache.TENANTEMPLOYMENTS.ToString());
+                await cache.RemoveAsync(Cache.TENANTEMPLOYMENTS.ToString());
                 tenantemploymentDto = this.mapper.Map<TenantEmploymentDto>(tenantEmployment);
             }
             catch (Exception er)
@@ -158,7 +155,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("TenantEmployment with the specified ID was not found.");
                 await tenantemploymentRepository.Delete(tenantEmployment);
                 await tenantemploymentRepository.Save();
-                cache.Remove(Cache.TENANTEMPLOYMENTS.ToString());
+                await cache.RemoveAsync(Cache.TENANTEMPLOYMENTS.ToString());
             }
             catch (Exception er)
             {

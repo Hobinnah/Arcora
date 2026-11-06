@@ -163,3 +163,26 @@ public class InspectionReviewRecordDto
     public long ReviewedByUserID { get; set; }
     public DateTime ReviewedAt { get; set; }
 }
+
+public class LeaseCheckOutResponseDto
+{
+    public Guid LeaseID { get; set; }
+    public LeaseCheckOutInspectionDto? Inspection { get; set; }
+}
+
+public class LeaseCheckOutInspectionDto
+{
+    public Guid InspectionID { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string? Notes { get; set; }
+    public DateTime? SubmittedAt { get; set; }
+    public DateTime? ActualMoveOutAt { get; set; }
+}
+
+public class SubmitLeaseCheckOutRequestDto
+{
+    public bool Confirmed { get; set; }
+
+    [MaxLength(1000)]
+    public string? Notes { get; set; }
+}

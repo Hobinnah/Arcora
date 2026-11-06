@@ -8,6 +8,7 @@ using Arcora.Payments.Configuration;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Diagnostics;
 
 namespace Arcora.Api.Services.Implementations
 {
@@ -54,13 +55,29 @@ namespace Arcora.Api.Services.Implementations
             var tenant = await tenantRepository.GetByID(tenantId)
                 ?? throw new KeyNotFoundException("Tenant with the specified ID was not found.");
 
-            var existingCustomerId = await GetExistingCustomerIdAsync(tenantId);
+            var existingCustomerId = tenant.ProviderCustomerID;
+            if (string.IsNullOrWhiteSpace(existingCustomerId))
+            {
+                existingCustomerId = await GetExistingCustomerIdAsync(tenantId);
+            }
 
             var user = await userManager.FindByIdAsync(tenant.UserID.ToString());
             var email = user?.Email;
             var name = user?.DisplayName;
 
+            var stopwatch = Stopwatch.StartNew();
+            var traceId = Activity.Current?.TraceId.ToString() ?? "unavailable";
+            logger.LogInformation("Payment onboarding customer provisioning started for trace {TraceId}.", traceId);
             var customer = await paymentProvider.EnsureCustomerAsync(existingCustomerId, tenantId.ToString(), email, name, cancellationToken);
+            logger.LogInformation("Payment onboarding customer provisioning completed for trace {TraceId} in {ElapsedMilliseconds} ms.", traceId, stopwatch.ElapsedMilliseconds);
+
+            if (!string.Equals(tenant.ProviderCustomerID, customer.CustomerId, StringComparison.Ordinal))
+            {
+                tenant.ProviderCustomerID = customer.CustomerId;
+                tenant.UpdatedDate = DateTime.UtcNow;
+                await tenantRepository.Update(tenant);
+                await tenantRepository.Save();
+            }
 
             return new PaymentOnboardingStartResponse
             {
@@ -74,19 +91,27 @@ namespace Arcora.Api.Services.Implementations
         /// <inheritdoc/>
         public async Task<CreateSetupIntentResponse> CreateSetupIntentAsync(CreateSetupIntentRequest request, CancellationToken cancellationToken = default)
         {
-            _ = await tenantRepository.GetByID(request.TenantID)
+            var tenant = await tenantRepository.GetByID(request.TenantID)
                 ?? throw new KeyNotFoundException("Tenant with the specified ID was not found.");
 
             var kind = ParseKind(request.MethodKind);
 
-            var customerId = await GetExistingCustomerIdAsync(request.TenantID);
+            var customerId = tenant.ProviderCustomerID;
+            if (string.IsNullOrWhiteSpace(customerId))
+            {
+                customerId = await GetExistingCustomerIdAsync(request.TenantID);
+            }
             if (string.IsNullOrWhiteSpace(customerId))
             {
                 var start = await StartAsync(request.TenantID, cancellationToken);
                 customerId = start.ProviderCustomerID;
             }
 
+            var stopwatch = Stopwatch.StartNew();
+            var traceId = Activity.Current?.TraceId.ToString() ?? "unavailable";
+            logger.LogInformation("Payment onboarding {MethodKind} SetupIntent creation started for trace {TraceId}.", kind, traceId);
             var setupIntent = await paymentProvider.CreateSetupIntentAsync(customerId!, kind, cancellationToken);
+            logger.LogInformation("Payment onboarding {MethodKind} SetupIntent creation completed for trace {TraceId} in {ElapsedMilliseconds} ms.", kind, traceId, stopwatch.ElapsedMilliseconds);
 
             return new CreateSetupIntentResponse
             {
@@ -106,7 +131,11 @@ namespace Arcora.Api.Services.Implementations
 
             var kind = ParseKind(request.MethodKind);
 
-            var customerId = await GetExistingCustomerIdAsync(request.TenantID);
+            var customerId = tenant.ProviderCustomerID;
+            if (string.IsNullOrWhiteSpace(customerId))
+            {
+                customerId = await GetExistingCustomerIdAsync(request.TenantID);
+            }
             if (string.IsNullOrWhiteSpace(customerId))
             {
                 var start = await StartAsync(request.TenantID, cancellationToken);
@@ -133,8 +162,8 @@ namespace Arcora.Api.Services.Implementations
                 TenantID = request.TenantID,
                 PaymentMethodType = kind == PaymentMethodKind.Pad ? "PAD" : "CARD",
                 DisplayName = kind == PaymentMethodKind.Pad
-                    ? $"{setup.BankName} ••{setup.Last4}"
-                    : $"{setup.Brand} ••{setup.Last4}",
+                    ? $"{setup.BankName} ï¿½ï¿½{setup.Last4}"
+                    : $"{setup.Brand} ï¿½ï¿½{setup.Last4}",
                 AccountLast4 = setup.Last4,
                 CardBrand = setup.Brand,
                 CardFunding = setup.Funding,
@@ -198,7 +227,18 @@ namespace Arcora.Api.Services.Implementations
         /// <inheritdoc/>
         public async Task<PaymentOnboardingStatusResponse> GetStatusAsync(Guid tenantId, CancellationToken cancellationToken = default)
         {
-            var methods = await paymentMethodRepository.Find(x => x.TenantID == tenantId && x.IsActive);
+            var methods = (await paymentMethodRepository.Find(x => x.TenantID == tenantId && x.IsActive))?.ToList()
+                ?? new List<PaymentMethod?>();
+            string? hostedBankVerificationUrl = null;
+            foreach (var method in methods.Where(m => m != null && m.MethodRole == RolePrimary
+                && m.VerificationStatus == "PENDING").OrderByDescending(m => m!.CapturedDate))
+            {
+                if (string.IsNullOrWhiteSpace(method!.ProviderCustomerID) || string.IsNullOrWhiteSpace(method.ProviderPaymentMethodID))
+                    throw new InvalidOperationException("The saved bank setup has no provider reference. Please contact support.");
+                var setup = await paymentProvider.GetPadSetupStatusAsync(method.ProviderCustomerID, method.ProviderPaymentMethodID, cancellationToken);
+                await ApplyVerificationStatusAsync(method, setup.Status, "STRIPE_STATUS_REFRESH");
+                hostedBankVerificationUrl ??= setup.HostedVerificationUrl;
+            }
             var activeMandates = (await autopayMandateRepository.Find(x => x.TenantID == tenantId && x.Status == "ACTIVE"))?.ToList()
                 ?? new List<AutopayMandate?>();
 
@@ -222,7 +262,8 @@ namespace Arcora.Api.Services.Implementations
                 TenantID = tenantId,
                 HasVerifiedPad = list.Any(m => m!.MethodRole == RolePrimary && m.VerificationStatus == "VERIFIED"),
                 HasVerifiedCard = list.Any(m => m!.MethodRole == RoleBackup && m.VerificationStatus == "VERIFIED"),
-                PadMandateActive = activeMandates.Any()
+                PadMandateActive = activeMandates.Any(),
+                HostedBankVerificationUrl = hostedBankVerificationUrl
             };
         }
 
@@ -243,6 +284,11 @@ namespace Arcora.Api.Services.Implementations
                 return;
             }
 
+            await ApplyVerificationStatusAsync(method, providerStatus, "STRIPE_WEBHOOK");
+        }
+
+        private async Task ApplyVerificationStatusAsync(PaymentMethod method, string? providerStatus, string updatedBy)
+        {
             var newStatus = MapVerificationStatus(providerStatus ?? string.Empty);
 
             // Idempotency: nothing to do if the status is unchanged.
@@ -254,7 +300,7 @@ namespace Arcora.Api.Services.Implementations
             method.VerificationStatus = newStatus;
             method.VerifiedAt = newStatus == "VERIFIED" ? DateTime.UtcNow : null;
             method.UpdatedDate = DateTime.UtcNow;
-            method.UpdatedBy = "STRIPE_WEBHOOK";
+            method.UpdatedBy = updatedBy;
             await paymentMethodRepository.Update(method);
             await paymentMethodRepository.Save();
 
@@ -267,14 +313,14 @@ namespace Arcora.Api.Services.Implementations
                     mandate!.Status = "ACTIVE";
                     mandate.ActivatedAt = DateTime.UtcNow;
                     mandate.UpdatedDate = DateTime.UtcNow;
-                    mandate.UpdatedBy = "STRIPE_WEBHOOK";
+                    mandate.UpdatedBy = updatedBy;
                     await autopayMandateRepository.Update(mandate);
                     await autopayMandateRepository.Save();
-                    await EnsureSingleActiveMandateAsync(mandate.TenantID, mandate.AutopayMandateID, "STRIPE_WEBHOOK");
+                    await EnsureSingleActiveMandateAsync(mandate.TenantID, mandate.AutopayMandateID, updatedBy);
                 }
             }
 
-            logger.LogInformation("Payment method {PaymentMethodId} verification updated to {Status} via webhook.", method.PaymentMethodID, newStatus);
+            logger.LogInformation("Payment method {PaymentMethodId} verification updated to {Status} via {Source}.", method.PaymentMethodID, newStatus, updatedBy);
         }
 
         private async Task EnsureSingleActiveMandateAsync(Guid tenantId, Guid activeMandateId, string updatedBy)

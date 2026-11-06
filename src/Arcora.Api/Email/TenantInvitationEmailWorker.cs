@@ -2,12 +2,14 @@ using System.Text.Json;
 using Arcora.Api.Entities;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Arcora.Api.Operations;
 
 namespace Arcora.Api.Email;
 
 public sealed class TenantInvitationEmailWorker(
     IServiceScopeFactory scopeFactory,
-    ILogger<TenantInvitationEmailWorker> logger) : BackgroundService
+    ILogger<TenantInvitationEmailWorker> logger,
+    OperationsRegistry? health = null) : BackgroundService
 {
     public const string ProtectionPurpose = "Arcora.TenantInvitationEmail.v1";
 
@@ -15,6 +17,7 @@ public sealed class TenantInvitationEmailWorker(
     {
         while (!stoppingToken.IsCancellationRequested)
         {
+            using var run = health?.Begin(WorkerIds.Invitations);
             try
             {
                 using var scope = scopeFactory.CreateScope();
@@ -29,17 +32,21 @@ public sealed class TenantInvitationEmailWorker(
                 {
                     using var deliveryScope = scopeFactory.CreateScope();
                     await DispatchAsync(deliveryScope.ServiceProvider, id, stoppingToken);
+                    run?.Count();
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
+                run?.Cancel();
                 break;
             }
             catch (Exception ex)
             {
+                run?.Fail();
                 logger.LogError(ex, "Tenant invitation email dispatcher failed. Pending jobs remain persisted for retry.");
             }
 
+            run?.Dispose();
             try
             {
                 await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);

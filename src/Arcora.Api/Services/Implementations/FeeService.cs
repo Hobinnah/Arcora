@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class FeeService : IFeeService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<FeeService> logger;
         private readonly IFeeRepository feeRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public FeeService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<FeeService> logger, IFeeRepository feeRepository)
+        public FeeService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<FeeService> logger, IFeeRepository feeRepository)
         {
             this.cache = cache;
             this.logger = logger;

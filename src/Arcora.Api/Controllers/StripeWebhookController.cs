@@ -142,7 +142,8 @@ namespace Arcora.Api.Controllers
                             localIntent.PaymentIntentID,
                             webhookEvent.Status ?? string.Empty,
                             webhookEvent.FailureCode,
-                            webhookEvent.FailureMessage);
+                            webhookEvent.FailureMessage,
+                            providerPaymentIntentId: webhookEvent.PaymentIntentId);
                     }
                     else
                     {
@@ -172,6 +173,8 @@ namespace Arcora.Api.Controllers
                 case "payout.created":
                 case "payout.paid":
                 case "payout.failed":
+                case "payout.updated":
+                case "payout.canceled":
                     if (!string.IsNullOrWhiteSpace(webhookEvent.ConnectedAccountId))
                     {
                         await orgPayoutAccountService.SyncStripePayoutEvent(webhookEvent.ConnectedAccountId, webhookEvent.RawPayload);

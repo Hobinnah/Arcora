@@ -3,6 +3,7 @@ using Arcora.Api.Email;
 using Arcora.Api.Entities;
 using Arcora.Api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Arcora.Api.Operations;
 
 namespace Arcora.Api.Services.Implementations;
 
@@ -12,15 +13,18 @@ public class LeaseCheckInDetailsEmailService : BackgroundService
     private readonly ILogger<LeaseCheckInDetailsEmailService> logger;
     private readonly IServiceProvider serviceProvider;
     private readonly IConfiguration configuration;
+    private readonly OperationsRegistry? health;
 
     public LeaseCheckInDetailsEmailService(
         ILogger<LeaseCheckInDetailsEmailService> logger,
         IServiceProvider serviceProvider,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        OperationsRegistry? health = null)
     {
         this.logger = logger;
         this.serviceProvider = serviceProvider;
         this.configuration = configuration;
+        this.health = health;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -30,12 +34,16 @@ public class LeaseCheckInDetailsEmailService : BackgroundService
 
         do
         {
+            using var run = health?.Begin(WorkerIds.CheckIn);
             try
             {
                 await RunCycleAsync(stoppingToken);
+                run?.Count();
             }
             catch (Exception ex)
             {
+                if (stoppingToken.IsCancellationRequested) { run?.Cancel(); break; }
+                run?.Fail();
                 logger.LogError(ex, "Lease check-in details email cycle failed.");
             }
         }
@@ -70,6 +78,8 @@ public class LeaseCheckInDetailsEmailService : BackgroundService
 
         foreach (var lease in leases)
         {
+            if (!await new PropertyLocationAccess(dbContext).IsActiveAndPaidAsync(lease, cancellationToken))
+                continue;
             var tenantEmail = lease.Tenant?.User?.Email;
             if (string.IsNullOrWhiteSpace(tenantEmail))
                 continue;

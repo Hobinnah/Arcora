@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class AutopayMandateService : IAutopayMandateService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<AutopayMandateService> logger;
         private readonly IAutopayMandateRepository autopaymandateRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public AutopayMandateService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<AutopayMandateService> logger, IAutopayMandateRepository autopaymandateRepository)
+        public AutopayMandateService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<AutopayMandateService> logger, IAutopayMandateRepository autopaymandateRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<AutopayMandate> entities;
             try
             {
-                entities = cache.Get<IEnumerable<AutopayMandate>>(Cache.AUTOPAYMANDATES.ToString()) ?? new List<AutopayMandate>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.autopaymandateRepository.GetAutopayMandateAsync())?.Where(x => x != null) ?? new List<AutopayMandate>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<AutopayMandate>>(Cache.AUTOPAYMANDATES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.AUTOPAYMANDATES.ToString(),
+                    async cancel =>
+                        (await this.autopaymandateRepository.GetAutopayMandateAsync())?.Where(x => x != null).ToList() ?? new List<AutopayMandate>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
@@ -76,16 +74,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<AutopayMandate> entities = cache.Get<IEnumerable<AutopayMandate>>(Cache.AUTOPAYMANDATES.ToString()) ?? new List<AutopayMandate>();
-                AutopayMandate? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.AutopayMandateID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.AUTOPAYMANDATES.ToString(),
+                    async cancel =>
+                        (await this.autopaymandateRepository.GetAutopayMandateAsync())?.Where(x => x != null).ToList() ?? new List<AutopayMandate>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.AutopayMandateID == ID);
+                if (match == null)
                     match = await this.autopaymandateRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<AutopayMandateDto>(match);
             }
@@ -113,7 +110,7 @@ namespace Arcora.Api.Services.Implementations
                     autopayMandate.CapturedDate = DateTime.UtcNow;
                     autopayMandate = await autopaymandateRepository.Create(autopayMandate) ?? new AutopayMandate();
                     await autopaymandateRepository.Save();
-                    cache.Remove(Cache.AUTOPAYMANDATES.ToString());
+                    await cache.RemoveAsync(Cache.AUTOPAYMANDATES.ToString());
                 }
             }
             catch (Exception er)
@@ -136,7 +133,7 @@ namespace Arcora.Api.Services.Implementations
                 AutopayMandate autopayMandate = this.mapper.Map<AutopayMandate>(autopaymandateDto);
                 autopayMandate = await autopaymandateRepository.Update(autopayMandate) ?? new AutopayMandate();
                 await autopaymandateRepository.Save();
-                cache.Remove(Cache.AUTOPAYMANDATES.ToString());
+                await cache.RemoveAsync(Cache.AUTOPAYMANDATES.ToString());
                 autopaymandateDto = this.mapper.Map<AutopayMandateDto>(autopayMandate);
             }
             catch (Exception er)
@@ -158,7 +155,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("AutopayMandate with the specified ID was not found.");
                 await autopaymandateRepository.Delete(autopayMandate);
                 await autopaymandateRepository.Save();
-                cache.Remove(Cache.AUTOPAYMANDATES.ToString());
+                await cache.RemoveAsync(Cache.AUTOPAYMANDATES.ToString());
             }
             catch (Exception er)
             {
@@ -184,7 +181,7 @@ namespace Arcora.Api.Services.Implementations
 
             await autopaymandateRepository.Update(autopayMandate);
             await autopaymandateRepository.Save();
-            cache.Remove(Cache.AUTOPAYMANDATES.ToString());
+            await cache.RemoveAsync(Cache.AUTOPAYMANDATES.ToString());
             return this.mapper.Map<AutopayMandateDto>(autopayMandate);
         }
     }

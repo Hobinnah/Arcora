@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class UnitTypeService : IUnitTypeService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<UnitTypeService> logger;
         private readonly IUnitTypeRepository unittypeRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public UnitTypeService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<UnitTypeService> logger, IUnitTypeRepository unittypeRepository)
+        public UnitTypeService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<UnitTypeService> logger, IUnitTypeRepository unittypeRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,14 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<UnitType> entities;
             try
             {
-                entities = cache.Get<IEnumerable<UnitType>>(Cache.UNITTYPES.ToString()) ?? new List<UnitType>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.unittypeRepository.GetAll())?.Where(x => x != null).Cast<UnitType>().ToList() ?? new List<UnitType>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<UnitType>>(Cache.UNITTYPES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.UNITTYPES.ToString(),
+                    async cancel =>
+                        (await this.unittypeRepository.GetAll())?.Where(x => x != null).Cast<UnitType>().ToList() ?? new List<UnitType>(),
+                    new HybridCacheEntryOptions
+                    {
+                        Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes)
+                    });
             }
             catch (Exception er)
             {
@@ -76,16 +77,18 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<UnitType> entities = cache.Get<IEnumerable<UnitType>>(Cache.UNITTYPES.ToString()) ?? new List<UnitType>();
-                UnitType? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.UnitTypeID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.UNITTYPES.ToString(),
+                    async cancel =>
+                        (await this.unittypeRepository.GetAll())?.Where(x => x != null).Cast<UnitType>().ToList() ?? new List<UnitType>(),
+                    new HybridCacheEntryOptions
+                    {
+                        Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes)
+                    });
+
+                var match = entities.FirstOrDefault(x => x.UnitTypeID == ID);
+                if (match == null)
                     match = await this.unittypeRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<UnitTypeDto>(match);
             }
@@ -112,7 +115,7 @@ namespace Arcora.Api.Services.Implementations
                     unitType.CapturedDate = DateTime.UtcNow;
                     unitType = await unittypeRepository.Create(unitType) ?? new UnitType();
                     await unittypeRepository.Save();
-                    cache.Remove(Cache.UNITTYPES.ToString());
+                    await cache.RemoveAsync(Cache.UNITTYPES.ToString());
                 }
             }
             catch (Exception er)
@@ -135,7 +138,7 @@ namespace Arcora.Api.Services.Implementations
                 UnitType unitType = this.mapper.Map<UnitType>(unittypeDto);
                 unitType = await unittypeRepository.Update(unitType) ?? new UnitType();
                 await unittypeRepository.Save();
-                cache.Remove(Cache.UNITTYPES.ToString());
+                await cache.RemoveAsync(Cache.UNITTYPES.ToString());
                 unittypeDto = this.mapper.Map<UnitTypeDto>(unitType);
             }
             catch (Exception er)
@@ -157,7 +160,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("UnitType with the specified ID was not found.");
                 await unittypeRepository.Delete(unitType);
                 await unittypeRepository.Save();
-                cache.Remove(Cache.UNITTYPES.ToString());
+                await cache.RemoveAsync(Cache.UNITTYPES.ToString());
             }
             catch (Exception er)
             {

@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class TenancyTypeService : ITenancyTypeService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<TenancyTypeService> logger;
         private readonly ITenancyTypeRepository tenancytypeRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public TenancyTypeService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<TenancyTypeService> logger, ITenancyTypeRepository tenancytypeRepository)
+        public TenancyTypeService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<TenancyTypeService> logger, ITenancyTypeRepository tenancytypeRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,38 +37,26 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<TenancyType> entities;
             try
             {
-                entities = cache.Get<IEnumerable<TenancyType>>(Cache.TENANCYTYPES.ToString()) ?? new List<TenancyType>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.tenancytypeRepository.GetAll())?.Where(x => x != null).Cast<TenancyType>().ToList() ?? new List<TenancyType>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<TenancyType>>(Cache.TENANCYTYPES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.TENANCYTYPES.ToString(),
+                    async cancel =>
+                        (await this.tenancytypeRepository.GetAll())?.Where(x => x != null).Cast<TenancyType>().ToList() ?? new List<TenancyType>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
                 logger.LogError(er, "An error occurred while fetching TenancyType by ID. Timestamp: {Timestamp}", DateTime.UtcNow);
-                return new PagedResult<TenancyTypeDto>
-                {
-                    Data = new List<TenancyTypeDto>(),
-                    TotalCount = 0
-                };
+                return new PagedResult<TenancyTypeDto> { Data = new List<TenancyTypeDto>(), TotalCount = 0 };
             }
 
             IEnumerable<TenancyType> filteredEntities = entities!;
             if (!string.IsNullOrEmpty(paging?.Search))
-            {
                 filteredEntities = entities!.Where(x => !string.IsNullOrEmpty(x.Name) && x.Name.Contains(paging.Search, StringComparison.OrdinalIgnoreCase));
-            }
 
             int totalCount = filteredEntities.Count();
             var pagedEntities = filteredEntities.OrderByDescending(x => x.TenancyTypeID).Skip((paging!.PageNumber - 1) * paging.PageSize).Take(paging.PageSize).ToList();
             var pagedDtos = this.mapper.Map<IEnumerable<TenancyTypeDto>>(pagedEntities);
-            return new PagedResult<TenancyTypeDto>
-            {
-                Data = pagedDtos,
-                TotalCount = totalCount
-            };
+            return new PagedResult<TenancyTypeDto> { Data = pagedDtos, TotalCount = totalCount };
         }
 
         /// <inheritdoc/>
@@ -76,16 +64,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<TenancyType> entities = cache.Get<IEnumerable<TenancyType>>(Cache.TENANCYTYPES.ToString()) ?? new List<TenancyType>();
-                TenancyType? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.TenancyTypeID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.TENANCYTYPES.ToString(),
+                    async cancel =>
+                        (await this.tenancytypeRepository.GetAll())?.Where(x => x != null).Cast<TenancyType>().ToList() ?? new List<TenancyType>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.TenancyTypeID == ID);
+                if (match == null)
                     match = await this.tenancytypeRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<TenancyTypeDto>(match);
             }
@@ -110,7 +97,7 @@ namespace Arcora.Api.Services.Implementations
                     tenancyType.CapturedDate = DateTime.UtcNow;
                     tenancyType = await tenancytypeRepository.Create(tenancyType) ?? new TenancyType();
                     await tenancytypeRepository.Save();
-                    cache.Remove(Cache.TENANCYTYPES.ToString());
+                    await cache.RemoveAsync(Cache.TENANCYTYPES.ToString());
                 }
             }
             catch (Exception er)
@@ -133,7 +120,7 @@ namespace Arcora.Api.Services.Implementations
                 TenancyType tenancyType = this.mapper.Map<TenancyType>(tenancytypeDto);
                 tenancyType = await tenancytypeRepository.Update(tenancyType) ?? new TenancyType();
                 await tenancytypeRepository.Save();
-                cache.Remove(Cache.TENANCYTYPES.ToString());
+                await cache.RemoveAsync(Cache.TENANCYTYPES.ToString());
                 tenancytypeDto = this.mapper.Map<TenancyTypeDto>(tenancyType);
             }
             catch (Exception er)
@@ -155,7 +142,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("TenancyType with the specified ID was not found.");
                 await tenancytypeRepository.Delete(tenancyType);
                 await tenancytypeRepository.Save();
-                cache.Remove(Cache.TENANCYTYPES.ToString());
+                await cache.RemoveAsync(Cache.TENANCYTYPES.ToString());
             }
             catch (Exception er)
             {

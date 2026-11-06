@@ -31,51 +31,31 @@ IF COL_LENGTH('Leases', 'AgreementUrl') IS NULL
     ALTER TABLE [Leases] ADD [AgreementUrl] nvarchar(1000) NULL;
 ");
 
-            migrationBuilder.AddColumn<DateTime>(
-                name: "ArrivalConfirmedAt",
-                table: "Inspections",
-                type: "datetime2",
-                nullable: true);
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[Inspections]', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH(N'[dbo].[Inspections]', N'ArrivalConfirmedAt') IS NULL
+        ALTER TABLE [dbo].[Inspections] ADD [ArrivalConfirmedAt] datetime2 NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "OccupancyReadiness",
-                table: "Inspections",
-                type: "nvarchar(50)",
-                maxLength: 50,
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[Inspections]', N'OccupancyReadiness') IS NULL
+        ALTER TABLE [dbo].[Inspections] ADD [OccupancyReadiness] nvarchar(50) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "SubmissionIdempotencyKey",
-                table: "Inspections",
-                type: "nvarchar(255)",
-                maxLength: 255,
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[Inspections]', N'SubmissionIdempotencyKey') IS NULL
+        ALTER TABLE [dbo].[Inspections] ADD [SubmissionIdempotencyKey] nvarchar(255) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "SubmissionRequestHash",
-                table: "Inspections",
-                type: "nvarchar(128)",
-                maxLength: 128,
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[Inspections]', N'SubmissionRequestHash') IS NULL
+        ALTER TABLE [dbo].[Inspections] ADD [SubmissionRequestHash] nvarchar(128) NULL;
 
-            migrationBuilder.AddColumn<DateTime>(
-                name: "SubmittedAt",
-                table: "Inspections",
-                type: "datetime2",
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[Inspections]', N'SubmittedAt') IS NULL
+        ALTER TABLE [dbo].[Inspections] ADD [SubmittedAt] datetime2 NULL;
 
-            migrationBuilder.AddColumn<long>(
-                name: "SubmittedByUserID",
-                table: "Inspections",
-                type: "bigint",
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[Inspections]', N'SubmittedByUserID') IS NULL
+        ALTER TABLE [dbo].[Inspections] ADD [SubmittedByUserID] bigint NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "Version",
-                table: "Inspections",
-                type: "nvarchar(64)",
-                maxLength: 64,
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[Inspections]', N'Version') IS NULL
+        ALTER TABLE [dbo].[Inspections] ADD [Version] nvarchar(64) NULL;
+END
+");
 
             migrationBuilder.AlterColumn<string>(
                 name: "Description",
@@ -88,39 +68,25 @@ IF COL_LENGTH('Leases', 'AgreementUrl') IS NULL
                 oldMaxLength: 255,
                 oldNullable: true);
 
-            migrationBuilder.AddColumn<string>(
-                name: "ChecksumSha256",
-                table: "Attachments",
-                type: "nvarchar(64)",
-                maxLength: 64,
-                nullable: true);
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[Attachments]', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH(N'[dbo].[Attachments]', N'ChecksumSha256') IS NULL
+        ALTER TABLE [dbo].[Attachments] ADD [ChecksumSha256] nvarchar(64) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "ClientUploadID",
-                table: "Attachments",
-                type: "nvarchar(100)",
-                maxLength: 100,
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[Attachments]', N'ClientUploadID') IS NULL
+        ALTER TABLE [dbo].[Attachments] ADD [ClientUploadID] nvarchar(100) NULL;
 
-            migrationBuilder.AddColumn<DateTime>(
-                name: "UploadExpiresAt",
-                table: "Attachments",
-                type: "datetime2",
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[Attachments]', N'UploadExpiresAt') IS NULL
+        ALTER TABLE [dbo].[Attachments] ADD [UploadExpiresAt] datetime2 NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "UploadFailureReason",
-                table: "Attachments",
-                type: "nvarchar(256)",
-                maxLength: 256,
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[Attachments]', N'UploadFailureReason') IS NULL
+        ALTER TABLE [dbo].[Attachments] ADD [UploadFailureReason] nvarchar(256) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "UploadStatus",
-                table: "Attachments",
-                type: "nvarchar(20)",
-                maxLength: 20,
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[Attachments]', N'UploadStatus') IS NULL
+        ALTER TABLE [dbo].[Attachments] ADD [UploadStatus] nvarchar(20) NULL;
+END
+");
 
             migrationBuilder.CreateTable(
                 name: "InspectionReviews",
@@ -189,73 +155,76 @@ IF COL_LENGTH('Leases', 'AgreementUrl') IS NULL
                 name: "IX_Attachments_EntityType_EntityID_ClientUploadID",
                 table: "Attachments");
 
-            migrationBuilder.DropColumn(
-                name: "ProviderDocumentID",
-                table: "LeaseSignatories");
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[LeaseSignatories]', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH(N'[dbo].[LeaseSignatories]', N'ProviderDocumentID') IS NOT NULL
+        ALTER TABLE [dbo].[LeaseSignatories] DROP COLUMN [ProviderDocumentID];
 
-            migrationBuilder.DropColumn(
-                name: "ProviderDocumentUrl",
-                table: "LeaseSignatories");
+    IF COL_LENGTH(N'[dbo].[LeaseSignatories]', N'ProviderDocumentUrl') IS NOT NULL
+        ALTER TABLE [dbo].[LeaseSignatories] DROP COLUMN [ProviderDocumentUrl];
 
-            migrationBuilder.DropColumn(
-                name: "ProviderRequestID",
-                table: "LeaseSignatories");
+    IF COL_LENGTH(N'[dbo].[LeaseSignatories]', N'ProviderRequestID') IS NOT NULL
+        ALTER TABLE [dbo].[LeaseSignatories] DROP COLUMN [ProviderRequestID];
 
-            migrationBuilder.DropColumn(
-                name: "SignatureImageUrl",
-                table: "LeaseSignatories");
+    IF COL_LENGTH(N'[dbo].[LeaseSignatories]', N'SignatureImageUrl') IS NOT NULL
+        ALTER TABLE [dbo].[LeaseSignatories] DROP COLUMN [SignatureImageUrl];
+END
+");
 
-            migrationBuilder.DropColumn(
-                name: "AgreementUrl",
-                table: "Leases");
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[Leases]', N'U') IS NOT NULL
+   AND COL_LENGTH(N'[dbo].[Leases]', N'AgreementUrl') IS NOT NULL
+BEGIN
+    ALTER TABLE [dbo].[Leases] DROP COLUMN [AgreementUrl];
+END
+");
 
-            migrationBuilder.DropColumn(
-                name: "ArrivalConfirmedAt",
-                table: "Inspections");
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[Inspections]', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH(N'[dbo].[Inspections]', N'ArrivalConfirmedAt') IS NOT NULL
+        ALTER TABLE [dbo].[Inspections] DROP COLUMN [ArrivalConfirmedAt];
 
-            migrationBuilder.DropColumn(
-                name: "OccupancyReadiness",
-                table: "Inspections");
+    IF COL_LENGTH(N'[dbo].[Inspections]', N'OccupancyReadiness') IS NOT NULL
+        ALTER TABLE [dbo].[Inspections] DROP COLUMN [OccupancyReadiness];
 
-            migrationBuilder.DropColumn(
-                name: "SubmissionIdempotencyKey",
-                table: "Inspections");
+    IF COL_LENGTH(N'[dbo].[Inspections]', N'SubmissionIdempotencyKey') IS NOT NULL
+        ALTER TABLE [dbo].[Inspections] DROP COLUMN [SubmissionIdempotencyKey];
 
-            migrationBuilder.DropColumn(
-                name: "SubmissionRequestHash",
-                table: "Inspections");
+    IF COL_LENGTH(N'[dbo].[Inspections]', N'SubmissionRequestHash') IS NOT NULL
+        ALTER TABLE [dbo].[Inspections] DROP COLUMN [SubmissionRequestHash];
 
-            migrationBuilder.DropColumn(
-                name: "SubmittedAt",
-                table: "Inspections");
+    IF COL_LENGTH(N'[dbo].[Inspections]', N'SubmittedAt') IS NOT NULL
+        ALTER TABLE [dbo].[Inspections] DROP COLUMN [SubmittedAt];
 
-            migrationBuilder.DropColumn(
-                name: "SubmittedByUserID",
-                table: "Inspections");
+    IF COL_LENGTH(N'[dbo].[Inspections]', N'SubmittedByUserID') IS NOT NULL
+        ALTER TABLE [dbo].[Inspections] DROP COLUMN [SubmittedByUserID];
 
-            migrationBuilder.DropColumn(
-                name: "Version",
-                table: "Inspections");
+    IF COL_LENGTH(N'[dbo].[Inspections]', N'Version') IS NOT NULL
+        ALTER TABLE [dbo].[Inspections] DROP COLUMN [Version];
+END
+");
 
-            migrationBuilder.DropColumn(
-                name: "ChecksumSha256",
-                table: "Attachments");
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[Attachments]', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH(N'[dbo].[Attachments]', N'ChecksumSha256') IS NOT NULL
+        ALTER TABLE [dbo].[Attachments] DROP COLUMN [ChecksumSha256];
 
-            migrationBuilder.DropColumn(
-                name: "ClientUploadID",
-                table: "Attachments");
+    IF COL_LENGTH(N'[dbo].[Attachments]', N'ClientUploadID') IS NOT NULL
+        ALTER TABLE [dbo].[Attachments] DROP COLUMN [ClientUploadID];
 
-            migrationBuilder.DropColumn(
-                name: "UploadExpiresAt",
-                table: "Attachments");
+    IF COL_LENGTH(N'[dbo].[Attachments]', N'UploadExpiresAt') IS NOT NULL
+        ALTER TABLE [dbo].[Attachments] DROP COLUMN [UploadExpiresAt];
 
-            migrationBuilder.DropColumn(
-                name: "UploadFailureReason",
-                table: "Attachments");
+    IF COL_LENGTH(N'[dbo].[Attachments]', N'UploadFailureReason') IS NOT NULL
+        ALTER TABLE [dbo].[Attachments] DROP COLUMN [UploadFailureReason];
 
-            migrationBuilder.DropColumn(
-                name: "UploadStatus",
-                table: "Attachments");
+    IF COL_LENGTH(N'[dbo].[Attachments]', N'UploadStatus') IS NOT NULL
+        ALTER TABLE [dbo].[Attachments] DROP COLUMN [UploadStatus];
+END
+");
 
             migrationBuilder.AlterColumn<string>(
                 name: "Description",

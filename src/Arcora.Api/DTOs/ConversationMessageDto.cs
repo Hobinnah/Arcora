@@ -35,7 +35,6 @@ public class ConversationMessageDto
     /// Message content
     /// </summary>
     [Required]
-    [MaxLength(256)]
     public string? Message { get; set; }
 
     /// <summary>
@@ -48,6 +47,7 @@ public class ConversationMessageDto
     /// FK to ConversationMessage (reply)
     /// </summary>
     public Guid? ReplyToMessageID { get; set; }
+    public Guid? AttachmentSendKey { get; set; }
 
     /// <summary>
     /// Message sent timestamp
@@ -92,4 +92,24 @@ public class ConversationMessageDto
     /// FK to ConversationMessage (reply)
     /// </summary>
     public ConversationMessageDto? ReplyToMessageConversationMessage { get; set; }
+    /// <summary>
+    /// Emoji reactions (one per participant)
+    /// </summary>
+    public List<ConversationMessageReactionDto> Reactions { get; set; } = new();
+    /// <summary>
+    /// Sender's first name for display (tenant, organization member, or user)
+    /// </summary>
+    public string? SenderName { get; set; }
+    /// <summary>
+    /// ATTACHMENT messages only: a short-lived read URL for the uploaded file
+    /// </summary>
+    public string? AttachmentUrl { get; set; }
+    /// <summary>
+    /// Replies only: a short preview of the quoted message ("Message unsent" when it was deleted)
+    /// </summary>
+    public string? ReplyToPreview { get; set; }
+    /// <summary>
+    /// Replies only: first name of the quoted message's sender
+    /// </summary>
+    public string? ReplyToSenderName { get; set; }
 }

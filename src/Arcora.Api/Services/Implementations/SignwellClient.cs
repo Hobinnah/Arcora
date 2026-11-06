@@ -15,6 +15,7 @@ namespace Arcora.Api.Services.Implementations
         private readonly string _getDocumentPathTemplate;
         private readonly string? _apiKey;
         private readonly string _preferredAuthScheme;
+        private readonly bool _testMode;
 
         public SignwellClient(HttpClient httpClient, IConfiguration configuration, ILogger<SignwellClient> logger)
         {
@@ -23,6 +24,7 @@ namespace Arcora.Api.Services.Implementations
 
             var baseUrl = configuration["Signwell:BaseUrl"];
             _apiKey = configuration["Signwell:ApiKey"];
+            _testMode = configuration.GetValue<bool>("Signwell:TestMode");
             var authScheme = configuration["Signwell:AuthScheme"];
             var configuredPath = configuration["Signwell:CreateDocumentPath"] ?? "/api/v1/documents";
             var configuredGetPath = configuration["Signwell:GetDocumentPathTemplate"] ?? "/api/v1/documents/{documentId}";
@@ -78,6 +80,7 @@ namespace Arcora.Api.Services.Implementations
 
             var payload = new
             {
+                test_mode = _testMode,
                 name = fileName,
                 subject,
                 message,
@@ -185,6 +188,27 @@ namespace Arcora.Api.Services.Implementations
                 throw new ArgumentException("Provider document id is required.", nameof(providerDocumentId));
 
             var requestPath = BuildDocumentStatusPath(providerDocumentId);
+            var responseBody = await GetDocumentJsonAsync(requestPath, cancellationToken);
+            var status = ParseDocumentStatusResult(responseBody, providerDocumentId);
+            if (string.Equals(status.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+            {
+                var completedResponse = await GetDocumentJsonAsync(
+                    requestPath.TrimEnd('/') + "/completed_pdf?url_only=true", cancellationToken);
+                using var completed = JsonDocument.Parse(completedResponse);
+                var url = TryGetString(completed.RootElement, "file_url");
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+                    throw new HttpRequestException("The signing provider returned no valid completed PDF URL.");
+                status.DocumentUrl = uri.AbsoluteUri;
+            }
+            else
+            {
+                status.DocumentUrl = null;
+            }
+            return status;
+        }
+
+        private async Task<string> GetDocumentJsonAsync(string requestPath, CancellationToken cancellationToken)
+        {
             var authAttempts = BuildAuthAttempts(_preferredAuthScheme);
             HttpResponseMessage? response = null;
             string responseBody = string.Empty;
@@ -225,7 +249,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new HttpRequestException($"Signwell status request failed with status {(int)response.StatusCode}.");
                 }
 
-                return ParseDocumentStatusResult(responseBody, providerDocumentId);
+                return responseBody;
             }
         }
 

@@ -28,9 +28,8 @@ public class ListingPhoto
     public string? Url { get; set; }
 
     /// <summary>
-    /// Storage provider for the photo (e.g. AZURE_BLOB).
+    /// Storage provider for uploaded photos; absent on legacy URL-only photos.
     /// </summary>
-    [Required]
     [MaxLength(100)]
     public string? StorageProvider { get; set; } = "AZURE_BLOB";
 
@@ -41,9 +40,8 @@ public class ListingPhoto
     public string? StorageContainer { get; set; }
 
     /// <summary>
-    /// Reference to the stored blob
+    /// Reference to the stored blob; absent on URL-only photos.
     /// </summary>
-    [Required]
     [MaxLength(500)]
     public string? StorageReference { get; set; }
 

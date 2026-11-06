@@ -22,7 +22,7 @@ namespace Arcora.Api.Services.Interfaces
         /// Handles a definitive PAD result for an intent, applying the retry/fallback state machine.
         /// Called from webhook processing when the ACSS outcome becomes final.
         /// </summary>
-        Task HandlePadResultAsync(Guid paymentIntentId, string providerStatus, string? failureCode, string? failureMessage, CancellationToken cancellationToken = default);
+        Task HandlePadResultAsync(Guid paymentIntentId, string providerStatus, string? failureCode, string? failureMessage, CancellationToken cancellationToken = default, string? providerPaymentIntentId = null);
 
         /// <summary>
         /// Charges the backup credit card for an intent whose PAD has definitively failed.

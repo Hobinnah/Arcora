@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class LeaseOccupantsService : ILeaseOccupantsService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<LeaseOccupantsService> logger;
         private readonly ILeaseOccupantsRepository leaseoccupantsRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public LeaseOccupantsService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<LeaseOccupantsService> logger, ILeaseOccupantsRepository leaseoccupantsRepository)
+        public LeaseOccupantsService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<LeaseOccupantsService> logger, ILeaseOccupantsRepository leaseoccupantsRepository)
         {
             this.cache = cache;
             this.logger = logger;

@@ -3,6 +3,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Microsoft.Extensions.Options;
+using Arcora.Api.Operations;
 
 namespace Arcora.Api.Services.Implementations
 {
@@ -19,15 +20,21 @@ namespace Arcora.Api.Services.Implementations
         private readonly ILogger<RecurringRentCollectionService> logger;
         private readonly IServiceProvider serviceProvider;
         private readonly RentCollectionOptions options;
+        private readonly OperationsRegistry? health;
+        private readonly TimeProvider timeProvider;
 
         public RecurringRentCollectionService(
             ILogger<RecurringRentCollectionService> logger,
             IServiceProvider serviceProvider,
-            IOptions<RentCollectionOptions> options)
+            IOptions<RentCollectionOptions> options,
+            OperationsRegistry? health = null,
+            TimeProvider? timeProvider = null)
         {
             this.logger = logger;
             this.serviceProvider = serviceProvider;
             this.options = options.Value;
+            this.health = health;
+            this.timeProvider = timeProvider ?? TimeProvider.System;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -58,12 +65,15 @@ namespace Arcora.Api.Services.Implementations
 
         private async Task RunOnceAsync(CancellationToken cancellationToken)
         {
+            using var run = health?.Begin(WorkerIds.Rent);
+            try
+            {
             using var scope = serviceProvider.CreateScope();
             var leaseRepository = scope.ServiceProvider.GetRequiredService<ILeaseRepository>();
             var paymentIntentRepository = scope.ServiceProvider.GetRequiredService<IPaymentIntentRepository>();
             var orchestrator = scope.ServiceProvider.GetRequiredService<IRentCollectionOrchestrator>();
 
-            var now = DateTime.UtcNow;
+            var now = timeProvider.GetUtcNow().UtcDateTime;
             var activeLeases = await leaseRepository.Find(x => x.Status == "ACTIVE");
             if (activeLeases == null)
                 return;
@@ -75,10 +85,10 @@ namespace Arcora.Api.Services.Implementations
 
                 // Deterministic key for this month's charge prevents duplicate collection within a cycle.
                 var periodKey = $"{now:yyyyMM}";
+                var collectionKey = $"pi_{lease!.LeaseID:N}_{periodKey}";
                 var alreadyCharged = await paymentIntentRepository.Find(x =>
                     x.LeaseID == lease!.LeaseID &&
-                    x.IdempotencyKey != null &&
-                    x.IdempotencyKey.Contains(periodKey));
+                    x.IdempotencyKey == collectionKey);
 
                 if (alreadyCharged != null && alreadyCharged.Any())
                     continue;
@@ -90,15 +100,29 @@ namespace Arcora.Api.Services.Implementations
                         lease.TenantID,
                         Guid.Empty,
                         lease.BaseRentAmount,
-                        $"pi_{lease.LeaseID:N}_{periodKey}",
+                        collectionKey,
                         cancellationToken);
+                    run?.Count();
 
                     logger.LogInformation("Initiated rent collection for lease {LeaseId} period {Period}.", lease.LeaseID, periodKey);
                 }
                 catch (Exception ex)
                 {
+                    if (cancellationToken.IsCancellationRequested) { run?.Cancel(); throw; }
+                    run?.Fail();
                     logger.LogError(ex, "Failed to initiate rent collection for lease {LeaseId}.", lease!.LeaseID);
                 }
+            }
+            }
+            catch (Exception) when (cancellationToken.IsCancellationRequested)
+            {
+                run?.Cancel();
+                throw;
+            }
+            catch
+            {
+                run?.Fail();
+                throw;
             }
         }
 
@@ -109,6 +133,9 @@ namespace Arcora.Api.Services.Implementations
         private bool IsDueToday(Lease lease, DateTime nowUtc)
         {
             var anchor = lease.StartDate;
+            if (nowUtc.Date < anchor.Date || (nowUtc.Year == anchor.Year && nowUtc.Month == anchor.Month) ||
+                (lease.EndDate.HasValue && nowUtc.Date > lease.EndDate.Value.Date))
+                return false;
             var daysInMonth = DateTime.DaysInMonth(nowUtc.Year, nowUtc.Month);
             var anniversaryDay = Math.Min(anchor.Day, daysInMonth);
 

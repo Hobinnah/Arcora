@@ -4,6 +4,7 @@ using Arcora.Api.Models;
 using Arcora.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Arcora.Api.Services.Implementations;
 
 namespace Arcora.Api.Controllers
 {
@@ -38,8 +39,10 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateRentalUnit")]
-        public async Task<IActionResult> CreateRentalUnit([FromServices] IRentalUnitService rentalunitService, [FromBody] RentalUnitDto rentalunitDto)
+        public async Task<IActionResult> CreateRentalUnit([FromServices] IRentalUnitService rentalunitService,
+            [FromServices] PropertyLocationAccess access, [FromBody] RentalUnitDto rentalunitDto)
         {
+            if (!await access.CanManagePropertyAsync(User, rentalunitDto.PropertyID, HttpContext.RequestAborted)) return Forbid();
             // var displayName = User.Identity?.Name ?? string.Empty;
             // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
             var result = await rentalunitService.CreateRentalUnit(rentalunitDto);
@@ -53,8 +56,13 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateRentalUnit")]
-        public async Task<IActionResult> UpdateRentalUnit([FromServices] IRentalUnitService rentalunitService, Guid id, [FromBody] RentalUnitDto rentalunitDto)
+        public async Task<IActionResult> UpdateRentalUnit([FromServices] IRentalUnitService rentalunitService,
+            [FromServices] PropertyLocationAccess access, Guid id, [FromBody] RentalUnitDto rentalunitDto)
         {
+            var existing = await rentalunitService.GetID(id);
+            if (existing == null) return NotFound(new { message = "Rental unit was not found." });
+            if (!await access.CanManagePropertyAsync(User, existing.PropertyID, HttpContext.RequestAborted) ||
+                !await access.CanManagePropertyAsync(User, rentalunitDto.PropertyID, HttpContext.RequestAborted)) return Forbid();
             // var displayName = User.Identity?.Name ?? string.Empty;
             // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
             var result = await rentalunitService.UpdateRentalUnit(id, rentalunitDto);
@@ -84,8 +92,12 @@ namespace Arcora.Api.Controllers
         // POST: api/rentalunit/{id}/{status}
         [Authorize(Roles = "User, LandLord, Admin")]
         [HttpPost("{id}/{status}", Name = "UpdateRentalUnitStatus")]
-        public async Task<ActionResult> UpdateRentalUnitStatus([FromServices] IRentalUnitService rentalunitService, [FromRoute] Guid id, [FromRoute] string status)
+        public async Task<ActionResult> UpdateRentalUnitStatus([FromServices] IRentalUnitService rentalunitService,
+            [FromServices] PropertyLocationAccess access, [FromRoute] Guid id, [FromRoute] string status)
         {
+            var existing = await rentalunitService.GetID(id);
+            if (existing == null) return NotFound(new { message = "Rental unit was not found." });
+            if (!await access.CanManagePropertyAsync(User, existing.PropertyID, HttpContext.RequestAborted)) return Forbid();
             var rentalunit = await rentalunitService.UpdateRentalUnitStatus(id, status);
             if (rentalunit == null)
                 return NotFound($"RentalUnit with ID {id} not found.");

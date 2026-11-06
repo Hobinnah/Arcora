@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class PayoutItemService : IPayoutItemService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<PayoutItemService> logger;
         private readonly IPayoutItemRepository payoutitemRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public PayoutItemService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<PayoutItemService> logger, IPayoutItemRepository payoutitemRepository)
+        public PayoutItemService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<PayoutItemService> logger, IPayoutItemRepository payoutitemRepository)
         {
             this.cache = cache;
             this.logger = logger;

@@ -8,6 +8,7 @@ namespace Arcora.Api.DTOs;
 /// </summary>
 public class ListingDto
 {
+    public PublicListingLocation? PublicLocation { get; set; }
     /// <summary>
     /// Key
     /// </summary>
@@ -64,7 +65,7 @@ public class ListingDto
     }
 
     /// <summary>
-    /// Additional details about the listing . "1 bed · 1 bath · Furnished"
+    /// Additional details about the listing . "1 bed ï¿½ 1 bath ï¿½ Furnished"
     /// </summary>
     public string? Details
     {
@@ -72,10 +73,10 @@ public class ListingDto
         {
             if (Bedrooms > 0 && Bathrooms > 0)
             {
-                return $"{Bedrooms.ToString()} bed(s) · {Bathrooms.ToString()} bath(s) . {(IsFurnished ? "Furnished" : "Unfurnished")} . {(IsPetFriendly ? "Pet Friendly" : "No Pets")}";
+                return $"{Bedrooms.ToString()} bed(s) ï¿½ {Bathrooms.ToString()} bath(s) . {(IsFurnished ? "Furnished" : "Unfurnished")} . {(IsPetFriendly ? "Pet Friendly" : "No Pets")}";
             }
 
-            return "1 bed · 1 bath · Unfurnished · No Pets";
+            return "1 bed ï¿½ 1 bath ï¿½ Unfurnished ï¿½ No Pets";
         }
         set { /* intentionally left blank to allow model binding */ }
     }
@@ -254,6 +255,11 @@ public class ListingDto
     [Required]
     [MaxLength(50)]
     public string? Status { get; set; } = "DRAFT";
+    public DateTime? ReviewSubmittedAt { get; set; }
+    public DateTime? ReviewedAt { get; set; }
+    public long? ReviewedByUserID { get; set; }
+    [MaxLength(2000)]
+    public string? ReviewMessage { get; set; }
     /// <summary>
     /// Date when listing was published
     /// </summary>

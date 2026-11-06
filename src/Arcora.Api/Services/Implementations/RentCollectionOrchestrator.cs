@@ -6,7 +6,9 @@ using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Payments.Abstractions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
+using Arcora.Api.Enums;
 
 namespace Arcora.Api.Services.Implementations
 {
@@ -27,6 +29,7 @@ namespace Arcora.Api.Services.Implementations
         private readonly IPaymentRepository paymentRepository;
         private readonly IAutopayMandateRepository autopayMandateRepository;
         private readonly ArcoraDbContext dbContext;
+        private readonly HybridCache cache;
 
         public RentCollectionOrchestrator(
             IMapper mapper,
@@ -37,7 +40,8 @@ namespace Arcora.Api.Services.Implementations
             IPaymentMethodRepository paymentMethodRepository,
             IPaymentRepository paymentRepository,
             IAutopayMandateRepository autopayMandateRepository,
-            ArcoraDbContext dbContext)
+            ArcoraDbContext dbContext,
+            HybridCache cache)
         {
             this.mapper = mapper;
             this.logger = logger;
@@ -48,29 +52,41 @@ namespace Arcora.Api.Services.Implementations
             this.paymentRepository = paymentRepository;
             this.autopayMandateRepository = autopayMandateRepository;
             this.dbContext = dbContext;
+            this.cache = cache;
         }
 
         /// <inheritdoc/>
         public async Task<PaymentIntentDto> InitiateCollectionAsync(Guid? leaseId, Guid tenantId, Guid invoiceMasterId, decimal amount, string? idempotencyKey = null, CancellationToken cancellationToken = default)
         {
+            if (amount <= 0m)
+                throw new InvalidOperationException("Collection amount must be positive.");
+            var key = string.IsNullOrWhiteSpace(idempotencyKey)
+                ? $"pi_{(leaseId.HasValue ? leaseId.Value.ToString("N") : tenantId.ToString("N"))}_{invoiceMasterId:N}"
+                : idempotencyKey;
+            var existing = await dbContext.PaymentIntents.AsNoTracking()
+                .SingleOrDefaultAsync(item => item.IdempotencyKey == key, cancellationToken);
+            if (existing != null)
+                return ExistingIntent(existing, leaseId, tenantId, invoiceMasterId, amount);
+
             var padMethod = await GetTenantMethodByRoleAsync(tenantId, "PRIMARY")
                 ?? throw new InvalidOperationException($"Tenant {tenantId} has no verified PAD (PRIMARY) payment method.");
 
             var mandates = leaseId.HasValue
-                ? await autopayMandateRepository.Find(x => x.LeaseID == leaseId && x.TenantID == tenantId && x.Status == "ACTIVE")
+                ? await autopayMandateRepository.Find(x => x.LeaseID == leaseId && x.TenantID == tenantId &&
+                    x.PaymentMethodID == padMethod.PaymentMethodID && x.PaymentRail == "PAD" && x.Status == "ACTIVE")
                 : null;
             var mandate = mandates?.FirstOrDefault();
 
             // Fall back to the tenant-level PAD mandate established during onboarding (not yet lease-bound).
             if (mandate == null)
             {
-                var tenantMandates = await autopayMandateRepository.Find(x => x.TenantID == tenantId && x.PaymentRail == "PAD" && x.Status == "ACTIVE");
+                var tenantMandates = await autopayMandateRepository.Find(x => x.TenantID == tenantId &&
+                    x.LeaseID == null && x.PaymentMethodID == padMethod.PaymentMethodID && x.PaymentRail == "PAD" && x.Status == "ACTIVE");
                 mandate = tenantMandates?.FirstOrDefault();
             }
 
-            var key = string.IsNullOrWhiteSpace(idempotencyKey)
-                ? $"pi_{(leaseId.HasValue ? leaseId.Value.ToString("N") : tenantId.ToString("N"))}_{invoiceMasterId:N}"
-                : idempotencyKey;
+            if (mandate == null)
+                throw new InvalidOperationException("An active PAD mandate is required for collection.");
 
             var intent = new PaymentIntent
             {
@@ -79,7 +95,7 @@ namespace Arcora.Api.Services.Implementations
                 LeaseID = leaseId,
                 TenantID = tenantId,
                 PaymentMethodID = padMethod.PaymentMethodID,
-                AutopayMandateID = mandate?.AutopayMandateID,
+                AutopayMandateID = mandate.AutopayMandateID,
                 Amount = amount,
                 Currency = "CAD",
                 Status = "PROCESSING",
@@ -91,16 +107,65 @@ namespace Arcora.Api.Services.Implementations
                 CapturedDate = DateTime.UtcNow
             };
 
+            var accounting = new RentPaymentAccountingService(dbContext);
+            var allocation = await accounting.SnapshotAsync(intent, cancellationToken);
+            var generatedInvoice = allocation != null && !intent.InvoiceMasterID.HasValue;
+            if (allocation != null)
+                await accounting.CreateInvoiceAsync(intent, allocation, cancellationToken);
+            var generatedInvoiceId = generatedInvoice ? intent.InvoiceMasterID : null;
             await paymentIntentRepository.Create(intent);
-            await paymentIntentRepository.Save();
+            if (allocation != null)
+                dbContext.RentPaymentAccountings.Add(allocation);
+            try
+            {
+                await paymentIntentRepository.Save();
+            }
+            catch (DbUpdateException)
+            {
+                dbContext.Entry(intent).State = EntityState.Detached;
+                if (allocation != null)
+                    dbContext.Entry(allocation).State = EntityState.Detached;
+                if (generatedInvoiceId.HasValue)
+                {
+                    foreach (var detailEntry in dbContext.ChangeTracker.Entries<InvoiceDetail>()
+                        .Where(entry => entry.State == EntityState.Added &&
+                            entry.Entity.InvoiceMasterID == generatedInvoiceId.Value)
+                        .ToList())
+                        detailEntry.State = EntityState.Detached;
+                    var invoiceEntry = dbContext.ChangeTracker.Entries<InvoiceMaster>()
+                        .FirstOrDefault(entry => entry.State == EntityState.Added &&
+                            entry.Entity.InvoiceMasterID == generatedInvoiceId.Value);
+                    if (invoiceEntry != null)
+                        invoiceEntry.State = EntityState.Detached;
+                }
+                var concurrent = await dbContext.PaymentIntents.AsNoTracking()
+                    .SingleOrDefaultAsync(item => item.IdempotencyKey == key, cancellationToken);
+                if (concurrent == null)
+                    throw;
+                logger.LogInformation("Reusing concurrent collection intent {IntentId}", concurrent.PaymentIntentID);
+                return ExistingIntent(concurrent, leaseId, tenantId, invoiceMasterId, amount);
+            }
+            InvalidatePaymentCaches();
 
-            await AttemptChargeAsync(intent, padMethod, PaymentMethodKind.Pad, mandate?.ProviderMandateID, cancellationToken);
+            var result = await AttemptChargeAsync(intent, padMethod, PaymentMethodKind.Pad, mandate.ProviderMandateID, cancellationToken);
+            if (result is FailureCategory.Temporary or FailureCategory.Permanent)
+                await ChargeBackupCardAsync(intent.PaymentIntentID, cancellationToken);
 
             return mapper.Map<PaymentIntentDto>(intent);
         }
 
+        private PaymentIntentDto ExistingIntent(PaymentIntent intent, Guid? leaseId, Guid tenantId, Guid invoiceId, decimal amount)
+        {
+            if (intent.LeaseID != leaseId || intent.TenantID != tenantId || intent.Amount != amount ||
+                (invoiceId != Guid.Empty && intent.InvoiceMasterID != invoiceId))
+                throw new InvalidOperationException("The collection idempotency key belongs to a different payment.");
+            return mapper.Map<PaymentIntentDto>(intent);
+        }
+
         /// <inheritdoc/>
-        public async Task HandlePadResultAsync(Guid paymentIntentId, string providerStatus, string? failureCode, string? failureMessage, CancellationToken cancellationToken = default)
+        public async Task HandlePadResultAsync(
+            Guid paymentIntentId, string providerStatus, string? failureCode, string? failureMessage,
+            CancellationToken cancellationToken = default, string? providerPaymentIntentId = null)
         {
             var intent = await paymentIntentRepository.GetByID(paymentIntentId);
             if (intent == null)
@@ -110,15 +175,36 @@ namespace Arcora.Api.Services.Implementations
             }
 
             var category = Arcora.Payments.Orchestration.FailureClassifier.Classify(providerStatus, failureCode);
+            var providerIntentId = string.IsNullOrWhiteSpace(providerPaymentIntentId)
+                ? intent.ProviderPaymentIntentID
+                : providerPaymentIntentId;
+            if (category != FailureCategory.None &&
+                !string.IsNullOrWhiteSpace(providerIntentId) &&
+                !string.Equals(providerIntentId, intent.ProviderPaymentIntentID, StringComparison.Ordinal))
+            {
+                await UpdateAttemptResultAsync(intent.PaymentIntentID, providerIntentId, category,
+                    failureCode, failureMessage, cancellationToken);
+                return;
+            }
+            if (intent.Status == "PAID")
+            {
+                if (category == FailureCategory.None)
+                    await MarkPaidAsync(intent, providerStatus, providerIntentId, cancellationToken);
+                return;
+            }
+            if (intent.Status is "OVERDUE" or "CARD_FAILED")
+                return;
 
             switch (category)
             {
                 case FailureCategory.None:
-                    await MarkPaidAsync(intent, providerStatus, cancellationToken);
+                    await MarkPaidAsync(intent, providerStatus, providerIntentId, cancellationToken);
                     break;
 
                 case FailureCategory.Pending:
                     // Not final yet - do NOT fall back to the card. Wait for the next webhook.
+                    await UpdateAttemptResultAsync(intent.PaymentIntentID, providerIntentId, category,
+                        failureCode, failureMessage, cancellationToken);
                     intent.Status = "PROCESSING";
                     intent.FailureCategory = category.ToString().ToUpperInvariant();
                     await UpdateIntentAsync(intent);
@@ -126,14 +212,26 @@ namespace Arcora.Api.Services.Implementations
 
                 case FailureCategory.Temporary:
                 case FailureCategory.Permanent:
+                    var attemptMethodKind = string.IsNullOrWhiteSpace(providerIntentId)
+                        ? await dbContext.PaymentAttempts.AsNoTracking()
+                            .Where(attempt => attempt.PaymentIntentID == intent.PaymentIntentID)
+                            .OrderByDescending(attempt => attempt.AttemptNumber)
+                            .Select(attempt => attempt.MethodKind).FirstOrDefaultAsync(cancellationToken)
+                        : await dbContext.PaymentAttempts.AsNoTracking()
+                            .Where(attempt => attempt.PaymentIntentID == intent.PaymentIntentID &&
+                                attempt.ProviderAttemptID == providerIntentId)
+                            .Select(attempt => attempt.MethodKind).FirstOrDefaultAsync(cancellationToken);
+                    await UpdateAttemptResultAsync(intent.PaymentIntentID, providerIntentId, category,
+                        failureCode, failureMessage, cancellationToken);
                     intent.FailureCode = failureCode;
                     intent.FailureReason = failureMessage;
                     intent.FailureCategory = category.ToString().ToUpperInvariant();
-                    intent.Status = "PAD_FAILED";
+                    intent.Status = attemptMethodKind == "CARD" ? "OVERDUE" : "PAD_FAILED";
                     await UpdateIntentAsync(intent);
 
                     // Definitive PAD failure -> charge the backup card.
-                    await ChargeBackupCardAsync(intent.PaymentIntentID, cancellationToken);
+                    if (intent.Status == "PAD_FAILED")
+                        await ChargeBackupCardAsync(intent.PaymentIntentID, cancellationToken);
                     break;
             }
         }
@@ -144,6 +242,13 @@ namespace Arcora.Api.Services.Implementations
             var intent = await paymentIntentRepository.GetByID(paymentIntentId);
             if (intent == null)
                 return false;
+
+            var claimed = await dbContext.PaymentIntents
+                .Where(item => item.PaymentIntentID == paymentIntentId && item.Status == "PAD_FAILED")
+                .ExecuteUpdateAsync(update => update.SetProperty(item => item.Status, "BACKUP_PROCESSING"), cancellationToken);
+            if (claimed == 0)
+                return false;
+            intent.Status = "BACKUP_PROCESSING";
 
             var cardMethod = await GetTenantMethodByRoleAsync(intent.TenantID, "BACKUP");
             if (cardMethod == null)
@@ -157,6 +262,8 @@ namespace Arcora.Api.Services.Implementations
             var result = await AttemptChargeAsync(intent, cardMethod, PaymentMethodKind.Card, null, cancellationToken);
             if (result == FailureCategory.None)
                 return true;
+            if (result == FailureCategory.Pending)
+                return false;
 
             intent.Status = "OVERDUE";
             await UpdateIntentAsync(intent);
@@ -197,13 +304,16 @@ namespace Arcora.Api.Services.Implementations
             catch (Exception ex)
             {
                 logger.LogError(ex, "Provider charge threw for intent {IntentId}", intent.PaymentIntentID);
-                attempt.Status = "FAILED";
+                attempt.Status = "UNKNOWN";
                 attempt.FailureMessage = ex.Message;
-                attempt.FailureCategory = FailureCategory.Permanent.ToString().ToUpperInvariant();
+                attempt.FailureCategory = FailureCategory.Pending.ToString().ToUpperInvariant();
                 attempt.CompletedAt = DateTime.UtcNow;
                 await paymentAttemptRepository.Create(attempt);
                 await paymentAttemptRepository.Save();
-                return FailureCategory.Permanent;
+                intent.FailureCategory = "PENDING";
+                intent.FailureReason = "The provider outcome is uncertain. Do not retry the debit; refresh payment status or contact support.";
+                await UpdateIntentAsync(intent);
+                return FailureCategory.Pending;
             }
 
             attempt.ProviderAttemptID = charge.PaymentIntentId;
@@ -219,7 +329,7 @@ namespace Arcora.Api.Services.Implementations
                 attempt.Status = "SUCCEEDED";
                 await paymentAttemptRepository.Create(attempt);
                 await paymentAttemptRepository.Save();
-                await MarkPaidAsync(intent, charge.Status, cancellationToken);
+                await MarkPaidAsync(intent, charge.Status, charge.PaymentIntentId, cancellationToken);
             }
             else if (charge.FailureCategory == FailureCategory.Pending)
             {
@@ -246,18 +356,34 @@ namespace Arcora.Api.Services.Implementations
             return charge.FailureCategory;
         }
 
-        private async Task MarkPaidAsync(PaymentIntent intent, string? providerStatus, CancellationToken cancellationToken)
+        private async Task MarkPaidAsync(
+            PaymentIntent intent, string? providerStatus, string? providerPaymentIntentId,
+            CancellationToken cancellationToken)
         {
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(
+                System.Data.IsolationLevel.Serializable, cancellationToken);
+            if (dbContext.Database.IsSqlServer())
+                await dbContext.PaymentIntents.FromSqlInterpolated(
+                    $"SELECT * FROM [PaymentIntents] WITH (UPDLOCK, HOLDLOCK) WHERE [PaymentIntentID] = {intent.PaymentIntentID}")
+                    .AsNoTracking().ToListAsync(cancellationToken);
+            await UpdateAttemptResultAsync(intent.PaymentIntentID, providerPaymentIntentId,
+                FailureCategory.None, null, null, cancellationToken);
             intent.Status = "PAID";
             intent.FailureCategory = FailureCategory.None.ToString().ToUpperInvariant();
-            intent.CompletedAt = DateTime.UtcNow;
+            intent.CompletedAt ??= DateTime.UtcNow;
             await UpdateIntentAsync(intent);
 
             var existing = await paymentRepository.Find(x => x.PaymentIntentID == intent.PaymentIntentID);
-            if (existing != null && existing.Any())
+            var existingPayment = existing?.FirstOrDefault(x => x != null);
+            if (existingPayment != null)
             {
-                await RecordFirstChargeDepositFundingAsync(intent, existing.First().PaymentID, cancellationToken);
+                await new RentPaymentAccountingService(dbContext)
+                    .ApplyPaymentToInvoiceAsync(existingPayment, cancellationToken);
+                await new RentPaymentAccountingService(dbContext).SettleAsync(existingPayment, cancellationToken);
+                await RecordFirstChargeDepositFundingAsync(intent, existingPayment.PaymentID, cancellationToken);
                 await ActivateLeaseIfEligibleAsync(intent.LeaseID, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                InvalidatePaymentCaches();
                 return;
             }
 
@@ -277,8 +403,63 @@ namespace Arcora.Api.Services.Implementations
             await paymentRepository.Create(payment);
             await paymentRepository.Save();
 
+            var paymentAccounting = new RentPaymentAccountingService(dbContext);
+            await paymentAccounting.ApplyPaymentToInvoiceAsync(payment, cancellationToken);
+            await paymentAccounting.SettleAsync(payment, cancellationToken);
             await RecordFirstChargeDepositFundingAsync(intent, payment.PaymentID, cancellationToken);
             await ActivateLeaseIfEligibleAsync(intent.LeaseID, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            InvalidatePaymentCaches();
+        }
+
+        private void InvalidatePaymentCaches()
+        {
+            cache.Remove(Cache.INVOICEMASTERS.ToString());
+            cache.Remove(Cache.INVOICEDETAILS.ToString());
+            cache.Remove(Cache.PAYMENTALLOCATIONS.ToString());
+            cache.Remove(Cache.PAYMENTS.ToString());
+        }
+
+        private Task<int> UpdateAttemptResultAsync(
+            Guid paymentIntentId, string? providerPaymentIntentId, FailureCategory category,
+            string? failureCode, string? failureMessage, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(providerPaymentIntentId))
+                return Task.FromResult(0);
+
+            var query = dbContext.PaymentAttempts.Where(attempt =>
+                attempt.PaymentIntentID == paymentIntentId &&
+                attempt.ProviderAttemptID == providerPaymentIntentId);
+            var completedAt = DateTime.UtcNow;
+            return category switch
+            {
+                FailureCategory.None => query.Where(attempt => attempt.Status != "SUCCEEDED")
+                    .ExecuteUpdateAsync(update => update
+                        .SetProperty(attempt => attempt.Status, "SUCCEEDED")
+                        .SetProperty(attempt => attempt.FailureCode, (string?)null)
+                        .SetProperty(attempt => attempt.FailureMessage, (string?)null)
+                        .SetProperty(attempt => attempt.FailureCategory, "NONE")
+                        .SetProperty(attempt => attempt.CompletedAt, attempt => attempt.CompletedAt ?? completedAt),
+                        cancellationToken),
+                FailureCategory.Pending => query.Where(attempt =>
+                        attempt.Status == "PENDING" || attempt.Status == "PROCESSING" || attempt.Status == "UNKNOWN")
+                    .ExecuteUpdateAsync(update => update
+                        .SetProperty(attempt => attempt.Status, "PROCESSING")
+                        .SetProperty(attempt => attempt.FailureCode, failureCode)
+                        .SetProperty(attempt => attempt.FailureMessage, failureMessage)
+                        .SetProperty(attempt => attempt.FailureCategory, "PENDING"),
+                        cancellationToken),
+                FailureCategory.Temporary or FailureCategory.Permanent => query.Where(attempt =>
+                        attempt.Status != "SUCCEEDED" && attempt.Status != "FAILED")
+                    .ExecuteUpdateAsync(update => update
+                        .SetProperty(attempt => attempt.Status, "FAILED")
+                        .SetProperty(attempt => attempt.FailureCode, failureCode)
+                        .SetProperty(attempt => attempt.FailureMessage, failureMessage)
+                        .SetProperty(attempt => attempt.FailureCategory, category.ToString().ToUpperInvariant())
+                        .SetProperty(attempt => attempt.CompletedAt, attempt => attempt.CompletedAt ?? completedAt),
+                        cancellationToken),
+                _ => Task.FromResult(0)
+            };
         }
 
         private async Task RecordFirstChargeDepositFundingAsync(PaymentIntent intent, Guid paymentID, CancellationToken cancellationToken)

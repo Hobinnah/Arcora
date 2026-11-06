@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class NotificationService : INotificationService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<NotificationService> logger;
         private readonly INotificationRepository notificationRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public NotificationService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<NotificationService> logger, INotificationRepository notificationRepository)
+        public NotificationService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<NotificationService> logger, INotificationRepository notificationRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<Notification> entities;
             try
             {
-                entities = cache.Get<IEnumerable<Notification>>(Cache.NOTIFICATIONS.ToString()) ?? new List<Notification>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.notificationRepository.GetNotificationAsync())?.Where(x => x != null) ?? new List<Notification>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<Notification>>(Cache.NOTIFICATIONS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.NOTIFICATIONS.ToString(),
+                    async cancel =>
+                        (await this.notificationRepository.GetNotificationAsync())?.Where(x => x != null).ToList() ?? new List<Notification>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
@@ -76,16 +74,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<Notification> entities = cache.Get<IEnumerable<Notification>>(Cache.NOTIFICATIONS.ToString()) ?? new List<Notification>();
-                Notification? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.NotificationID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.NOTIFICATIONS.ToString(),
+                    async cancel =>
+                        (await this.notificationRepository.GetNotificationAsync())?.Where(x => x != null).ToList() ?? new List<Notification>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.NotificationID == ID);
+                if (match == null)
                     match = await this.notificationRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<NotificationDto>(match);
             }
@@ -116,7 +113,7 @@ namespace Arcora.Api.Services.Implementations
                     notification.CapturedDate = DateTime.UtcNow;
                     notification = await notificationRepository.Create(notification) ?? new Notification();
                     await notificationRepository.Save();
-                    cache.Remove(Cache.NOTIFICATIONS.ToString());
+                    await cache.RemoveAsync(Cache.NOTIFICATIONS.ToString());
                 }
             }
             catch (Exception er)
@@ -139,7 +136,7 @@ namespace Arcora.Api.Services.Implementations
                 Notification notification = this.mapper.Map<Notification>(notificationDto);
                 notification = await notificationRepository.Update(notification) ?? new Notification();
                 await notificationRepository.Save();
-                cache.Remove(Cache.NOTIFICATIONS.ToString());
+                await cache.RemoveAsync(Cache.NOTIFICATIONS.ToString());
                 notificationDto = this.mapper.Map<NotificationDto>(notification);
             }
             catch (Exception er)
@@ -161,7 +158,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("Notification with the specified ID was not found.");
                 await notificationRepository.Delete(notification);
                 await notificationRepository.Save();
-                cache.Remove(Cache.NOTIFICATIONS.ToString());
+                await cache.RemoveAsync(Cache.NOTIFICATIONS.ToString());
             }
             catch (Exception er)
             {
@@ -187,7 +184,7 @@ namespace Arcora.Api.Services.Implementations
 
             await notificationRepository.Update(notification);
             await notificationRepository.Save();
-            cache.Remove(Cache.NOTIFICATIONS.ToString());
+            await cache.RemoveAsync(Cache.NOTIFICATIONS.ToString());
             return this.mapper.Map<NotificationDto>(notification);
         }
     }

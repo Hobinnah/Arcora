@@ -66,7 +66,8 @@ namespace Arcora.Payments.Abstractions
     public sealed record ProviderMandateResult(
         string MandateId,
         string PaymentMethodId,
-        string Status);
+        string Status,
+        string? HostedVerificationUrl = null);
 
     /// <summary>
     /// Result of a charge (PaymentIntent) attempt against the provider.

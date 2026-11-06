@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class DisputeService : IDisputeService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<DisputeService> logger;
         private readonly IDisputeRepository disputeRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public DisputeService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<DisputeService> logger, IDisputeRepository disputeRepository)
+        public DisputeService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<DisputeService> logger, IDisputeRepository disputeRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<Dispute> entities;
             try
             {
-                entities = cache.Get<IEnumerable<Dispute>>(Cache.DISPUTES.ToString()) ?? new List<Dispute>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.disputeRepository.GetDisputeAsync())?.Where(x => x != null) ?? new List<Dispute>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<Dispute>>(Cache.DISPUTES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.DISPUTES.ToString(),
+                    async cancel =>
+                        (await this.disputeRepository.GetDisputeAsync())?.Where(x => x != null).ToList() ?? new List<Dispute>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
@@ -76,16 +74,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<Dispute> entities = cache.Get<IEnumerable<Dispute>>(Cache.DISPUTES.ToString()) ?? new List<Dispute>();
-                Dispute? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.DisputeID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.DISPUTES.ToString(),
+                    async cancel =>
+                        (await this.disputeRepository.GetDisputeAsync())?.Where(x => x != null).ToList() ?? new List<Dispute>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.DisputeID == ID);
+                if (match == null)
                     match = await this.disputeRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<DisputeDto>(match);
             }
@@ -117,7 +114,7 @@ namespace Arcora.Api.Services.Implementations
                     dispute.CapturedDate = DateTime.UtcNow;
                     dispute = await disputeRepository.Create(dispute) ?? new Dispute();
                     await disputeRepository.Save();
-                    cache.Remove(Cache.DISPUTES.ToString());
+                    await cache.RemoveAsync(Cache.DISPUTES.ToString());
                 }
             }
             catch (Exception er)
@@ -140,7 +137,7 @@ namespace Arcora.Api.Services.Implementations
                 Dispute dispute = this.mapper.Map<Dispute>(disputeDto);
                 dispute = await disputeRepository.Update(dispute) ?? new Dispute();
                 await disputeRepository.Save();
-                cache.Remove(Cache.DISPUTES.ToString());
+                await cache.RemoveAsync(Cache.DISPUTES.ToString());
                 disputeDto = this.mapper.Map<DisputeDto>(dispute);
             }
             catch (Exception er)
@@ -162,7 +159,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("Dispute with the specified ID was not found.");
                 await disputeRepository.Delete(dispute);
                 await disputeRepository.Save();
-                cache.Remove(Cache.DISPUTES.ToString());
+                await cache.RemoveAsync(Cache.DISPUTES.ToString());
             }
             catch (Exception er)
             {
@@ -188,7 +185,7 @@ namespace Arcora.Api.Services.Implementations
 
             await disputeRepository.Update(dispute);
             await disputeRepository.Save();
-            cache.Remove(Cache.DISPUTES.ToString());
+            await cache.RemoveAsync(Cache.DISPUTES.ToString());
             return this.mapper.Map<DisputeDto>(dispute);
         }
     }

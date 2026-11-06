@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class AuditLogService : IAuditLogService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<AuditLogService> logger;
         private readonly IAuditLogRepository auditlogRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public AuditLogService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<AuditLogService> logger, IAuditLogRepository auditlogRepository)
+        public AuditLogService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<AuditLogService> logger, IAuditLogRepository auditlogRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<AuditLog> entities;
             try
             {
-                entities = cache.Get<IEnumerable<AuditLog>>(Cache.AUDITLOGS.ToString()) ?? new List<AuditLog>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.auditlogRepository.GetAuditLogAsync())?.Where(x => x != null) ?? new List<AuditLog>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<AuditLog>>(Cache.AUDITLOGS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.AUDITLOGS.ToString(),
+                    async cancel =>
+                        (await this.auditlogRepository.GetAuditLogAsync())?.Where(x => x != null).ToList() ?? new List<AuditLog>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
@@ -76,16 +74,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<AuditLog> entities = cache.Get<IEnumerable<AuditLog>>(Cache.AUDITLOGS.ToString()) ?? new List<AuditLog>();
-                AuditLog? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.AuditLogID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.AUDITLOGS.ToString(),
+                    async cancel =>
+                        (await this.auditlogRepository.GetAuditLogAsync())?.Where(x => x != null).ToList() ?? new List<AuditLog>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.AuditLogID == ID);
+                if (match == null)
                     match = await this.auditlogRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<AuditLogDto>(match);
             }
@@ -116,7 +113,7 @@ namespace Arcora.Api.Services.Implementations
                     auditLog.CapturedDate = DateTime.UtcNow;
                     auditLog = await auditlogRepository.Create(auditLog) ?? new AuditLog();
                     await auditlogRepository.Save();
-                    cache.Remove(Cache.AUDITLOGS.ToString());
+                    await cache.RemoveAsync(Cache.AUDITLOGS.ToString());
                 }
             }
             catch (Exception er)
@@ -139,7 +136,7 @@ namespace Arcora.Api.Services.Implementations
                 AuditLog auditLog = this.mapper.Map<AuditLog>(auditlogDto);
                 auditLog = await auditlogRepository.Update(auditLog) ?? new AuditLog();
                 await auditlogRepository.Save();
-                cache.Remove(Cache.AUDITLOGS.ToString());
+                await cache.RemoveAsync(Cache.AUDITLOGS.ToString());
                 auditlogDto = this.mapper.Map<AuditLogDto>(auditLog);
             }
             catch (Exception er)
@@ -161,7 +158,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("AuditLog with the specified ID was not found.");
                 await auditlogRepository.Delete(auditLog);
                 await auditlogRepository.Save();
-                cache.Remove(Cache.AUDITLOGS.ToString());
+                await cache.RemoveAsync(Cache.AUDITLOGS.ToString());
             }
             catch (Exception er)
             {

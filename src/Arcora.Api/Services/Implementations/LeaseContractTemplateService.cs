@@ -8,7 +8,7 @@ using Arcora.Api.Enums;
 using Arcora.Api.Models;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +22,7 @@ public class LeaseContractTemplateService : ILeaseContractTemplateService
     private static readonly HashSet<int> NonEditableSections = new() { 1, 2, 3, 4, 5, 31, 32, 33, 34 };
 
     private readonly IMapper mapper;
-    private readonly IMemoryCache cache;
+    private readonly HybridCache cache;
     private readonly ILogger<LeaseContractTemplateService> logger;
     private readonly ILeaseContractTemplateRepository templateRepository;
     private readonly ILeaseRepository leaseRepository;
@@ -32,7 +32,7 @@ public class LeaseContractTemplateService : ILeaseContractTemplateService
 
     public LeaseContractTemplateService(
         IMapper mapper,
-        IMemoryCache cache,
+        HybridCache cache,
         IOptions<CacheConfiguration> options,
         ILogger<LeaseContractTemplateService> logger,
         ILeaseContractTemplateRepository templateRepository,

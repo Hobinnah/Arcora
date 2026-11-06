@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class LeaseRecurringChargesService : ILeaseRecurringChargesService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<LeaseRecurringChargesService> logger;
         private readonly ILeaseRecurringChargesRepository leaserecurringchargesRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public LeaseRecurringChargesService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<LeaseRecurringChargesService> logger, ILeaseRecurringChargesRepository leaserecurringchargesRepository)
+        public LeaseRecurringChargesService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<LeaseRecurringChargesService> logger, ILeaseRecurringChargesRepository leaserecurringchargesRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<LeaseRecurringCharges> entities;
             try
             {
-                entities = cache.Get<IEnumerable<LeaseRecurringCharges>>(Cache.LEASERECURRINGCHARGES.ToString()) ?? new List<LeaseRecurringCharges>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.leaserecurringchargesRepository.GetLeaseRecurringChargesAsync())?.Where(x => x != null) ?? new List<LeaseRecurringCharges>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<LeaseRecurringCharges>>(Cache.LEASERECURRINGCHARGES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.LEASERECURRINGCHARGES.ToString(),
+                    async cancel =>
+                        (await this.leaserecurringchargesRepository.GetLeaseRecurringChargesAsync())?.Where(x => x != null).ToList() ?? new List<LeaseRecurringCharges>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
@@ -76,16 +74,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<LeaseRecurringCharges> entities = cache.Get<IEnumerable<LeaseRecurringCharges>>(Cache.LEASERECURRINGCHARGES.ToString()) ?? new List<LeaseRecurringCharges>();
-                LeaseRecurringCharges? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.LeaseRecurringChargeID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.LEASERECURRINGCHARGES.ToString(),
+                    async cancel =>
+                        (await this.leaserecurringchargesRepository.GetLeaseRecurringChargesAsync())?.Where(x => x != null).ToList() ?? new List<LeaseRecurringCharges>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.LeaseRecurringChargeID == ID);
+                if (match == null)
                     match = await this.leaserecurringchargesRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<LeaseRecurringChargesDto>(match);
             }
@@ -113,7 +110,7 @@ namespace Arcora.Api.Services.Implementations
                     leaseRecurringCharges.CapturedDate = DateTime.UtcNow;
                     leaseRecurringCharges = await leaserecurringchargesRepository.Create(leaseRecurringCharges) ?? new LeaseRecurringCharges();
                     await leaserecurringchargesRepository.Save();
-                    cache.Remove(Cache.LEASERECURRINGCHARGES.ToString());
+                    await cache.RemoveAsync(Cache.LEASERECURRINGCHARGES.ToString());
                 }
             }
             catch (Exception er)
@@ -136,7 +133,7 @@ namespace Arcora.Api.Services.Implementations
                 LeaseRecurringCharges leaseRecurringCharges = this.mapper.Map<LeaseRecurringCharges>(leaserecurringchargesDto);
                 leaseRecurringCharges = await leaserecurringchargesRepository.Update(leaseRecurringCharges) ?? new LeaseRecurringCharges();
                 await leaserecurringchargesRepository.Save();
-                cache.Remove(Cache.LEASERECURRINGCHARGES.ToString());
+                await cache.RemoveAsync(Cache.LEASERECURRINGCHARGES.ToString());
                 leaserecurringchargesDto = this.mapper.Map<LeaseRecurringChargesDto>(leaseRecurringCharges);
             }
             catch (Exception er)
@@ -158,7 +155,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("LeaseRecurringCharges with the specified ID was not found.");
                 await leaserecurringchargesRepository.Delete(leaseRecurringCharges);
                 await leaserecurringchargesRepository.Save();
-                cache.Remove(Cache.LEASERECURRINGCHARGES.ToString());
+                await cache.RemoveAsync(Cache.LEASERECURRINGCHARGES.ToString());
             }
             catch (Exception er)
             {

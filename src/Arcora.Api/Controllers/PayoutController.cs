@@ -17,32 +17,44 @@ namespace Arcora.Api.Controllers
         [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet(Name = "GetAllPayouts")]
-        public async Task<IActionResult> Get([FromServices] IPayoutService payoutService, [FromQuery] Guid? organizationID, [FromQuery] string? period, [FromQuery] Paging paging)
+        public async Task<IActionResult> Get([FromServices] IPayoutService payoutService,
+            [FromServices] IOrgPayoutAccountService accounts, [FromQuery] Guid? organizationID, [FromQuery] string? period, [FromQuery] Paging paging)
         {
+            if (organizationID.HasValue ? !await CanReadOrganization(accounts, organizationID.Value) : !User.IsInRole("Admin"))
+                return Forbid();
             return Ok(await payoutService.GetFiltered(organizationID, period, paging));
         }
 
         [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet("{organizationID:guid}", Name = "GetEarningsSummary")]
-        public async Task<IActionResult> GetEarningsSummary([FromServices] IPayoutService payoutService, Guid organizationID, [FromQuery] string? period)
+        public async Task<IActionResult> GetEarningsSummary([FromServices] IPayoutService payoutService,
+            [FromServices] IOrgPayoutAccountService accounts, Guid organizationID, [FromQuery] string? period)
         {
+            if (!await CanReadOrganization(accounts, organizationID))
+                return Forbid();
             return Ok(await payoutService.GetEarningsSummary(organizationID, period));
         }
 
         [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet("{organizationID:guid}", Name = "GetListingBreakdown")]
-        public async Task<IActionResult> GetListingBreakdown([FromServices] IPayoutService payoutService, Guid organizationID, [FromQuery] string? period)
+        public async Task<IActionResult> GetListingBreakdown([FromServices] IPayoutService payoutService,
+            [FromServices] IOrgPayoutAccountService accounts, Guid organizationID, [FromQuery] string? period)
         {
+            if (!await CanReadOrganization(accounts, organizationID))
+                return Forbid();
             return Ok(await payoutService.GetListingBreakdown(organizationID, period));
         }
 
         [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet("{organizationID:guid}", Name = "ExportStatement")]
-        public async Task<IActionResult> ExportStatement([FromServices] IPayoutService payoutService, Guid organizationID, [FromQuery] string? period, [FromQuery] string format = "json")
+        public async Task<IActionResult> ExportStatement([FromServices] IPayoutService payoutService,
+            [FromServices] IOrgPayoutAccountService accounts, Guid organizationID, [FromQuery] string? period, [FromQuery] string format = "json")
         {
+            if (!await CanReadOrganization(accounts, organizationID))
+                return Forbid();
             var statementRows = (await payoutService.GetStatementTransactions(organizationID, period)).ToList();
             if (!string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
                 return Ok(statementRows);
@@ -67,6 +79,21 @@ namespace Arcora.Api.Controllers
             return File(Encoding.UTF8.GetBytes(csvBuilder.ToString()), "text/csv", $"earnings-statement-{organizationID}.csv");
         }
 
+        private async Task<bool> CanReadOrganization(IOrgPayoutAccountService accounts, Guid organizationID)
+        {
+            if (!long.TryParse(User.FindFirst("UserId")?.Value, out var actor) || actor <= 0)
+                return false;
+            try
+            {
+                await accounts.GetOrganizationPayoutAccountStatus(organizationID, actor);
+                return true;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
         private static string EscapeForCsv(string? value)
         {
             if (string.IsNullOrEmpty(value))
@@ -83,11 +110,14 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetPayoutByID")]
-        public async Task<IActionResult> GetPayoutByID([FromServices] IPayoutService payoutService, long id)
+        public async Task<IActionResult> GetPayoutByID([FromServices] IPayoutService payoutService,
+            [FromServices] IOrgPayoutAccountService accounts, long id)
         {
             var result = await payoutService.GetID(id);
             if (result == null)
                 return NotFound(new { message = "Payout with the specified ID was not found." });
+            if (!await CanReadOrganization(accounts, result.OrganizationID))
+                return Forbid();
             return Ok(result);
         }
 

@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class RefundService : IRefundService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<RefundService> logger;
         private readonly IRefundRepository refundRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public RefundService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<RefundService> logger, IRefundRepository refundRepository)
+        public RefundService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<RefundService> logger, IRefundRepository refundRepository)
         {
             this.cache = cache;
             this.logger = logger;

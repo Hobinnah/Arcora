@@ -3,6 +3,7 @@ using Arcora.Api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Arcora.Api.Operations;
 
 namespace Arcora.Api.Signing
 {
@@ -11,20 +12,26 @@ namespace Arcora.Api.Signing
         private readonly ISigningQueue _queue;
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<SigningQueueBackgroundService> _logger;
+        private readonly OperationsRegistry? health;
 
-        public SigningQueueBackgroundService(ISigningQueue queue, IServiceProvider serviceProvider, ILogger<SigningQueueBackgroundService> logger)
+        public SigningQueueBackgroundService(ISigningQueue queue, IServiceProvider serviceProvider, ILogger<SigningQueueBackgroundService> logger,
+            OperationsRegistry? health = null)
         {
             _queue = queue;
             _serviceProvider = serviceProvider;
             _logger = logger;
+            this.health = health;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.LogInformation("Signing queue background service started.");
+            health?.Started(WorkerIds.Signing);
 
             await foreach (var item in _queue.Reader.ReadAllAsync(stoppingToken))
             {
+                using var run = health?.Begin(WorkerIds.Signing);
+                var providerSubmissionStarted = false;
                 try
                 {
                     using var scope = _serviceProvider.CreateScope();
@@ -41,8 +48,7 @@ namespace Arcora.Api.Signing
                     var renderResult = await templateService.RenderContract(renderRequest);
                     if (renderResult == null)
                     {
-                        _logger.LogWarning("RenderContract returned null for lease {LeaseId}", item.LeaseId);
-                        continue;
+                        throw new InvalidOperationException($"The lease agreement could not be rendered for lease {item.LeaseId}.");
                     }
 
                     var html = renderResult.RenderedHtml ?? renderResult.RawHtml ?? string.Empty;
@@ -151,12 +157,14 @@ namespace Arcora.Api.Signing
                     }).ToList();
 
                     SignwellCreateResult signwellResult;
+                    providerSubmissionStarted = true;
                     try
                     {
                         signwellResult = await signwell.CreateSigningRequestAsync(item.LeaseId, providerPdfBytes, fileName, signers, item.Sequential, item.Subject, item.Message, stoppingToken);
                     }
                     catch (Exception ex)
                     {
+                        run?.Fail();
                         _logger.LogError(ex, "Failed to create provider signing request for {SigningRequestId}", item.SigningRequestId);
                         if (placeholder != null)
                         {
@@ -216,10 +224,38 @@ namespace Arcora.Api.Signing
                     }
 
                     _logger.LogInformation("Signing request {SigningRequestId} for lease {LeaseId} processed and sent to provider.", item.SigningRequestId, item.LeaseId);
+                    run?.Count();
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    run?.Cancel();
+                    break;
                 }
                 catch (Exception ex)
                 {
+                    run?.Fail();
                     _logger.LogError(ex, "Unhandled error while processing signing work item.");
+                    if (!providerSubmissionStarted && item.LeaseDocumentId.HasValue)
+                    {
+                        try
+                        {
+                            using var failureScope = _serviceProvider.CreateScope();
+                            var failureContext = failureScope.ServiceProvider.GetRequiredService<ArcoraDbContext>();
+                            var document = await failureContext.LeaseDocuments.FirstOrDefaultAsync(d =>
+                                d.LeaseDocumentID == item.LeaseDocumentId.Value && d.LeaseID == item.LeaseId
+                                && d.DocumentStatus == "QUEUED", stoppingToken);
+                            if (document != null)
+                            {
+                                document.DocumentStatus = "FAILED";
+                                document.UpdatedDate = DateTime.UtcNow;
+                                await failureContext.SaveChangesAsync(stoppingToken);
+                            }
+                        }
+                        catch (Exception persistenceError)
+                        {
+                            _logger.LogError(persistenceError, "Could not persist preparation failure for signing request {SigningRequestId}.", item.SigningRequestId);
+                        }
+                    }
                 }
             }
         }

@@ -1,0 +1,156 @@
+Arcora Frontend Integration Guide - Phone Number Verification
+
+Overview
+- Phone verification is available through authenticated account endpoints.
+- Twilio Verify manages the one-time verification code.
+- Arcora stores the verified state on the user record.
+
+Verified State in Backend
+- Phone number value: User.PhoneNumber
+- Verification flag: User.PhoneNumberConfirmed
+- If a user changes their phone number, the backend resets PhoneNumberConfirmed to false.
+
+Required Frontend Flow
+1. User saves a phone number through profile update.
+2. Frontend calls the request-verification endpoint.
+3. User receives a code by SMS.
+4. User enters the code in the UI.
+5. Frontend calls the confirm-verification endpoint.
+6. Frontend refreshes profile state if needed.
+
+Authentication
+- Both verification endpoints require an authenticated user.
+- Send the JWT bearer token in the Authorization header.
+- Header format: Authorization: Bearer <token>
+
+Endpoint 1: Update Phone Number
+- Method: PUT
+- URL: /api/account/profile
+- Purpose: save or change the user phone number before verification.
+
+Request body
+{
+  "firstName": "Optional",
+  "lastName": "Optional",
+  "phone": "+14155552671"
+}
+
+Notes
+- Phone must be in international format and include the country code.
+- Backend normalizes phone numbers to E.164 format.
+- If the number belongs to another account, backend returns conflict.
+- If the phone changes, backend resets PhoneNumberConfirmed to false.
+
+Success response shape
+{
+  "success": true,
+  "message": "Profile updated.",
+  "data": {
+    "id": 123,
+    "firstName": "Jane",
+    "lastName": "Doe",
+    "email": "jane@example.com",
+    "phone": "+14155552671",
+    "emailConfirmed": false,
+    "phoneNumberConfirmed": false
+  }
+}
+
+Endpoint 2: Request Verification Code
+- Method: POST
+- URL: /api/account/phone-verification/request
+- Purpose: trigger SMS delivery of verification code.
+- Request body: none
+
+Success response shape
+{
+  "success": true,
+  "message": "Verification code sent.",
+  "data": {
+    "phone": "+14155552671",
+    "phoneNumberConfirmed": false,
+    "status": "pending",
+    "message": "Verification code sent."
+  }
+}
+
+Possible backend behavior
+- If phone is already confirmed, backend may return success with:
+  - status: approved
+  - message: Phone number already confirmed.
+- If user has no phone number saved, backend returns 400.
+
+Endpoint 3: Confirm Verification Code
+- Method: POST
+- URL: /api/account/phone-verification/confirm
+- Purpose: validate the SMS code and mark the number as verified.
+
+Request body
+{
+  "code": "123456"
+}
+
+Success response shape
+{
+  "success": true,
+  "message": "Phone number confirmed.",
+  "data": {
+    "phone": "+14155552671",
+    "phoneNumberConfirmed": true,
+    "status": "approved",
+    "message": "Phone number confirmed."
+  }
+}
+
+Failure behavior
+- Invalid or expired code returns 400.
+- Missing phone number returns 400.
+- Missing or invalid auth returns 401.
+
+Optional Endpoint: Load Current Profile
+- Method: GET
+- URL: /api/account/profile
+- Purpose: refresh the latest phone verification state.
+
+Profile response fields relevant to frontend
+{
+  "success": true,
+  "message": "Profile loaded.",
+  "data": {
+    "id": 123,
+    "firstName": "Jane",
+    "lastName": "Doe",
+    "email": "jane@example.com",
+    "phone": "+14155552671",
+    "emailConfirmed": false,
+    "phoneNumberConfirmed": true
+  }
+}
+
+Recommended UI States
+- No phone on file
+  - Show input for phone number
+  - Save profile first
+- Phone saved but not verified
+  - Show Verify Phone action
+  - Show code entry form after request endpoint succeeds
+- Phone verified
+  - Show Verified badge using phoneNumberConfirmed = true
+- Phone changed
+  - Expect verified badge to disappear because backend resets verification
+
+Frontend Validation Recommendations
+- Require international phone format starting with +
+- Require verification code input before calling confirm endpoint
+- Show backend validation messages directly when possible
+
+Important Backend Rules
+- Verification code is not stored by Arcora.
+- Twilio Verify stores and validates the code.
+- Arcora only stores whether the number is verified using PhoneNumberConfirmed.
+
+Minimal Integration Sequence
+1. PUT /api/account/profile with phone
+2. POST /api/account/phone-verification/request
+3. POST /api/account/phone-verification/confirm with code
+4. GET /api/account/profile if UI needs a fresh state pull

@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class ApplicationOccupantService : IApplicationOccupantService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<ApplicationOccupantService> logger;
         private readonly IApplicationOccupantRepository applicationoccupantRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public ApplicationOccupantService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<ApplicationOccupantService> logger, IApplicationOccupantRepository applicationoccupantRepository)
+        public ApplicationOccupantService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<ApplicationOccupantService> logger, IApplicationOccupantRepository applicationoccupantRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<ApplicationOccupant> entities;
             try
             {
-                entities = cache.Get<IEnumerable<ApplicationOccupant>>(Cache.APPLICATIONOCCUPANTS.ToString()) ?? new List<ApplicationOccupant>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.applicationoccupantRepository.GetApplicationOccupantAsync())?.Where(x => x != null) ?? new List<ApplicationOccupant>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<ApplicationOccupant>>(Cache.APPLICATIONOCCUPANTS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.APPLICATIONOCCUPANTS.ToString(),
+                    async cancel =>
+                        (await this.applicationoccupantRepository.GetApplicationOccupantAsync())?.Where(x => x != null).ToList() ?? new List<ApplicationOccupant>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
 
                 if (entities is not null && paging.UserID > 0)
                 {
@@ -81,16 +79,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<ApplicationOccupant> entities = cache.Get<IEnumerable<ApplicationOccupant>>(Cache.APPLICATIONOCCUPANTS.ToString()) ?? new List<ApplicationOccupant>();
-                ApplicationOccupant? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.ApplicationOccupantID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.APPLICATIONOCCUPANTS.ToString(),
+                    async cancel =>
+                        (await this.applicationoccupantRepository.GetApplicationOccupantAsync())?.Where(x => x != null).ToList() ?? new List<ApplicationOccupant>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.ApplicationOccupantID == ID);
+                if (match == null)
                     match = await this.applicationoccupantRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<ApplicationOccupantDto>(match);
             }
@@ -118,7 +115,7 @@ namespace Arcora.Api.Services.Implementations
                     applicationOccupant.CapturedDate = DateTime.UtcNow;
                     applicationOccupant = await applicationoccupantRepository.Create(applicationOccupant) ?? new ApplicationOccupant();
                     await applicationoccupantRepository.Save();
-                    cache.Remove(Cache.APPLICATIONOCCUPANTS.ToString());
+                    await cache.RemoveAsync(Cache.APPLICATIONOCCUPANTS.ToString());
                 }
             }
             catch (Exception er)
@@ -141,7 +138,7 @@ namespace Arcora.Api.Services.Implementations
                 ApplicationOccupant applicationOccupant = this.mapper.Map<ApplicationOccupant>(applicationoccupantDto);
                 applicationOccupant = await applicationoccupantRepository.Update(applicationOccupant) ?? new ApplicationOccupant();
                 await applicationoccupantRepository.Save();
-                cache.Remove(Cache.APPLICATIONOCCUPANTS.ToString());
+                await cache.RemoveAsync(Cache.APPLICATIONOCCUPANTS.ToString());
                 applicationoccupantDto = this.mapper.Map<ApplicationOccupantDto>(applicationOccupant);
             }
             catch (Exception er)
@@ -163,7 +160,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("ApplicationOccupant with the specified ID was not found.");
                 await applicationoccupantRepository.Delete(applicationOccupant);
                 await applicationoccupantRepository.Save();
-                cache.Remove(Cache.APPLICATIONOCCUPANTS.ToString());
+                await cache.RemoveAsync(Cache.APPLICATIONOCCUPANTS.ToString());
             }
             catch (Exception er)
             {
@@ -189,7 +186,7 @@ namespace Arcora.Api.Services.Implementations
 
             await applicationoccupantRepository.Update(applicationOccupant);
             await applicationoccupantRepository.Save();
-            cache.Remove(Cache.APPLICATIONOCCUPANTS.ToString());
+            await cache.RemoveAsync(Cache.APPLICATIONOCCUPANTS.ToString());
             return this.mapper.Map<ApplicationOccupantDto>(applicationOccupant);
         }
     }

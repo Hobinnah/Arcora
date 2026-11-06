@@ -8,7 +8,10 @@ namespace Arcora.Api.Email
     /// <param name="To">Recipient email address.</param>
     /// <param name="Subject">Email subject line.</param>
     /// <param name="HtmlBody">HTML body of the email.</param>
-    public sealed record EmailMessage(string To, string Subject, string HtmlBody);
+    public sealed record EmailMessage(string To, string Subject, string HtmlBody)
+    {
+        public DateTime EnqueuedAt { get; init; } = DateTime.UtcNow;
+    }
 
     /// <summary>
     /// Abstraction for enqueuing emails for out-of-band (background) delivery so request handling is
@@ -40,7 +43,7 @@ namespace Arcora.Api.Email
             // Single reader (the background service), many writers (request handlers).
             _channel = Channel.CreateUnbounded<EmailMessage>(new UnboundedChannelOptions
             {
-                SingleReader = true,
+                SingleReader = false,
                 SingleWriter = false
             });
         }
@@ -49,7 +52,7 @@ namespace Arcora.Api.Email
         public ValueTask EnqueueAsync(EmailMessage message, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(message);
-            return _channel.Writer.WriteAsync(message, cancellationToken);
+            return _channel.Writer.WriteAsync(message with { EnqueuedAt = DateTime.UtcNow }, cancellationToken);
         }
 
         /// <inheritdoc/>

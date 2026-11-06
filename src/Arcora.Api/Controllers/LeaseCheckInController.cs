@@ -175,3 +175,53 @@ public class InspectionMoveInReviewController : ControllerBase
         }
     }
 }
+
+[ApiController]
+[Route("api/leases/{leaseId:guid}/check-out")]
+[Authorize(Roles = "User")]
+public class LeaseCheckOutController : ControllerBase
+{
+    [HttpGet]
+    [ProducesResponseType(typeof(LeaseCheckOutResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Get([FromServices] ILeaseCheckInService service, Guid leaseId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await service.GetCheckOutAsync(leaseId, User, cancellationToken));
+        }
+        catch (LeaseCheckInException ex)
+        {
+            var problem = new ProblemDetails { Status = ex.StatusCode, Title = ex.Title, Detail = ex.Detail };
+            if (!string.IsNullOrWhiteSpace(ex.ReasonCode)) problem.Extensions["reasonCode"] = ex.ReasonCode;
+            return StatusCode(ex.StatusCode, problem);
+        }
+    }
+
+    [HttpPost]
+    [ProducesResponseType(typeof(LeaseCheckOutInspectionDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Submit(
+        [FromServices] ILeaseCheckInService service,
+        Guid leaseId,
+        [FromBody] SubmitLeaseCheckOutRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var key = Request.Headers["Idempotency-Key"].ToString();
+            var (inspection, created) = await service.SubmitCheckOutAsync(leaseId, request, key, User, cancellationToken);
+            return created
+                ? CreatedAtAction(nameof(Get), new { leaseId }, inspection)
+                : Ok(inspection);
+        }
+        catch (LeaseCheckInException ex)
+        {
+            var problem = new ProblemDetails { Status = ex.StatusCode, Title = ex.Title, Detail = ex.Detail };
+            if (!string.IsNullOrWhiteSpace(ex.ReasonCode)) problem.Extensions["reasonCode"] = ex.ReasonCode;
+            return StatusCode(ex.StatusCode, problem);
+        }
+    }
+}

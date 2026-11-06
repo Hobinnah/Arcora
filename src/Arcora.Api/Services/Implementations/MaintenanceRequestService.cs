@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class MaintenanceRequestService : IMaintenanceRequestService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<MaintenanceRequestService> logger;
         private readonly IMaintenanceRequestRepository maintenancerequestRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public MaintenanceRequestService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<MaintenanceRequestService> logger, IMaintenanceRequestRepository maintenancerequestRepository)
+        public MaintenanceRequestService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<MaintenanceRequestService> logger, IMaintenanceRequestRepository maintenancerequestRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<MaintenanceRequest> entities;
             try
             {
-                entities = cache.Get<IEnumerable<MaintenanceRequest>>(Cache.MAINTENANCEREQUESTS.ToString()) ?? new List<MaintenanceRequest>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.maintenancerequestRepository.GetMaintenanceRequestAsync())?.Where(x => x != null) ?? new List<MaintenanceRequest>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<MaintenanceRequest>>(Cache.MAINTENANCEREQUESTS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.MAINTENANCEREQUESTS.ToString(),
+                    async cancel =>
+                        (await this.maintenancerequestRepository.GetMaintenanceRequestAsync())?.Where(x => x != null).ToList() ?? new List<MaintenanceRequest>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
@@ -76,16 +74,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<MaintenanceRequest> entities = cache.Get<IEnumerable<MaintenanceRequest>>(Cache.MAINTENANCEREQUESTS.ToString()) ?? new List<MaintenanceRequest>();
-                MaintenanceRequest? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.MaintenanceRequestID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.MAINTENANCEREQUESTS.ToString(),
+                    async cancel =>
+                        (await this.maintenancerequestRepository.GetMaintenanceRequestAsync())?.Where(x => x != null).ToList() ?? new List<MaintenanceRequest>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.MaintenanceRequestID == ID);
+                if (match == null)
                     match = await this.maintenancerequestRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<MaintenanceRequestDto>(match);
             }
@@ -117,7 +114,7 @@ namespace Arcora.Api.Services.Implementations
                     maintenanceRequest.CapturedDate = DateTime.UtcNow;
                     maintenanceRequest = await maintenancerequestRepository.Create(maintenanceRequest) ?? new MaintenanceRequest();
                     await maintenancerequestRepository.Save();
-                    cache.Remove(Cache.MAINTENANCEREQUESTS.ToString());
+                    await cache.RemoveAsync(Cache.MAINTENANCEREQUESTS.ToString());
                 }
             }
             catch (Exception er)
@@ -140,7 +137,7 @@ namespace Arcora.Api.Services.Implementations
                 MaintenanceRequest maintenanceRequest = this.mapper.Map<MaintenanceRequest>(maintenancerequestDto);
                 maintenanceRequest = await maintenancerequestRepository.Update(maintenanceRequest) ?? new MaintenanceRequest();
                 await maintenancerequestRepository.Save();
-                cache.Remove(Cache.MAINTENANCEREQUESTS.ToString());
+                await cache.RemoveAsync(Cache.MAINTENANCEREQUESTS.ToString());
                 maintenancerequestDto = this.mapper.Map<MaintenanceRequestDto>(maintenanceRequest);
             }
             catch (Exception er)
@@ -162,7 +159,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("MaintenanceRequest with the specified ID was not found.");
                 await maintenancerequestRepository.Delete(maintenanceRequest);
                 await maintenancerequestRepository.Save();
-                cache.Remove(Cache.MAINTENANCEREQUESTS.ToString());
+                await cache.RemoveAsync(Cache.MAINTENANCEREQUESTS.ToString());
             }
             catch (Exception er)
             {
@@ -188,7 +185,7 @@ namespace Arcora.Api.Services.Implementations
 
             await maintenancerequestRepository.Update(maintenanceRequest);
             await maintenancerequestRepository.Save();
-            cache.Remove(Cache.MAINTENANCEREQUESTS.ToString());
+            await cache.RemoveAsync(Cache.MAINTENANCEREQUESTS.ToString());
             return this.mapper.Map<MaintenanceRequestDto>(maintenanceRequest);
         }
     }

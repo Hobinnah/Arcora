@@ -20,6 +20,7 @@ namespace Arcora.Payments.DependencyInjection
                 .Bind(configuration.GetSection(StripeOptions.SectionName));
 
             services.AddSingleton<IPaymentProvider, StripePaymentProvider>();
+            services.AddSingleton<IHostPayoutProvider, StripeHostPayoutProvider>();
 
             return services;
         }

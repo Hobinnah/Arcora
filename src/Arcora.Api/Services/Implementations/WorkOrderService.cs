@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class WorkOrderService : IWorkOrderService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<WorkOrderService> logger;
         private readonly IWorkOrderRepository workorderRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public WorkOrderService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<WorkOrderService> logger, IWorkOrderRepository workorderRepository)
+        public WorkOrderService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<WorkOrderService> logger, IWorkOrderRepository workorderRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<WorkOrder> entities;
             try
             {
-                entities = cache.Get<IEnumerable<WorkOrder>>(Cache.WORKORDERS.ToString()) ?? new List<WorkOrder>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.workorderRepository.GetWorkOrderAsync())?.Where(x => x != null) ?? new List<WorkOrder>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<WorkOrder>>(Cache.WORKORDERS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.WORKORDERS.ToString(),
+                    async cancel =>
+                        (await this.workorderRepository.GetWorkOrderAsync())?.Where(x => x != null).ToList() ?? new List<WorkOrder>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
@@ -76,16 +74,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<WorkOrder> entities = cache.Get<IEnumerable<WorkOrder>>(Cache.WORKORDERS.ToString()) ?? new List<WorkOrder>();
-                WorkOrder? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.WorkOrderID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.WORKORDERS.ToString(),
+                    async cancel =>
+                        (await this.workorderRepository.GetWorkOrderAsync())?.Where(x => x != null).ToList() ?? new List<WorkOrder>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.WorkOrderID == ID);
+                if (match == null)
                     match = await this.workorderRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<WorkOrderDto>(match);
             }
@@ -115,7 +112,7 @@ namespace Arcora.Api.Services.Implementations
                     workOrder.CapturedDate = DateTime.UtcNow;
                     workOrder = await workorderRepository.Create(workOrder) ?? new WorkOrder();
                     await workorderRepository.Save();
-                    cache.Remove(Cache.WORKORDERS.ToString());
+                    await cache.RemoveAsync(Cache.WORKORDERS.ToString());
                 }
             }
             catch (Exception er)
@@ -138,7 +135,7 @@ namespace Arcora.Api.Services.Implementations
                 WorkOrder workOrder = this.mapper.Map<WorkOrder>(workorderDto);
                 workOrder = await workorderRepository.Update(workOrder) ?? new WorkOrder();
                 await workorderRepository.Save();
-                cache.Remove(Cache.WORKORDERS.ToString());
+                await cache.RemoveAsync(Cache.WORKORDERS.ToString());
                 workorderDto = this.mapper.Map<WorkOrderDto>(workOrder);
             }
             catch (Exception er)
@@ -160,7 +157,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("WorkOrder with the specified ID was not found.");
                 await workorderRepository.Delete(workOrder);
                 await workorderRepository.Save();
-                cache.Remove(Cache.WORKORDERS.ToString());
+                await cache.RemoveAsync(Cache.WORKORDERS.ToString());
             }
             catch (Exception er)
             {
@@ -186,7 +183,7 @@ namespace Arcora.Api.Services.Implementations
 
             await workorderRepository.Update(workOrder);
             await workorderRepository.Save();
-            cache.Remove(Cache.WORKORDERS.ToString());
+            await cache.RemoveAsync(Cache.WORKORDERS.ToString());
             return this.mapper.Map<WorkOrderDto>(workOrder);
         }
     }

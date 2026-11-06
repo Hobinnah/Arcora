@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class ListingTermPriceService : IListingTermPriceService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<ListingTermPriceService> logger;
         private readonly IListingTermPriceRepository listingtermpriceRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public ListingTermPriceService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<ListingTermPriceService> logger, IListingTermPriceRepository listingtermpriceRepository)
+        public ListingTermPriceService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<ListingTermPriceService> logger, IListingTermPriceRepository listingtermpriceRepository)
         {
             this.cache = cache;
             this.logger = logger;

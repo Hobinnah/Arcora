@@ -20,85 +20,73 @@ namespace Arcora.Api.Migrations
                 oldType: "nvarchar(256)",
                 oldMaxLength: 256);
 
-            migrationBuilder.AddColumn<string>(
-                name: "CardFunding",
-                table: "PaymentMethods",
-                type: "nvarchar(20)",
-                maxLength: 20,
-                nullable: true);
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[PaymentMethods]', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH(N'[dbo].[PaymentMethods]', N'CardFunding') IS NULL
+        ALTER TABLE [dbo].[PaymentMethods] ADD [CardFunding] nvarchar(20) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "MethodRole",
-                table: "PaymentMethods",
-                type: "nvarchar(50)",
-                maxLength: 50,
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[PaymentMethods]', N'MethodRole') IS NULL
+        ALTER TABLE [dbo].[PaymentMethods] ADD [MethodRole] nvarchar(50) NULL;
+END
 
-            migrationBuilder.AddColumn<string>(
-                name: "FailureCategory",
-                table: "PaymentIntents",
-                type: "nvarchar(50)",
-                maxLength: 50,
-                nullable: true);
+IF OBJECT_ID(N'[dbo].[PaymentIntents]', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH(N'[dbo].[PaymentIntents]', N'FailureCategory') IS NULL
+        ALTER TABLE [dbo].[PaymentIntents] ADD [FailureCategory] nvarchar(50) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "FailureCode",
-                table: "PaymentIntents",
-                type: "nvarchar(100)",
-                maxLength: 100,
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[PaymentIntents]', N'FailureCode') IS NULL
+        ALTER TABLE [dbo].[PaymentIntents] ADD [FailureCode] nvarchar(100) NULL;
+END
 
-            migrationBuilder.AddColumn<string>(
-                name: "FailureCategory",
-                table: "PaymentAttempts",
-                type: "nvarchar(50)",
-                maxLength: 50,
-                nullable: true);
+IF OBJECT_ID(N'[dbo].[PaymentAttempts]', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH(N'[dbo].[PaymentAttempts]', N'FailureCategory') IS NULL
+        ALTER TABLE [dbo].[PaymentAttempts] ADD [FailureCategory] nvarchar(50) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "MethodKind",
-                table: "PaymentAttempts",
-                type: "nvarchar(50)",
-                maxLength: 50,
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[PaymentAttempts]', N'MethodKind') IS NULL
+        ALTER TABLE [dbo].[PaymentAttempts] ADD [MethodKind] nvarchar(50) NULL;
 
-            migrationBuilder.AddColumn<Guid>(
-                name: "PaymentMethodID",
-                table: "PaymentAttempts",
-                type: "uniqueidentifier",
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[PaymentAttempts]', N'PaymentMethodID') IS NULL
+        ALTER TABLE [dbo].[PaymentAttempts] ADD [PaymentMethodID] uniqueidentifier NULL;
+END
+");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "CardFunding",
-                table: "PaymentMethods");
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[PaymentMethods]', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH(N'[dbo].[PaymentMethods]', N'CardFunding') IS NOT NULL
+        ALTER TABLE [dbo].[PaymentMethods] DROP COLUMN [CardFunding];
 
-            migrationBuilder.DropColumn(
-                name: "MethodRole",
-                table: "PaymentMethods");
+    IF COL_LENGTH(N'[dbo].[PaymentMethods]', N'MethodRole') IS NOT NULL
+        ALTER TABLE [dbo].[PaymentMethods] DROP COLUMN [MethodRole];
+END
 
-            migrationBuilder.DropColumn(
-                name: "FailureCategory",
-                table: "PaymentIntents");
+IF OBJECT_ID(N'[dbo].[PaymentIntents]', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH(N'[dbo].[PaymentIntents]', N'FailureCategory') IS NOT NULL
+        ALTER TABLE [dbo].[PaymentIntents] DROP COLUMN [FailureCategory];
 
-            migrationBuilder.DropColumn(
-                name: "FailureCode",
-                table: "PaymentIntents");
+    IF COL_LENGTH(N'[dbo].[PaymentIntents]', N'FailureCode') IS NOT NULL
+        ALTER TABLE [dbo].[PaymentIntents] DROP COLUMN [FailureCode];
+END
 
-            migrationBuilder.DropColumn(
-                name: "FailureCategory",
-                table: "PaymentAttempts");
+IF OBJECT_ID(N'[dbo].[PaymentAttempts]', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH(N'[dbo].[PaymentAttempts]', N'FailureCategory') IS NOT NULL
+        ALTER TABLE [dbo].[PaymentAttempts] DROP COLUMN [FailureCategory];
 
-            migrationBuilder.DropColumn(
-                name: "MethodKind",
-                table: "PaymentAttempts");
+    IF COL_LENGTH(N'[dbo].[PaymentAttempts]', N'MethodKind') IS NOT NULL
+        ALTER TABLE [dbo].[PaymentAttempts] DROP COLUMN [MethodKind];
 
-            migrationBuilder.DropColumn(
-                name: "PaymentMethodID",
-                table: "PaymentAttempts");
+    IF COL_LENGTH(N'[dbo].[PaymentAttempts]', N'PaymentMethodID') IS NOT NULL
+        ALTER TABLE [dbo].[PaymentAttempts] DROP COLUMN [PaymentMethodID];
+END
+");
 
             migrationBuilder.AlterColumn<string>(
                 name: "Payload",

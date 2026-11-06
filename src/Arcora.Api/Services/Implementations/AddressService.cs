@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Net.Http.Headers;
@@ -22,14 +22,14 @@ namespace Arcora.Api.Services.Implementations
     public class AddressService : IAddressService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<AddressService> logger;
         private readonly IAddressRepository addressRepository;
         private readonly IPostalLookupRepository postalLookupRepository;
         private readonly IOptions<CacheConfiguration> _options;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
-        public AddressService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<AddressService> logger, IAddressRepository addressRepository, IPostalLookupRepository postalLookupRepository, IHttpClientFactory httpClientFactory, IConfiguration configuration)
+        public AddressService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<AddressService> logger, IAddressRepository addressRepository, IPostalLookupRepository postalLookupRepository, IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
             this.cache = cache;
             this.logger = logger;
@@ -115,7 +115,10 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<Address?> checkEntity;
             try
             {
-                checkEntity = await this.addressRepository.Find(x => x.Line1!.ToLower().Trim() == addressDto.Line1!.ToLower().Trim());
+                checkEntity = await this.addressRepository.Find(x => x.Line1!.ToLower().Trim() == addressDto.Line1!.ToLower().Trim() &&
+                    x.Line2 == addressDto.Line2 && x.City == addressDto.City && x.ProvinceCode == addressDto.ProvinceCode &&
+                    x.PostalCode == addressDto.PostalCode && x.CountryCode == addressDto.CountryCode &&
+                    x.OrganizationID == addressDto.OrganizationID);
                 if (checkEntity == null || !checkEntity.Any())
                 {
                     address = this.mapper.Map<Address>(addressDto);
@@ -126,6 +129,10 @@ namespace Arcora.Api.Services.Implementations
                     address = await addressRepository.Create(address) ?? new Address();
                     await addressRepository.Save();
                     cache.Remove(Cache.ADDRESSES.ToString());
+                }
+                else
+                {
+                    address = checkEntity.First()!;
                 }
             }
             catch (Exception er)
@@ -146,6 +153,14 @@ namespace Arcora.Api.Services.Implementations
                 if (existing == null)
                     return null;
                 Address address = this.mapper.Map<Address>(addressDto);
+                address.AddressID = id;
+                if (AddressChanged(existing, addressDto) && !addressDto.LocationConfirmed)
+                {
+                    address.Latitude = null;
+                    address.Longitude = null;
+                    address.PlaceProvider = null;
+                    address.PlaceProviderReferenceID = null;
+                }
                 address = await addressRepository.Update(address) ?? new Address();
                 await addressRepository.Save();
                 cache.Remove(Cache.ADDRESSES.ToString());
@@ -159,6 +174,13 @@ namespace Arcora.Api.Services.Implementations
 
             return addressDto;
         }
+
+        private static bool AddressChanged(Address existing, AddressDto update) =>
+            !string.Equals(existing.Line1?.Trim(), update.Line1?.Trim(), StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(existing.City?.Trim(), update.City?.Trim(), StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(existing.ProvinceCode?.Trim(), update.ProvinceCode?.Trim(), StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(existing.PostalCode?.Trim(), update.PostalCode?.Trim(), StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(existing.CountryCode?.Trim(), update.CountryCode?.Trim(), StringComparison.OrdinalIgnoreCase);
 
         /// <inheritdoc/>
         public async Task DeleteAddress(Guid ID)

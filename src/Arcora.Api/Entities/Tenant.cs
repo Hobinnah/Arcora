@@ -73,6 +73,12 @@ public class Tenant
     public bool? IsCardRegistered { get; set; }
 
     /// <summary>
+    /// Provider customer identifier used to resume payment onboarding.
+    /// </summary>
+    [MaxLength(255)]
+    public string? ProviderCustomerID { get; set; }
+
+    /// <summary>
     /// Indicates whether the lease contract has been reviewed
     /// </summary>
     public bool? LeaseContractReviewed { get; set; } = false;

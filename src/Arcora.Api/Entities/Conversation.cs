@@ -50,6 +50,11 @@ public class Conversation
     public Guid? OrganizationID { get; set; }
 
     /// <summary>
+    /// Optional listing scope for direct host-to-tenant enquiry threads.
+    /// </summary>
+    public Guid? ListingID { get; set; }
+
+    /// <summary>
     /// Subject of the conversation
     /// </summary>
     [MaxLength(200)]
@@ -119,4 +124,10 @@ public class Conversation
     /// </summary>
     [ForeignKey(nameof(OrganizationID))]
     public Organization? Organization { get; set; }
+
+    /// <summary>
+    /// FK to the listing associated with a direct enquiry thread.
+    /// </summary>
+    [ForeignKey(nameof(ListingID))]
+    public Listing? Listing { get; set; }
 }

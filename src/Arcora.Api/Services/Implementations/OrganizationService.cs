@@ -8,7 +8,7 @@ using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.IO;
@@ -18,14 +18,14 @@ namespace Arcora.Api.Services.Implementations
     public class OrganizationService : IOrganizationService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<OrganizationService> logger;
         private readonly IOrganizationRepository organizationRepository;
         private readonly IOrganizationMemberRepository organizationMemberRepository;
         private readonly UserManager<User> userManager;
         private readonly IFileStorageService fileStorageService;
         private readonly IOptions<CacheConfiguration> _options;
-        public OrganizationService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<OrganizationService> logger, IOrganizationRepository organizationRepository, IOrganizationMemberRepository organizationMemberRepository, UserManager<User> userManager, IFileStorageService fileStorageService)
+        public OrganizationService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<OrganizationService> logger, IOrganizationRepository organizationRepository, IOrganizationMemberRepository organizationMemberRepository, UserManager<User> userManager, IFileStorageService fileStorageService)
         {
             this.cache = cache;
             this.logger = logger;

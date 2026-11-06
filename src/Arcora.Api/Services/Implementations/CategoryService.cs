@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class CategoryService : ICategoryService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<CategoryService> logger;
         private readonly ICategoryRepository categoryRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public CategoryService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<CategoryService> logger, ICategoryRepository categoryRepository)
+        public CategoryService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<CategoryService> logger, ICategoryRepository categoryRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,14 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<Category> entities;
             try
             {
-                entities = cache.Get<IEnumerable<Category>>(Cache.CATEGORIES.ToString()) ?? new List<Category>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.categoryRepository.GetAll())?.Where(x => x != null).Cast<Category>().ToList() ?? new List<Category>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<Category>>(Cache.CATEGORIES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.CATEGORIES.ToString(),
+                    async cancel =>
+                        (await this.categoryRepository.GetAll())?.Where(x => x != null).Cast<Category>().ToList() ?? new List<Category>(),
+                    new HybridCacheEntryOptions
+                    {
+                        Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes)
+                    });
             }
             catch (Exception er)
             {
@@ -76,16 +77,18 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<Category> entities = cache.Get<IEnumerable<Category>>(Cache.CATEGORIES.ToString()) ?? new List<Category>();
-                Category? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.CategoryID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.CATEGORIES.ToString(),
+                    async cancel =>
+                        (await this.categoryRepository.GetAll())?.Where(x => x != null).Cast<Category>().ToList() ?? new List<Category>(),
+                    new HybridCacheEntryOptions
+                    {
+                        Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes)
+                    });
+
+                var match = entities.FirstOrDefault(x => x.CategoryID == ID);
+                if (match == null)
                     match = await this.categoryRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<CategoryDto>(match);
             }
@@ -110,7 +113,7 @@ namespace Arcora.Api.Services.Implementations
                     category.CapturedDate = DateTime.UtcNow;
                     category = await categoryRepository.Create(category) ?? new Category();
                     await categoryRepository.Save();
-                    cache.Remove(Cache.CATEGORIES.ToString());
+                    await cache.RemoveAsync(Cache.CATEGORIES.ToString());
                 }
             }
             catch (Exception er)
@@ -133,7 +136,7 @@ namespace Arcora.Api.Services.Implementations
                 Category category = this.mapper.Map<Category>(categoryDto);
                 category = await categoryRepository.Update(category) ?? new Category();
                 await categoryRepository.Save();
-                cache.Remove(Cache.CATEGORIES.ToString());
+                await cache.RemoveAsync(Cache.CATEGORIES.ToString());
                 categoryDto = this.mapper.Map<CategoryDto>(category);
             }
             catch (Exception er)
@@ -155,7 +158,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("Category with the specified ID was not found.");
                 await categoryRepository.Delete(category);
                 await categoryRepository.Save();
-                cache.Remove(Cache.CATEGORIES.ToString());
+                await cache.RemoveAsync(Cache.CATEGORIES.ToString());
             }
             catch (Exception er)
             {

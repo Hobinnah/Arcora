@@ -17,7 +17,7 @@ namespace Arcora.Api.Signing
         {
             _channel = Channel.CreateUnbounded<SigningWorkItem>(new UnboundedChannelOptions
             {
-                SingleReader = true,
+                SingleReader = false,
                 SingleWriter = false
             });
         }
@@ -25,6 +25,7 @@ namespace Arcora.Api.Signing
         public ValueTask EnqueueAsync(SigningWorkItem item, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(item);
+            item.EnqueuedAt = DateTime.UtcNow;
             return _channel.Writer.WriteAsync(item, cancellationToken);
         }
 

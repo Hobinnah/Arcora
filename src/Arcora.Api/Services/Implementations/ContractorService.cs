@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class ContractorService : IContractorService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<ContractorService> logger;
         private readonly IContractorRepository contractorRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public ContractorService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<ContractorService> logger, IContractorRepository contractorRepository)
+        public ContractorService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<ContractorService> logger, IContractorRepository contractorRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<Contractor> entities;
             try
             {
-                entities = cache.Get<IEnumerable<Contractor>>(Cache.CONTRACTORS.ToString()) ?? new List<Contractor>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.contractorRepository.GetContractorAsync())?.Where(x => x != null) ?? new List<Contractor>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<Contractor>>(Cache.CONTRACTORS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.CONTRACTORS.ToString(),
+                    async cancel =>
+                        (await this.contractorRepository.GetContractorAsync())?.Where(x => x != null).ToList() ?? new List<Contractor>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
@@ -76,16 +74,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<Contractor> entities = cache.Get<IEnumerable<Contractor>>(Cache.CONTRACTORS.ToString()) ?? new List<Contractor>();
-                Contractor? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.ContractorID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.CONTRACTORS.ToString(),
+                    async cancel =>
+                        (await this.contractorRepository.GetContractorAsync())?.Where(x => x != null).ToList() ?? new List<Contractor>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.ContractorID == ID);
+                if (match == null)
                     match = await this.contractorRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<ContractorDto>(match);
             }
@@ -112,7 +109,7 @@ namespace Arcora.Api.Services.Implementations
                     contractor.CapturedDate = DateTime.UtcNow;
                     contractor = await contractorRepository.Create(contractor) ?? new Contractor();
                     await contractorRepository.Save();
-                    cache.Remove(Cache.CONTRACTORS.ToString());
+                    await cache.RemoveAsync(Cache.CONTRACTORS.ToString());
                 }
             }
             catch (Exception er)
@@ -135,7 +132,7 @@ namespace Arcora.Api.Services.Implementations
                 Contractor contractor = this.mapper.Map<Contractor>(contractorDto);
                 contractor = await contractorRepository.Update(contractor) ?? new Contractor();
                 await contractorRepository.Save();
-                cache.Remove(Cache.CONTRACTORS.ToString());
+                await cache.RemoveAsync(Cache.CONTRACTORS.ToString());
                 contractorDto = this.mapper.Map<ContractorDto>(contractor);
             }
             catch (Exception er)
@@ -157,7 +154,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("Contractor with the specified ID was not found.");
                 await contractorRepository.Delete(contractor);
                 await contractorRepository.Save();
-                cache.Remove(Cache.CONTRACTORS.ToString());
+                await cache.RemoveAsync(Cache.CONTRACTORS.ToString());
             }
             catch (Exception er)
             {
@@ -183,7 +180,7 @@ namespace Arcora.Api.Services.Implementations
 
             await contractorRepository.Update(contractor);
             await contractorRepository.Save();
-            cache.Remove(Cache.CONTRACTORS.ToString());
+            await cache.RemoveAsync(Cache.CONTRACTORS.ToString());
             return this.mapper.Map<ContractorDto>(contractor);
         }
     }

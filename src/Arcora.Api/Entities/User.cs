@@ -36,6 +36,16 @@ namespace Arcora.Api.Entities
         public string? BranchName { get; set; }
 
         /// <summary>
+        /// Latest SMS verification code issued to the user.
+        /// </summary>
+        public string? SmsCode { get; set; }
+
+        /// <summary>
+        /// UTC timestamp when the SMS verification code expires.
+        /// </summary>
+        public DateTimeOffset? SmsCodeExpiresAt { get; set; }
+
+        /// <summary>
         /// 
         /// </summary>
         public Guid? TenantID { get; set; }

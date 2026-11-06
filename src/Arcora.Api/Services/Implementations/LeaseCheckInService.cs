@@ -21,6 +21,7 @@ namespace Arcora.Api.Services.Implementations;
 public class LeaseCheckInService : ILeaseCheckInService
 {
     private const string MoveInInspectionType = "MOVE_IN";
+    private const string TenantMoveOutInspectionType = "TENANT_MOVE_OUT";
     private const string DraftStatus = "DRAFT";
     private const string SubmittedStatus = "SUBMITTED";
     private const string CompletedStatus = "COMPLETED";
@@ -136,6 +137,108 @@ public class LeaseCheckInService : ILeaseCheckInService
             InspectionID = inspection.InspectionID,
             Version = inspection.Version ?? string.Empty
         }, true);
+    }
+
+    public async Task<LeaseCheckOutResponseDto> GetCheckOutAsync(Guid leaseId, ClaimsPrincipal user, CancellationToken cancellationToken = default)
+    {
+        var lease = await GetTenantAuthorizedLeaseAsync(leaseId, user, cancellationToken, asNoTracking: true);
+        var inspection = await context.Inspections.AsNoTracking().SingleOrDefaultAsync(
+            x => x.LeaseID == leaseId && x.InspectionType == TenantMoveOutInspectionType,
+            cancellationToken);
+
+        return new LeaseCheckOutResponseDto
+        {
+            LeaseID = lease.LeaseID,
+            Inspection = inspection == null ? null : MapCheckOutInspection(inspection, lease.ActualMoveOutAt)
+        };
+    }
+
+    public async Task<(LeaseCheckOutInspectionDto Inspection, bool Created)> SubmitCheckOutAsync(
+        Guid leaseId,
+        SubmitLeaseCheckOutRequestDto request,
+        string idempotencyKey,
+        ClaimsPrincipal user,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 255)
+            throw new LeaseCheckInException(StatusCodes.Status400BadRequest, "Invalid idempotency key", "A valid Idempotency-Key header of at most 255 characters is required.");
+        if (!request.Confirmed)
+            throw new LeaseCheckInException(StatusCodes.Status400BadRequest, "Check-out not confirmed", "Confirm that you have returned possession before submitting check-out.");
+        if (request.Notes?.Length > 1000)
+            throw new LeaseCheckInException(StatusCodes.Status400BadRequest, "Notes too long", "Check-out notes must be 1000 characters or fewer.");
+
+        var lease = await GetTenantAuthorizedLeaseAsync(leaseId, user, cancellationToken);
+        var userId = GetRequiredUserId(user);
+        var requestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            JsonSerializer.Serialize(new { request.Confirmed, Notes = request.Notes?.Trim() }))));
+
+        await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        var existing = await context.Inspections.SingleOrDefaultAsync(
+            x => x.LeaseID == leaseId && x.InspectionType == TenantMoveOutInspectionType,
+            cancellationToken);
+
+        if (existing != null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            if (string.Equals(existing.SubmissionIdempotencyKey, idempotencyKey, StringComparison.Ordinal)
+                && string.Equals(existing.SubmissionRequestHash, requestHash, StringComparison.Ordinal))
+                return (MapCheckOutInspection(existing, lease.ActualMoveOutAt), false);
+
+            throw new LeaseCheckInException(StatusCodes.Status409Conflict, "Check-out already submitted", "A check-out record already exists for this lease.", "ALREADY_SUBMITTED");
+        }
+
+        if (lease.ActualMoveOutAt.HasValue)
+            throw new LeaseCheckInException(StatusCodes.Status409Conflict, "Check-out already recorded", "This lease already has an actual move-out date.", "ALREADY_SUBMITTED");
+
+        var now = DateTime.UtcNow;
+        var inspection = new Inspection
+        {
+            InspectionID = Guid.NewGuid(),
+            LeaseID = lease.LeaseID,
+            RentalUnitID = lease.RentalUnitID,
+            PropertyID = lease.RentalUnit?.PropertyID,
+            InspectionType = TenantMoveOutInspectionType,
+            Status = SubmittedStatus,
+            Notes = request.Notes?.Trim(),
+            SubmittedAt = now,
+            SubmittedByUserID = userId,
+            SubmissionIdempotencyKey = idempotencyKey,
+            SubmissionRequestHash = requestHash,
+            Version = Guid.NewGuid().ToString("N"),
+            CapturedDate = now,
+            CapturedBy = userId.ToString(CultureInfo.InvariantCulture),
+            UpdatedDate = now,
+            UpdatedBy = userId.ToString(CultureInfo.InvariantCulture)
+        };
+
+        context.Inspections.Add(inspection);
+        lease.ActualMoveOutAt = now;
+        lease.UpdatedDate = now;
+        lease.UpdatedBy = userId.ToString(CultureInfo.InvariantCulture);
+        await CreateMoveOutNotificationsAsync(lease, inspection, now, cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            var concurrentInspection = await context.Inspections.AsNoTracking().SingleOrDefaultAsync(
+                x => x.LeaseID == leaseId && x.InspectionType == TenantMoveOutInspectionType,
+                cancellationToken);
+            if (concurrentInspection == null)
+                throw;
+
+            if (string.Equals(concurrentInspection.SubmissionIdempotencyKey, idempotencyKey, StringComparison.Ordinal)
+                && string.Equals(concurrentInspection.SubmissionRequestHash, requestHash, StringComparison.Ordinal))
+                return (MapCheckOutInspection(concurrentInspection, lease.ActualMoveOutAt), false);
+
+            throw new LeaseCheckInException(StatusCodes.Status409Conflict, "Check-out already submitted", "A check-out record already exists for this lease.", "ALREADY_SUBMITTED");
+        }
+        await transaction.CommitAsync(cancellationToken);
+
+        return (MapCheckOutInspection(inspection, lease.ActualMoveOutAt), true);
     }
 
     public async Task<LeaseCheckInPhotoUploadResponseDto> UploadPhotoAsync(Guid leaseId, LeaseCheckInPhotoUploadRequestDto request, ClaimsPrincipal user, CancellationToken cancellationToken = default)
@@ -496,8 +599,8 @@ public class LeaseCheckInService : ILeaseCheckInService
         }
 
         await CreateNotificationsAsync(lease, inspection, now, cancellationToken);
-        await SendLandlordChatMessageAsync(lease, inspection, request, now, userId, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
+        await SendLandlordChatMessageAsync(lease, inspection, request, now, userId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         return await BuildInspectionDtoAsync(inspection, cancellationToken);
@@ -680,6 +783,32 @@ public class LeaseCheckInService : ILeaseCheckInService
 
         return lease;
     }
+
+    private async Task<Lease> GetTenantAuthorizedLeaseAsync(Guid leaseId, ClaimsPrincipal user, CancellationToken cancellationToken, bool asNoTracking = false)
+    {
+        var userId = GetRequiredUserId(user);
+        var query = context.Leases
+            .Where(lease => lease.LeaseID == leaseId && context.Tenants.Any(tenant =>
+                tenant.TenantID == lease.TenantID && tenant.UserID == userId))
+            .Include(x => x.RentalUnit);
+        var lease = asNoTracking
+            ? await query.AsNoTracking().SingleOrDefaultAsync(cancellationToken)
+            : await query.SingleOrDefaultAsync(cancellationToken);
+
+        if (lease == null)
+            throw new LeaseCheckInException(StatusCodes.Status404NotFound, "Lease not found", "The requested lease was not found.");
+
+        return lease;
+    }
+
+    private static LeaseCheckOutInspectionDto MapCheckOutInspection(Inspection inspection, DateTime? actualMoveOutAt) => new()
+    {
+        InspectionID = inspection.InspectionID,
+        Status = inspection.Status ?? string.Empty,
+        Notes = inspection.Notes,
+        SubmittedAt = inspection.SubmittedAt,
+        ActualMoveOutAt = actualMoveOutAt
+    };
 
     private async Task<Inspection?> GetMoveInInspectionAsync(Guid leaseId, bool asNoTracking, CancellationToken cancellationToken)
     {
@@ -953,6 +1082,38 @@ public class LeaseCheckInService : ILeaseCheckInService
                 Body = inspection.OccupancyReadiness == "NEEDS_ATTENTION"
                     ? "A tenant submitted a move-in check-in that requires follow-up."
                     : "A tenant submitted a move-in check-in.",
+                Status = "QUEUED",
+                ScheduledAt = now,
+                Metadata = metadata,
+                CapturedDate = now,
+                CapturedBy = inspection.SubmittedByUserID?.ToString(CultureInfo.InvariantCulture)
+            });
+        }
+    }
+
+    private async Task CreateMoveOutNotificationsAsync(Lease lease, Inspection inspection, DateTime now, CancellationToken cancellationToken)
+    {
+        var metadata = $"TENANT_MOVE_OUT_SUBMITTED:{inspection.InspectionID}";
+        var alreadyExists = await context.Notifications.AnyAsync(x => x.Metadata == metadata, cancellationToken);
+        if (alreadyExists)
+            return;
+
+        var recipients = await context.OrganizationMembers
+            .Where(x => x.OrganizationID == lease.OrganizationID && x.DeactivatedAt == null && (x.AcceptedAt != null || x.Status == "ACTIVE"))
+            .ToListAsync(cancellationToken);
+
+        foreach (var recipient in recipients)
+        {
+            context.Notifications.Add(new Notification
+            {
+                NotificationID = Guid.NewGuid(),
+                RecipientUserID = recipient.UserID,
+                OrganizationID = lease.OrganizationID,
+                OrganizationMemberID = recipient.OrganizationMemberID,
+                Channel = "IN_APP",
+                TemplateCode = "TENANT_MOVE_OUT_SUBMITTED",
+                Subject = "Tenant submitted a move-out check-out",
+                Body = "A tenant submitted a move-out check-out for one of your leases.",
                 Status = "QUEUED",
                 ScheduledAt = now,
                 Metadata = metadata,

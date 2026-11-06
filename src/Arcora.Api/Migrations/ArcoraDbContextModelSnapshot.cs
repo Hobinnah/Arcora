@@ -936,6 +936,9 @@ namespace Arcora.Api.Migrations
                     b.Property<Guid?>("LeaseRenewalID")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("ListingID")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid?>("MaintenanceRequestID")
                         .HasColumnType("uniqueidentifier");
 
@@ -967,11 +970,18 @@ namespace Arcora.Api.Migrations
 
                     b.HasIndex("LeaseID");
 
+                    b.HasIndex("ListingID");
+
                     b.HasIndex("MaintenanceRequestID");
 
                     b.HasIndex("OrganizationID");
 
                     b.HasIndex("TenantID");
+
+                    b.HasIndex("TenantID", "OrganizationID", "ListingID")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Conversations_DirectTenantOrganizationListing")
+                        .HasFilter("[ConversationType] = 'DIRECT' AND [TenantID] IS NOT NULL AND [OrganizationID] IS NOT NULL AND [ListingID] IS NOT NULL");
 
                     b.ToTable("Conversations");
                 });
@@ -981,6 +991,17 @@ namespace Arcora.Api.Migrations
                     b.Property<Guid>("ConversationMessageID")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AttachmentPayloadHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<Guid?>("AttachmentSendKey")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AttachmentSenderScope")
+                        .HasMaxLength(48)
+                        .HasColumnType("nvarchar(48)");
 
                     b.Property<string>("CapturedBy")
                         .HasMaxLength(256)
@@ -1000,8 +1021,7 @@ namespace Arcora.Api.Migrations
 
                     b.Property<string>("Message")
                         .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("MessageType")
                         .IsRequired()
@@ -1034,6 +1054,10 @@ namespace Arcora.Api.Migrations
                     b.HasIndex("SenderTenantID");
 
                     b.HasIndex("SenderUserID");
+
+                    b.HasIndex("ConversationID", "AttachmentSenderScope", "AttachmentSendKey")
+                        .IsUnique()
+                        .HasFilter("[AttachmentSenderScope] IS NOT NULL AND [AttachmentSendKey] IS NOT NULL");
 
                     b.ToTable("ConversationMessages");
                 });
@@ -1691,6 +1715,11 @@ namespace Arcora.Api.Migrations
                         .HasColumnType("nvarchar(64)");
 
                     b.HasKey("InspectionID");
+
+                    b.HasIndex("LeaseID")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Inspections_LeaseID_TenantMoveOut")
+                        .HasFilter("[LeaseID] IS NOT NULL AND [InspectionType] = 'TENANT_MOVE_OUT'");
 
                     b.HasIndex("PropertyID");
 
@@ -2902,6 +2931,19 @@ namespace Arcora.Api.Migrations
                     b.Property<Guid>("RentalUnitID")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("ReviewMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime?>("ReviewSubmittedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long?>("ReviewedByUserID")
+                        .HasColumnType("bigint");
+
                     b.Property<decimal>("SecurityDepositAmount")
                         .HasColumnType("decimal(18,2)");
 
@@ -3092,12 +3134,10 @@ namespace Arcora.Api.Migrations
                         .HasColumnType("nvarchar(255)");
 
                     b.Property<string>("StorageProvider")
-                        .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("StorageReference")
-                        .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
@@ -4146,6 +4186,9 @@ namespace Arcora.Api.Migrations
 
                     b.HasIndex("AutopayMandateID");
 
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique();
+
                     b.HasIndex("InvoiceMasterID");
 
                     b.HasIndex("LeaseID");
@@ -4298,6 +4341,11 @@ namespace Arcora.Api.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("PaymentProviderEventID");
+
+                    b.HasIndex("ProviderName", "ProviderEventID")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PaymentProviderEvents_InternalSecurityDeposit_Idempotency")
+                        .HasFilter("[ProviderName] = 'INTERNAL_SECURITY_DEPOSIT'");
 
                     b.ToTable("PaymentProviderEvents");
                 });
@@ -4854,6 +4902,137 @@ namespace Arcora.Api.Migrations
                     b.HasIndex("TenantID");
 
                     b.ToTable("Refunds");
+                });
+
+            modelBuilder.Entity("Arcora.Api.Entities.OperationsIncident", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uniqueidentifier");
+                    b.Property<string>("InstanceId").IsRequired().HasMaxLength(128).HasColumnType("nvarchar(128)");
+                    b.Property<string>("CheckId").IsRequired().HasMaxLength(80).HasColumnType("nvarchar(80)");
+                    b.Property<string>("Status").IsRequired().HasMaxLength(32).HasColumnType("nvarchar(32)");
+                    b.Property<string>("Message").IsRequired().HasMaxLength(512).HasColumnType("nvarchar(512)");
+                    b.Property<DateTime>("OpenedAt").HasColumnType("datetime2");
+                    b.Property<DateTime?>("ResolvedAt").HasColumnType("datetime2");
+                    b.Property<DateTime?>("EmailSentAt").HasColumnType("datetime2");
+                    b.Property<DateTime?>("RecoveryEmailSentAt").HasColumnType("datetime2");
+                    b.Property<DateTime?>("NextEmailAttemptAt").HasColumnType("datetime2");
+                    b.Property<int>("EmailAttempts").HasColumnType("int");
+                    b.HasKey("Id");
+                    b.HasIndex("InstanceId", "CheckId").IsUnique().HasFilter("[ResolvedAt] IS NULL");
+                    b.ToTable("OperationsIncidents");
+                });
+
+            modelBuilder.Entity("Arcora.Api.Entities.RentDisbursement", b =>
+                {
+                    b.Property<Guid>("PaymentID").HasColumnType("uniqueidentifier");
+                    b.Property<Guid>("OrganizationID").HasColumnType("uniqueidentifier");
+                    b.Property<long>("OrgPayoutAccountID").HasColumnType("bigint");
+                    b.Property<long>("PayoutID").HasColumnType("bigint");
+                    b.Property<string>("AccountReference").IsRequired().HasMaxLength(255).HasColumnType("nvarchar(255)");
+                    b.Property<string>("PaymentIntentReference").IsRequired().HasMaxLength(255).HasColumnType("nvarchar(255)");
+                    b.Property<string>("TransferReference").HasMaxLength(255).HasColumnType("nvarchar(255)");
+                    b.Property<string>("BankPayoutReference").HasMaxLength(255).HasColumnType("nvarchar(255)");
+                    b.Property<string>("Status").IsRequired().HasMaxLength(50).HasColumnType("nvarchar(50)");
+                    b.Property<string>("FailureReason").HasMaxLength(1000).HasColumnType("nvarchar(1000)");
+                    b.Property<decimal>("Amount").HasPrecision(18, 2).HasColumnType("decimal(18,2)");
+                    b.Property<decimal>("CollectedAmount").HasPrecision(18, 2).HasColumnType("decimal(18,2)");
+                    b.Property<string>("Currency").IsRequired().HasMaxLength(3).HasColumnType("nvarchar(3)");
+                    b.Property<DateTime>("CapturedDate").HasColumnType("datetime2");
+                    b.Property<DateTime?>("LastCheckedAt").HasColumnType("datetime2");
+                    b.Property<DateTime?>("PayoutAttemptedAt").HasColumnType("datetime2");
+                    b.Property<string>("CapturedBy").IsRequired().HasMaxLength(256).HasColumnType("nvarchar(256)");
+                    b.HasKey("PaymentID");
+                    b.HasIndex("PayoutID").IsUnique();
+                    b.ToTable("RentDisbursements");
+                });
+
+            modelBuilder.Entity("Arcora.Api.Entities.RentPaymentAccounting", b =>
+                {
+                    b.Property<Guid>("PaymentIntentID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CapturedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
+                    b.Property<decimal>("DepositAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("HostMonthlyFee")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("HostNetAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("HostPlacementFee")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("LeaseID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ListingID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("MonthlyFeeRate")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("OrganizationID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("PaymentID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("PlacementFeeRate")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("ReconciliationBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<decimal>("RentAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("RentalUnitID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("RentPeriod")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("SettledAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("TenantFeeAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("PaymentIntentID");
+
+                    b.HasIndex("LeaseID")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RentPaymentAccountings_PlacementOnce")
+                        .HasFilter("[SettledAt] IS NOT NULL AND [HostPlacementFee] > 0");
+
+                    b.HasIndex("PaymentID")
+                        .IsUnique()
+                        .HasFilter("[PaymentID] IS NOT NULL");
+
+                    b.HasIndex("RentalUnitID", "RentPeriod")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RentPaymentAccountings_MonthlyOnce")
+                        .HasFilter("[SettledAt] IS NOT NULL AND [HostMonthlyFee] > 0");
+
+                    b.ToTable("RentPaymentAccountings");
                 });
 
             modelBuilder.Entity("Arcora.Api.Entities.RentalApplication", b =>
@@ -5502,6 +5681,10 @@ namespace Arcora.Api.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("ProviderCustomerID")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
                     b.Property<string>("UpdatedBy")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
@@ -5733,13 +5916,6 @@ namespace Arcora.Api.Migrations
 
             modelBuilder.Entity("Arcora.Api.Entities.TenantInvitation", b =>
                 {
-                    b.Property<decimal?>("MonthlyRentAmount").HasPrecision(18, 2).HasColumnType("decimal(18,2)");
-                    b.Property<decimal?>("SecurityDepositAmount").HasPrecision(18, 2).HasColumnType("decimal(18,2)");
-                    b.Property<string>("Currency").HasMaxLength(3).HasColumnType("nvarchar(3)");
-                    b.Property<DateTime?>("StartDate").HasColumnType("datetime2");
-                    b.Property<DateTime?>("EndDate").HasColumnType("datetime2");
-                    b.Property<short?>("LeaseTermMonths").HasColumnType("smallint");
-                    b.Property<Guid?>("ReservationHoldID").HasColumnType("uniqueidentifier");
                     b.Property<Guid>("TenantInvitationID")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
@@ -5754,9 +5930,16 @@ namespace Arcora.Api.Migrations
                     b.Property<DateTime?>("CapturedDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("Currency")
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
                     b.Property<string>("Email")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
+
+                    b.Property<DateTime?>("EndDate")
+                        .HasColumnType("datetime2");
 
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("datetime2");
@@ -5769,8 +5952,15 @@ namespace Arcora.Api.Migrations
                     b.Property<Guid?>("LeaseID")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<short?>("LeaseTermMonths")
+                        .HasColumnType("smallint");
+
                     b.Property<Guid?>("ListingID")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("MonthlyRentAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Name")
                         .HasMaxLength(200)
@@ -5783,7 +5973,17 @@ namespace Arcora.Api.Migrations
                     b.Property<Guid?>("RentalApplicationID")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("ReservationHoldID")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal?>("SecurityDepositAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("StartDate")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Status")
@@ -5807,16 +6007,35 @@ namespace Arcora.Api.Migrations
 
             modelBuilder.Entity("Arcora.Api.Entities.TenantInvitationEmail", b =>
                 {
-                    b.Property<Guid>("TenantInvitationID").HasColumnType("uniqueidentifier");
-                    b.Property<string>("Status").IsRequired().HasMaxLength(30).HasColumnType("nvarchar(30)");
-                    b.Property<string>("ProtectedMessage").IsRequired().HasColumnType("nvarchar(max)");
-                    b.Property<int>("Attempts").HasColumnType("int");
-                    b.Property<DateTime>("NextAttemptAt").HasColumnType("datetime2");
-                    b.Property<DateTime?>("LastAttemptAt").HasColumnType("datetime2");
-                    b.Property<DateTime?>("SentAt").HasColumnType("datetime2");
+                    b.Property<Guid>("TenantInvitationID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("LastAttemptAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ProtectedMessage")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
                     b.HasKey("TenantInvitationID");
+
                     b.HasIndex("Status", "NextAttemptAt");
-                    b.ToTable("TenantInvitationEmails", (string)null);
+
+                    b.ToTable("TenantInvitationEmails");
                 });
 
             modelBuilder.Entity("Arcora.Api.Entities.TenantScreeningCheck", b =>
@@ -6507,6 +6726,11 @@ namespace Arcora.Api.Migrations
                         .HasForeignKey("LeaseID")
                         .OnDelete(DeleteBehavior.NoAction);
 
+                    b.HasOne("Arcora.Api.Entities.Listing", "Listing")
+                        .WithMany()
+                        .HasForeignKey("ListingID")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("Arcora.Api.Entities.MaintenanceRequest", "MaintenanceRequest")
                         .WithMany()
                         .HasForeignKey("MaintenanceRequestID")
@@ -6525,6 +6749,8 @@ namespace Arcora.Api.Migrations
                     b.Navigation("Dispute");
 
                     b.Navigation("Lease");
+
+                    b.Navigation("Listing");
 
                     b.Navigation("MaintenanceRequest");
 
@@ -7631,6 +7857,34 @@ namespace Arcora.Api.Migrations
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("Arcora.Api.Entities.RentPaymentAccounting", b =>
+                {
+                    b.HasOne("Arcora.Api.Entities.Payment", "Payment")
+                        .WithMany()
+                        .HasForeignKey("PaymentID")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Arcora.Api.Entities.PaymentIntent", "PaymentIntent")
+                        .WithOne()
+                        .HasForeignKey("Arcora.Api.Entities.RentPaymentAccounting", "PaymentIntentID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Payment");
+
+                    b.Navigation("PaymentIntent");
+                });
+
+            modelBuilder.Entity("Arcora.Api.Entities.RentDisbursement", b =>
+                {
+                    b.HasOne("Arcora.Api.Entities.Payment", null).WithOne()
+                        .HasForeignKey("Arcora.Api.Entities.RentDisbursement", "PaymentID")
+                        .OnDelete(DeleteBehavior.Restrict).IsRequired();
+                    b.HasOne("Arcora.Api.Entities.Payout", null).WithOne()
+                        .HasForeignKey("Arcora.Api.Entities.RentDisbursement", "PayoutID")
+                        .OnDelete(DeleteBehavior.Restrict).IsRequired();
+                });
+
             modelBuilder.Entity("Arcora.Api.Entities.RentalApplication", b =>
                 {
                     b.HasOne("Arcora.Api.Entities.Listing", "Listing")
@@ -7863,6 +8117,7 @@ namespace Arcora.Api.Migrations
                         .HasForeignKey("Arcora.Api.Entities.TenantInvitationEmail", "TenantInvitationID")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
+
                     b.Navigation("TenantInvitation");
                 });
 

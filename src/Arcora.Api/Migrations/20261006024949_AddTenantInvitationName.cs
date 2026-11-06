@@ -10,20 +10,25 @@ namespace Arcora.Api.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "Name",
-                table: "TenantInvitations",
-                type: "nvarchar(200)",
-                maxLength: 200,
-                nullable: true);
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[TenantInvitations]', N'U') IS NOT NULL
+   AND COL_LENGTH(N'[dbo].[TenantInvitations]', N'Name') IS NULL
+BEGIN
+    ALTER TABLE [dbo].[TenantInvitations] ADD [Name] nvarchar(200) NULL;
+END
+");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "Name",
-                table: "TenantInvitations");
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[TenantInvitations]', N'U') IS NOT NULL
+   AND COL_LENGTH(N'[dbo].[TenantInvitations]', N'Name') IS NOT NULL
+BEGIN
+    ALTER TABLE [dbo].[TenantInvitations] DROP COLUMN [Name];
+END
+");
         }
     }
 }

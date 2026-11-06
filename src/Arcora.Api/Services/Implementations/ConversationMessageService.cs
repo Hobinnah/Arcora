@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class ConversationMessageService : IConversationMessageService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<ConversationMessageService> logger;
         private readonly IConversationMessageRepository conversationmessageRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public ConversationMessageService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<ConversationMessageService> logger, IConversationMessageRepository conversationmessageRepository)
+        public ConversationMessageService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<ConversationMessageService> logger, IConversationMessageRepository conversationmessageRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -131,6 +131,9 @@ namespace Arcora.Api.Services.Implementations
                 var existing = await this.conversationmessageRepository.GetByID(id);
                 if (existing == null)
                     return null;
+                if (existing.AttachmentSendKey.HasValue)
+                    throw new Arcora.Api.Exceptions.ApiProblemException(409, "Attachment cannot be edited",
+                        "Sent attachments cannot be replaced. Send a new attachment instead.");
                 ConversationMessage conversationMessage = this.mapper.Map<ConversationMessage>(conversationmessageDto);
                 conversationMessage = await conversationmessageRepository.Update(conversationMessage) ?? new ConversationMessage();
                 await conversationmessageRepository.Save();
@@ -154,7 +157,14 @@ namespace Arcora.Api.Services.Implementations
                 var conversationMessage = await this.conversationmessageRepository.GetByID(ID);
                 if (conversationMessage == null)
                     throw new KeyNotFoundException("ConversationMessage with the specified ID was not found.");
-                await conversationmessageRepository.Delete(conversationMessage);
+                if (conversationMessage.AttachmentSendKey.HasValue)
+                {
+                    // Retain the replay identity even when an administrator removes the message.
+                    conversationMessage.DeletedAt ??= DateTime.UtcNow;
+                    await conversationmessageRepository.Update(conversationMessage);
+                }
+                else
+                    await conversationmessageRepository.Delete(conversationMessage);
                 await conversationmessageRepository.Save();
                 cache.Remove(Cache.CONVERSATIONMESSAGES.ToString());
             }

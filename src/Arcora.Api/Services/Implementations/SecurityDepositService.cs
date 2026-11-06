@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,12 +16,12 @@ namespace Arcora.Api.Services.Implementations
     public class SecurityDepositService : ISecurityDepositService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<SecurityDepositService> logger;
         private readonly ISecurityDepositRepository securitydepositRepository;
         private readonly IOrganizationMemberRepository organizationMemberRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public SecurityDepositService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<SecurityDepositService> logger, ISecurityDepositRepository securitydepositRepository, IOrganizationMemberRepository organizationMemberRepository)
+        public SecurityDepositService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<SecurityDepositService> logger, ISecurityDepositRepository securitydepositRepository, IOrganizationMemberRepository organizationMemberRepository)
         {
             this.cache = cache;
             this.logger = logger;

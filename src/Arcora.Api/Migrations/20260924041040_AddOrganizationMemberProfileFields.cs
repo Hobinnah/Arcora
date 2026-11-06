@@ -10,79 +10,61 @@ namespace Arcora.Api.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "BirthDecade",
-                table: "OrganizationMembers",
-                type: "nvarchar(max)",
-                nullable: true);
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[OrganizationMembers]', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH(N'[dbo].[OrganizationMembers]', N'BirthDecade') IS NULL
+        ALTER TABLE [dbo].[OrganizationMembers] ADD [BirthDecade] nvarchar(max) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "HomeUniqueDescription",
-                table: "OrganizationMembers",
-                type: "nvarchar(max)",
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[OrganizationMembers]', N'HomeUniqueDescription') IS NULL
+        ALTER TABLE [dbo].[OrganizationMembers] ADD [HomeUniqueDescription] nvarchar(max) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "PetsDescription",
-                table: "OrganizationMembers",
-                type: "nvarchar(max)",
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[OrganizationMembers]', N'PetsDescription') IS NULL
+        ALTER TABLE [dbo].[OrganizationMembers] ADD [PetsDescription] nvarchar(max) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "ProfilePhotoUrl",
-                table: "OrganizationMembers",
-                type: "nvarchar(max)",
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[OrganizationMembers]', N'ProfilePhotoUrl') IS NULL
+        ALTER TABLE [dbo].[OrganizationMembers] ADD [ProfilePhotoUrl] nvarchar(max) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "SchoolDescription",
-                table: "OrganizationMembers",
-                type: "nvarchar(max)",
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[OrganizationMembers]', N'SchoolDescription') IS NULL
+        ALTER TABLE [dbo].[OrganizationMembers] ADD [SchoolDescription] nvarchar(max) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "TravelDestination",
-                table: "OrganizationMembers",
-                type: "nvarchar(max)",
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[OrganizationMembers]', N'TravelDestination') IS NULL
+        ALTER TABLE [dbo].[OrganizationMembers] ADD [TravelDestination] nvarchar(max) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "WorkDescription",
-                table: "OrganizationMembers",
-                type: "nvarchar(max)",
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[OrganizationMembers]', N'WorkDescription') IS NULL
+        ALTER TABLE [dbo].[OrganizationMembers] ADD [WorkDescription] nvarchar(max) NULL;
+END
+");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "BirthDecade",
-                table: "OrganizationMembers");
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[OrganizationMembers]', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH(N'[dbo].[OrganizationMembers]', N'BirthDecade') IS NOT NULL
+        ALTER TABLE [dbo].[OrganizationMembers] DROP COLUMN [BirthDecade];
 
-            migrationBuilder.DropColumn(
-                name: "HomeUniqueDescription",
-                table: "OrganizationMembers");
+    IF COL_LENGTH(N'[dbo].[OrganizationMembers]', N'HomeUniqueDescription') IS NOT NULL
+        ALTER TABLE [dbo].[OrganizationMembers] DROP COLUMN [HomeUniqueDescription];
 
-            migrationBuilder.DropColumn(
-                name: "PetsDescription",
-                table: "OrganizationMembers");
+    IF COL_LENGTH(N'[dbo].[OrganizationMembers]', N'PetsDescription') IS NOT NULL
+        ALTER TABLE [dbo].[OrganizationMembers] DROP COLUMN [PetsDescription];
 
-            migrationBuilder.DropColumn(
-                name: "ProfilePhotoUrl",
-                table: "OrganizationMembers");
+    IF COL_LENGTH(N'[dbo].[OrganizationMembers]', N'ProfilePhotoUrl') IS NOT NULL
+        ALTER TABLE [dbo].[OrganizationMembers] DROP COLUMN [ProfilePhotoUrl];
 
-            migrationBuilder.DropColumn(
-                name: "SchoolDescription",
-                table: "OrganizationMembers");
+    IF COL_LENGTH(N'[dbo].[OrganizationMembers]', N'SchoolDescription') IS NOT NULL
+        ALTER TABLE [dbo].[OrganizationMembers] DROP COLUMN [SchoolDescription];
 
-            migrationBuilder.DropColumn(
-                name: "TravelDestination",
-                table: "OrganizationMembers");
+    IF COL_LENGTH(N'[dbo].[OrganizationMembers]', N'TravelDestination') IS NOT NULL
+        ALTER TABLE [dbo].[OrganizationMembers] DROP COLUMN [TravelDestination];
 
-            migrationBuilder.DropColumn(
-                name: "WorkDescription",
-                table: "OrganizationMembers");
+    IF COL_LENGTH(N'[dbo].[OrganizationMembers]', N'WorkDescription') IS NOT NULL
+        ALTER TABLE [dbo].[OrganizationMembers] DROP COLUMN [WorkDescription];
+END
+");
         }
     }
 }

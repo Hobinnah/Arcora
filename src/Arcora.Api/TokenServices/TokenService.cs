@@ -32,9 +32,10 @@ namespace Arcora.Api.TokenServices
             var claims = new List<Claim>
             {
                 new Claim(JwtRegisteredClaimNames.GivenName, $"{user.FirstName} {user.LastName}"),
-                new Claim(JwtRegisteredClaimNames.Sub, user.Email!),
+                new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim(JwtRegisteredClaimNames.NameId, user.Id.ToString()),
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(JwtRegisteredClaimNames.Iat, DateTime.UtcNow.AddDays(2).ToString()),
                 new Claim(ClaimTypes.Email, user.Email!.ToString()),
                 new Claim(ClaimTypes.Name, $"{user.LastName}-{user.FirstName}-{user.UserName}"),

@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class TaxRateService : ITaxRateService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<TaxRateService> logger;
         private readonly ITaxRateRepository taxrateRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public TaxRateService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<TaxRateService> logger, ITaxRateRepository taxrateRepository)
+        public TaxRateService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<TaxRateService> logger, ITaxRateRepository taxrateRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,38 +37,26 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<TaxRate> entities;
             try
             {
-                entities = cache.Get<IEnumerable<TaxRate>>(Cache.TAXRATES.ToString()) ?? new List<TaxRate>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.taxrateRepository.GetAll())?.Where(x => x != null).Cast<TaxRate>().ToList() ?? new List<TaxRate>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<TaxRate>>(Cache.TAXRATES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.TAXRATES.ToString(),
+                    async cancel =>
+                        (await this.taxrateRepository.GetAll())?.Where(x => x != null).Cast<TaxRate>().ToList() ?? new List<TaxRate>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
                 logger.LogError(er, "An error occurred while fetching TaxRate by ID. Timestamp: {Timestamp}", DateTime.UtcNow);
-                return new PagedResult<TaxRateDto>
-                {
-                    Data = new List<TaxRateDto>(),
-                    TotalCount = 0
-                };
+                return new PagedResult<TaxRateDto> { Data = new List<TaxRateDto>(), TotalCount = 0 };
             }
 
             IEnumerable<TaxRate> filteredEntities = entities!;
             if (!string.IsNullOrEmpty(paging?.Search))
-            {
                 filteredEntities = entities!.Where(x => !string.IsNullOrEmpty(x.Name) && x.Name.Contains(paging.Search, StringComparison.OrdinalIgnoreCase));
-            }
 
             int totalCount = filteredEntities.Count();
             var pagedEntities = filteredEntities.OrderByDescending(x => x.TaxID).Skip((paging!.PageNumber - 1) * paging.PageSize).Take(paging.PageSize).ToList();
             var pagedDtos = this.mapper.Map<IEnumerable<TaxRateDto>>(pagedEntities);
-            return new PagedResult<TaxRateDto>
-            {
-                Data = pagedDtos,
-                TotalCount = totalCount
-            };
+            return new PagedResult<TaxRateDto> { Data = pagedDtos, TotalCount = totalCount };
         }
 
         /// <inheritdoc/>
@@ -76,16 +64,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<TaxRate> entities = cache.Get<IEnumerable<TaxRate>>(Cache.TAXRATES.ToString()) ?? new List<TaxRate>();
-                TaxRate? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.TaxID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.TAXRATES.ToString(),
+                    async cancel =>
+                        (await this.taxrateRepository.GetAll())?.Where(x => x != null).Cast<TaxRate>().ToList() ?? new List<TaxRate>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.TaxID == ID);
+                if (match == null)
                     match = await this.taxrateRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<TaxRateDto>(match);
             }
@@ -110,7 +97,7 @@ namespace Arcora.Api.Services.Implementations
                     taxRate.CapturedDate = DateTime.UtcNow;
                     taxRate = await taxrateRepository.Create(taxRate) ?? new TaxRate();
                     await taxrateRepository.Save();
-                    cache.Remove(Cache.TAXRATES.ToString());
+                    await cache.RemoveAsync(Cache.TAXRATES.ToString());
                 }
             }
             catch (Exception er)
@@ -133,7 +120,7 @@ namespace Arcora.Api.Services.Implementations
                 TaxRate taxRate = this.mapper.Map<TaxRate>(taxrateDto);
                 taxRate = await taxrateRepository.Update(taxRate) ?? new TaxRate();
                 await taxrateRepository.Save();
-                cache.Remove(Cache.TAXRATES.ToString());
+                await cache.RemoveAsync(Cache.TAXRATES.ToString());
                 taxrateDto = this.mapper.Map<TaxRateDto>(taxRate);
             }
             catch (Exception er)
@@ -155,7 +142,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("TaxRate with the specified ID was not found.");
                 await taxrateRepository.Delete(taxRate);
                 await taxrateRepository.Save();
-                cache.Remove(Cache.TAXRATES.ToString());
+                await cache.RemoveAsync(Cache.TAXRATES.ToString());
             }
             catch (Exception er)
             {

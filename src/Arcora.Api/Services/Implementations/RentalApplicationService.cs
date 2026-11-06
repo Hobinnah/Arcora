@@ -8,7 +8,7 @@ using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -19,7 +19,7 @@ namespace Arcora.Api.Services.Implementations
     public class RentalApplicationService : IRentalApplicationService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<RentalApplicationService> logger;
         private readonly IRentalApplicationRepository rentalapplicationRepository;
         private readonly IRentCollectionOrchestrator rentCollectionOrchestrator;
@@ -41,7 +41,7 @@ namespace Arcora.Api.Services.Implementations
         private readonly Arcora.Api.Email.IEmailQueue? emailQueue;
         private readonly IOptions<CacheConfiguration> _options;
         private readonly ArcoraDbContext dbContext;
-        public RentalApplicationService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<RentalApplicationService> logger, IRentalApplicationRepository rentalapplicationRepository, IRentCollectionOrchestrator rentCollectionOrchestrator, IListingRepository listingRepository, IFeeRepository feeRepository, ISecurityDepositRepository securityDepositRepository, ILeaseRepository leaseRepository, ITenancyTypeRepository tenancyTypeRepository, IApplicationOccupantRepository applicationOccupantRepository, ILeaseDocumentsRepository leaseDocumentsRepository, ITenantGuarantorService tenantGuarantorService, ITenantRepository tenantRepository, IListingPhotoRepository listingPhotoRepository, IFileStorageService fileStorageService, IOrganizationMemberRepository organizationMemberRepository, IPreferenceService preferenceService, IConfiguration configuration, ArcoraDbContext dbContext, IEmailSender? emailSender = null, Arcora.Api.Email.IEmailQueue? emailQueue = null)
+        public RentalApplicationService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<RentalApplicationService> logger, IRentalApplicationRepository rentalapplicationRepository, IRentCollectionOrchestrator rentCollectionOrchestrator, IListingRepository listingRepository, IFeeRepository feeRepository, ISecurityDepositRepository securityDepositRepository, ILeaseRepository leaseRepository, ITenancyTypeRepository tenancyTypeRepository, IApplicationOccupantRepository applicationOccupantRepository, ILeaseDocumentsRepository leaseDocumentsRepository, ITenantGuarantorService tenantGuarantorService, ITenantRepository tenantRepository, IListingPhotoRepository listingPhotoRepository, IFileStorageService fileStorageService, IOrganizationMemberRepository organizationMemberRepository, IPreferenceService preferenceService, IConfiguration configuration, ArcoraDbContext dbContext, IEmailSender? emailSender = null, Arcora.Api.Email.IEmailQueue? emailQueue = null)
         {
             this.cache = cache;
             this.logger = logger;
@@ -794,6 +794,21 @@ namespace Arcora.Api.Services.Implementations
                     CapturedBy = "SYSTEM"
                 };
 
+                var holdConversionTime = DateTime.UtcNow;
+                var applicationHolds = await dbContext.ReservationHolds
+                    .Where(hold => hold.RentalApplicationID == application.RentalApplicationID
+                        && hold.ListingID == listing.ListingID
+                        && hold.ReleasedAt == null
+                        && hold.ExpiresAt > holdConversionTime
+                        && !ArcoraDbContext.NonBlockingHoldStatuses.Contains((hold.Status ?? string.Empty).ToUpper()))
+                    .ToListAsync();
+                foreach (var hold in applicationHolds)
+                {
+                    hold.Status = "RELEASED";
+                    hold.ReleasedAt = holdConversionTime;
+                    hold.ConvertedToLeaseAt = holdConversionTime;
+                }
+
                 lease = await leaseRepository.Create(lease) ?? lease;
                 await leaseRepository.Save();
                 cache.Remove(Cache.LEASES.ToString());
@@ -885,53 +900,22 @@ namespace Arcora.Api.Services.Implementations
         }
 
         /// <summary>
-        /// Sums all active platform/booking fees applicable to the application. Organization-specific
-        /// fees take precedence but global platform fees (no organization) also apply. Percentage fees
+        /// Sums tenant platform/booking fees applicable to the application, excluding host billing.
+        /// Global and organization-specific fees apply. Percentage fees
         /// are calculated against the first month's rent and clamped to any configured min/max.
         /// </summary>
         private async Task<decimal> CalculatePlatformFeesAsync(RentalApplication application, decimal rent)
         {
             var now = DateTime.UtcNow;
-            var fees = await feeRepository.Find(f =>
+            var fees = await dbContext.Fees.AsNoTracking().Include(f => f.FeeType).Where(f =>
                 f.IsActive &&
                 f.FeeType != null &&
                 f.FeeType.IsPlatformFee == true &&
                 (f.OrganizationID == null || f.OrganizationID == application.OrganizationID) &&
                 (f.EffectiveFrom == null || f.EffectiveFrom <= now) &&
-                (f.EffectiveTo == null || f.EffectiveTo >= now));
+                (f.EffectiveTo == null || f.EffectiveTo >= now)).ToListAsync();
 
-            var total = 0m;
-            foreach (var fee in fees.Where(f => f != null)!)
-            {
-                total += CalculateFeeAmount(fee!, rent);
-            }
-
-            return total;
-        }
-
-        /// <summary>
-        /// Resolves a single fee to a concrete amount based on its calculation type, applying the
-        /// configured minimum/maximum bounds.
-        /// </summary>
-        private static decimal CalculateFeeAmount(Fee fee, decimal baseAmount)
-        {
-            var amount = fee.CalculationType?.Trim().ToUpperInvariant() switch
-            {
-                "PERCENTAGE" => baseAmount * ((fee.PercentageRate ?? 0m) / 100m),
-                _ => fee.FixedAmount ?? 0m
-            };
-
-            if (fee.MinimumFeeAmount.HasValue && amount < fee.MinimumFeeAmount.Value)
-            {
-                amount = fee.MinimumFeeAmount.Value;
-            }
-
-            if (fee.MaximumFeeAmount.HasValue && amount > fee.MaximumFeeAmount.Value)
-            {
-                amount = fee.MaximumFeeAmount.Value;
-            }
-
-            return amount < 0m ? 0m : amount;
+            return TenantBookingFees.Calculate(fees.OfType<Fee>(), rent);
         }
 
         public async Task<PagedResult<RentalApplicationDto>> GetAllForActor(Paging paging, long actorUserID, bool isAdmin)
@@ -1070,6 +1054,24 @@ namespace Arcora.Api.Services.Implementations
             }
 
             rentalApplication.Status = normalizedStatus;
+            if (normalizedStatus is "UNDER_REVIEW" or "APPROVED" or "DECLINED" or "CHANGES_REQUESTED")
+            {
+                var reviewer = await dbContext.OrganizationMembers.AsNoTracking()
+                    .Where(member => member.OrganizationID == rentalApplication.OrganizationID
+                        && member.UserID == actorUserID
+                        && member.DeactivatedAt == null
+                        && member.Status == "ACTIVE"
+                        && (member.IsPrimaryOwner || member.RoleName == "FULL ACCESS"))
+                    .Select(member => (Guid?)member.OrganizationMemberID)
+                    .FirstOrDefaultAsync();
+                if (!isAdmin && reviewer == null)
+                    throw new UnauthorizedAccessException("An active organization manager is required to review applications.");
+
+                rentalApplication.ReviewedAt = DateTime.UtcNow;
+                rentalApplication.ReviewedByOrganizationMemberID = reviewer;
+                rentalApplication.ApprovedAt = normalizedStatus == "APPROVED" ? DateTime.UtcNow : null;
+                rentalApplication.DeclinedAt = normalizedStatus == "DECLINED" ? DateTime.UtcNow : null;
+            }
             rentalApplication.UpdatedDate = DateTime.UtcNow;
             rentalApplication.UpdatedBy = actorUserID.ToString(CultureInfo.InvariantCulture);
 

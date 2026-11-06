@@ -32,6 +32,7 @@ using Azure.Identity;
 using Azure.Storage.Blobs;
 using Microsoft.Extensions.Azure;
 using Arcora.Payments.DependencyInjection;
+using System.Security.Claims;
 
 
 
@@ -50,6 +51,12 @@ namespace Arcora.Api.Extensions
         private const string googleConfigurationKey = "Authentication:Google";
         private const string oidcConfigurationKey = "Authentication:OIDC";
         private const string blobStorageConfigurationKey = "Azure:BlobStorage";
+        private const string twilioVerifyConfigurationKey = "Twilio:Verify";
+        private const string infobipConfigurationKey = "Infobip";
+        private const string phoneVerificationConfigurationKey = "PhoneVerification";
+        private const string identityVerificationConfigurationKey = "IdentityVerification";
+        private const string personaConfigurationKey = "Persona";
+        private const string onfidoConfigurationKey = "Onfido";
 
         /// <summary>
         /// Add application services
@@ -58,6 +65,8 @@ namespace Arcora.Api.Extensions
         public static IServiceCollection AddApplicationServices(this IServiceCollection services, IConfiguration configuration)
         {
             services.AddDataProtection();
+            services.AddMemoryCache();
+            services.AddHybridCache();
             services.AddHostedService<Arcora.Api.Email.TenantInvitationEmailWorker>();
 
 
@@ -73,6 +82,71 @@ namespace Arcora.Api.Extensions
              services.Configure<JwtConfiguration>(configuration.GetSection(jwtConfigurationKey));
              services.Configure<CacheConfiguration>(configuration.GetSection(cacheConfigurationKey));
              services.Configure<EmailSettings>(configuration.GetSection("EmailSettings"));
+
+            services.AddOptions<TwilioVerifyOptions>()
+                .Bind(configuration.GetSection(twilioVerifyConfigurationKey))
+                .Validate(options =>
+                    string.IsNullOrWhiteSpace(options.Channel)
+                    || options.Channel.Equals("sms", StringComparison.OrdinalIgnoreCase)
+                    || options.Channel.Equals("call", StringComparison.OrdinalIgnoreCase)
+                    || options.Channel.Equals("whatsapp", StringComparison.OrdinalIgnoreCase),
+                    "Twilio:Verify:Channel must be one of sms, call, or whatsapp.")
+                .ValidateOnStart();
+
+            services.AddOptions<InfobipOptions>()
+                .Bind(configuration.GetSection(infobipConfigurationKey))
+                .Validate(options =>
+                {
+                    var baseUrl = options.BaseUrl?.Trim();
+                    if (string.IsNullOrWhiteSpace(baseUrl))
+                        return true;
+
+                    if (Uri.TryCreate(baseUrl, UriKind.Absolute, out _))
+                        return true;
+
+                    return Uri.TryCreate($"https://{baseUrl}", UriKind.Absolute, out _);
+                }, "Infobip:BaseUrl must be a valid absolute URL.")
+                .ValidateOnStart();
+
+            services.AddOptions<PhoneVerificationOptions>()
+                .Bind(configuration.GetSection(phoneVerificationConfigurationKey))
+                .Validate(options =>
+                {
+                    var provider = options.Provider?.Trim().ToUpperInvariant();
+                    return string.IsNullOrWhiteSpace(provider)
+                        || provider is "AUTO" or "TWILIO" or "INFOBIP"
+                        || (provider == "LOCAL" && options.EnableDevelopmentOtp);
+                }, "PhoneVerification:Provider must be AUTO, TWILIO, INFOBIP, or explicitly enabled LOCAL.")
+                .Validate(options => options.InfobipCodeLength > 0,
+                    "PhoneVerification:InfobipCodeLength must be greater than 0.")
+                .Validate(options => options.InfobipCodeExpiryMinutes > 0,
+                    "PhoneVerification:InfobipCodeExpiryMinutes must be greater than 0.")
+                .ValidateOnStart();
+
+            services.AddOptions<IdentityVerificationOptions>()
+                .Bind(configuration.GetSection(identityVerificationConfigurationKey))
+                .Validate(options => !string.IsNullOrWhiteSpace(options.DefaultProvider),
+                    "IdentityVerification:DefaultProvider is required.")
+                .Validate(options =>
+                {
+                    var provider = options.DefaultProvider?.Trim().ToUpperInvariant();
+                    return provider is "PERSONA" or "ONFIDO";
+                }, "IdentityVerification:DefaultProvider must be PERSONA or ONFIDO.")
+                .ValidateOnStart();
+
+            services.AddOptions<PersonaOptions>()
+                .Bind(configuration.GetSection(personaConfigurationKey))
+                .Validate(options => string.IsNullOrWhiteSpace(options.BaseUrl)
+                    || Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out _),
+                    "Persona:BaseUrl must be a valid absolute URL.")
+                .ValidateOnStart();
+
+            services.AddOptions<OnfidoOptions>()
+                .Bind(configuration.GetSection(onfidoConfigurationKey))
+                .Validate(options => string.IsNullOrWhiteSpace(options.BaseUrl)
+                    || Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out _),
+                    "Onfido:BaseUrl must be a valid absolute URL.")
+                .ValidateOnStart();
 
             #endregion
 
@@ -140,11 +214,13 @@ namespace Arcora.Api.Extensions
              services.AddTransient<IRatingRepository, RatingRepository>();
              services.AddTransient<IConversationMessageService, ConversationMessageService>();
              services.AddTransient<IConversationMessageRepository, ConversationMessageRepository>();
+            services.AddTransient<IConversationMessageReactionRepository, ConversationMessageReactionRepository>();
              services.AddTransient<IConversationParticipantService, ConversationParticipantService>();
              services.AddTransient<IConversationParticipantRepository, ConversationParticipantRepository>();
              services.AddTransient<IConversationService, ConversationService>();
              services.AddTransient<IConversationRepository, ConversationRepository>();
              services.AddTransient<IMessagingService, MessagingService>();
+             services.AddTransient<IConversationDetailsService, ConversationDetailsService>();
              services.AddTransient<IAttachmentService, AttachmentService>();
              services.AddTransient<IAttachmentRepository, AttachmentRepository>();
              services.AddTransient<IInspectionItemService, InspectionItemService>();
@@ -166,6 +242,7 @@ namespace Arcora.Api.Extensions
              services.AddTransient<ILedgerAccountService, LedgerAccountService>();
              services.AddTransient<ILedgerAccountRepository, LedgerAccountRepository>();
              services.AddTransient<IPayoutService, PayoutService>();
+             services.AddScoped<HostRentPayoutService>();
              services.AddTransient<IPayoutRepository, PayoutRepository>();
              services.AddTransient<IPaymentAllocationService, PaymentAllocationService>();
              services.AddTransient<IPaymentAllocationRepository, PaymentAllocationRepository>();
@@ -190,6 +267,7 @@ namespace Arcora.Api.Extensions
              services.AddTransient<IPaymentIntentService, PaymentIntentService>();
              services.AddTransient<IPaymentIntentRepository, PaymentIntentRepository>();
              services.AddTransient<IRentCollectionOrchestrator, RentCollectionOrchestrator>();
+             services.AddTransient<ILeaseFirstPaymentService, LeaseFirstPaymentService>();
              services.AddTransient<IPaymentOnboardingService, PaymentOnboardingService>();
              services.AddTransient<IOrganizationStatementService, OrganizationStatementService>();
              services.AddTransient<IOrganizationStatementRepository, OrganizationStatementRepository>();
@@ -250,6 +328,7 @@ namespace Arcora.Api.Extensions
              services.AddTransient<IListingTermPriceService, ListingTermPriceService>();
              services.AddTransient<IListingTermPriceRepository, ListingTermPriceRepository>();
              services.AddTransient<IListingService, ListingService>();
+             services.AddTransient<IListingReviewService, ListingReviewService>();
              services.AddTransient<IListingRepository, ListingRepository>();
              services.AddTransient<IOrganizationMemberService, OrganizationMemberService>();
              services.AddTransient<IOrganizationMemberRepository, OrganizationMemberRepository>();
@@ -271,6 +350,17 @@ namespace Arcora.Api.Extensions
              services.AddTransient<ITenantRepository, TenantRepository>();
              services.AddScoped<IPreferenceService, PreferenceService>();
              services.AddTransient<IPreferenceRepository, PreferenceRepository>();
+             services.AddTransient<IPhoneVerificationService, PhoneVerificationService>();
+             services.AddHttpClient<ITwilioVerifyClient, TwilioVerifyClient>(client =>
+             {
+                 client.BaseAddress = new Uri("https://verify.twilio.com/v2/");
+             });
+             services.AddHttpClient<IInfobipSmsClient, InfobipSmsClient>();
+             services.AddHttpClient<PersonaIdentityVerificationProvider>();
+             services.AddHttpClient<OnfidoIdentityVerificationProvider>();
+             services.AddTransient<IIdentityVerificationProvider>(serviceProvider => serviceProvider.GetRequiredService<PersonaIdentityVerificationProvider>());
+             services.AddTransient<IIdentityVerificationProvider>(serviceProvider => serviceProvider.GetRequiredService<OnfidoIdentityVerificationProvider>());
+             services.AddTransient<IIdentityVerificationProviderFactory, IdentityVerificationProviderFactory>();
 
                   services.AddTransient<IEmailSender, EmailSender>();
                   services.AddSingleton<Arcora.Api.Email.IEmailQueue, Arcora.Api.Email.EmailQueue>();
@@ -417,6 +507,9 @@ namespace Arcora.Api.Extensions
                         options.Password.RequireNonAlphanumeric = false;
                         options.Password.RequireUppercase = false;
                         options.SignIn.RequireConfirmedEmail = false;
+                        options.ClaimsIdentity.UserIdClaimType = "UserId";
+                        options.ClaimsIdentity.UserNameClaimType = ClaimTypes.Name;
+                        options.ClaimsIdentity.RoleClaimType = ClaimTypes.Role;
                     })
                     .AddRoles<Role>()
                    .AddEntityFrameworkStores<ArcoraDbContext>()
@@ -545,6 +638,14 @@ namespace Arcora.Api.Extensions
                     // Suppress any redirect - always return 401/403 for API requests
                     b.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
                     {
+                        OnMessageReceived = context =>
+                        {
+                            // Browser WebSockets cannot set Authorization headers.
+                            if (context.Request.Path.StartsWithSegments("/hubs/messaging")
+                                && context.Request.Query.TryGetValue("access_token", out var token))
+                                context.Token = token;
+                            return Task.CompletedTask;
+                        },
                         OnChallenge = context =>
                         {
                             context.HandleResponse(); // Prevents default challenge behavior (no redirect)
@@ -644,8 +745,8 @@ namespace Arcora.Api.Extensions
             services.Configure<RentCollectionOptions>(configuration.GetSection(RentCollectionOptions.SectionName));
             services.AddHostedService<RecurringRentCollectionService>();
             services.AddHostedService<LeaseCheckInDetailsEmailService>();
-services.AddTransient<ILeaseCheckInService, LeaseCheckInService>();
-services.AddHostedService<LeaseCheckInDraftCleanupBackgroundService>();
+            services.AddTransient<ILeaseCheckInService, LeaseCheckInService>();
+            services.AddHostedService<LeaseCheckInDraftCleanupBackgroundService>();
 
             return services;
         }

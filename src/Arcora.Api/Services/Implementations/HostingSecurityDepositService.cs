@@ -1,7 +1,10 @@
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
 using Arcora.Api.DTOs;
 using Arcora.Api.Entities;
 using Arcora.Api.Enums;
+using Arcora.Api.Exceptions;
 using Arcora.Api.Models;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
@@ -11,6 +14,8 @@ namespace Arcora.Api.Services.Implementations
 {
     public class HostingSecurityDepositService : IHostingSecurityDepositService
     {
+        private sealed record SettlementNoticeReplayPayload(string RequestHash, SecurityDepositSettlementNoticeResponseDto Response);
+
         private static readonly HashSet<string> AllowedEvidenceContentTypes = new(StringComparer.OrdinalIgnoreCase)
         {
             "image/jpeg",
@@ -188,17 +193,15 @@ namespace Arcora.Api.Services.Implementations
             if (string.IsNullOrWhiteSpace(idempotencyKey))
                 throw new ArgumentException("Idempotency-Key header is required.");
 
+            var requestHash = ComputeSettlementNoticeRequestHash(request);
+
             var idempotencyEventID = $"settlement-notice:{securityDepositID}:{idempotencyKey}";
             var existingEvent = await dbContext.PaymentProviderEvents
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.ProviderName == "INTERNAL_SECURITY_DEPOSIT" && x.ProviderEventID == idempotencyEventID);
 
             if (existingEvent != null)
-            {
-                var replay = JsonSerializer.Deserialize<SecurityDepositSettlementNoticeResponseDto>(existingEvent.Payload ?? string.Empty);
-                if (replay != null)
-                    return replay;
-            }
+                return ReadSettlementNoticeReplay(existingEvent.Payload, requestHash);
 
             var deductionTotal = request.Deductions.Sum(x => x.Amount);
             if (deductionTotal <= 0)
@@ -224,13 +227,15 @@ namespace Arcora.Api.Services.Implementations
                     throw new ArgumentException("One or more evidence attachments are invalid for this deposit.");
             }
 
-            var availableToSettle = Math.Max(0m, deposit.ReceivedAmount - deposit.ReturnedAmount - deposit.AppliedAmount);
+            var pendingReturnAmount = await GetPendingReturnAmountAsync(securityDepositID);
+            var availableToSettle = Math.Max(0m,
+                deposit.ReceivedAmount - deposit.ReturnedAmount - deposit.AppliedAmount - pendingReturnAmount);
             if (deductionTotal > availableToSettle)
                 throw new ArgumentException("Deductions exceed the available amount for settlement.");
 
             var returnAmount = availableToSettle - deductionTotal;
             deposit.AppliedAmount += deductionTotal;
-            deposit.Status = returnAmount > 0 ? "RETURN_DUE" : "CLOSED";
+            deposit.Status = pendingReturnAmount > 0 ? "RETURN_PENDING" : returnAmount > 0 ? "RETURN_DUE" : "CLOSED";
             deposit.UpdatedBy = actorUserID.ToString();
             deposit.UpdatedDate = DateTime.UtcNow;
             if (string.Equals(deposit.Status, "CLOSED", StringComparison.OrdinalIgnoreCase))
@@ -270,13 +275,25 @@ namespace Arcora.Api.Services.Implementations
                 ProviderEventID = idempotencyEventID,
                 EventType = "SETTLEMENT_NOTICE",
                 ProcessingStatus = "RECEIVED",
-                Payload = JsonSerializer.Serialize(response),
+                Payload = JsonSerializer.Serialize(new SettlementNoticeReplayPayload(requestHash, response)),
                 ReceivedAt = DateTime.UtcNow,
                 CapturedDate = DateTime.UtcNow
             };
             dbContext.PaymentProviderEvents.Add(providerEvent);
 
-            await dbContext.SaveChangesAsync();
+            try
+            {
+                await dbContext.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                var concurrentEvent = await dbContext.PaymentProviderEvents.AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.ProviderName == "INTERNAL_SECURITY_DEPOSIT" && x.ProviderEventID == idempotencyEventID);
+                if (concurrentEvent == null)
+                    throw;
+
+                return ReadSettlementNoticeReplay(concurrentEvent.Payload, requestHash);
+            }
 
             if (!string.IsNullOrWhiteSpace(recipientEmail))
             {
@@ -288,6 +305,34 @@ namespace Arcora.Api.Services.Implementations
             providerEvent.ProcessedAt = DateTime.UtcNow;
             await dbContext.SaveChangesAsync();
             return response;
+        }
+
+        private static SecurityDepositSettlementNoticeResponseDto ReadSettlementNoticeReplay(string? payload, string requestHash)
+        {
+            var replay = JsonSerializer.Deserialize<SettlementNoticeReplayPayload>(payload ?? string.Empty);
+            if (replay == null || !string.Equals(replay.RequestHash, requestHash, StringComparison.Ordinal))
+                throw new ApiProblemException(409, "Idempotency key conflict", "This idempotency key was already used with a different or unverifiable settlement request. Use a new key only after checking the prior operation status.");
+
+            return replay.Response;
+        }
+
+        private static string ComputeSettlementNoticeRequestHash(SecurityDepositSettlementNoticeRequestDto request)
+        {
+            var canonicalRequest = new
+            {
+                Currency = request.Currency.Trim().ToUpperInvariant(),
+                Deductions = request.Deductions
+                    .Select(deduction => new
+                    {
+                        Description = deduction.Description.Trim(),
+                        deduction.Amount,
+                        EvidenceAttachmentIDs = deduction.EvidenceAttachmentIDs.OrderBy(id => id).ToArray()
+                    })
+                    .OrderBy(deduction => deduction.Description, StringComparer.Ordinal)
+                    .ThenBy(deduction => deduction.Amount)
+                    .ToArray()
+            };
+            return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(canonicalRequest))));
         }
 
         public async Task<SecurityDepositReturnResponseDto> ReturnDeposit(Guid securityDepositID, long actorUserID, SecurityDepositReturnRequestDto request)
@@ -317,13 +362,14 @@ namespace Arcora.Api.Services.Implementations
                 {
                     var replayRefund = await dbContext.Refunds.AsNoTracking()
                         .FirstOrDefaultAsync(x => x.RefundID == replay.RefundID);
-                    if (replayRefund != null)
-                    {
-                        replay.RefundStatus = replayRefund.Status;
-                        replay.ReturnedAmount = lockedDeposit.ReturnedAmount;
-                        replay.HeldAmount = await GetAvailableHeldAmountAsync(securityDepositID, lockedDeposit);
-                        replay.Status = lockedDeposit.Status;
-                    }
+                    if (replayRefund == null || replayRefund.Amount != request.Amount
+                        || !string.Equals(replayRefund.Currency?.Trim(), request.Currency?.Trim(), StringComparison.OrdinalIgnoreCase))
+                        throw new ApiProblemException(409, "Idempotency key conflict",
+                            "This idempotency key was already used with a different or unverifiable refund request.");
+                    replay.RefundStatus = replayRefund.Status;
+                    replay.ReturnedAmount = lockedDeposit.ReturnedAmount;
+                    replay.HeldAmount = await GetAvailableHeldAmountAsync(securityDepositID, lockedDeposit);
+                    replay.Status = lockedDeposit.Status;
                     replay.IdempotentReplay = true;
                     await tx.CommitAsync();
                     return replay;

@@ -10,19 +10,25 @@ namespace Arcora.Api.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<bool>(
-                name: "AttestationProvidedInfoIsCorrect",
-                table: "RentalApplications",
-                type: "bit",
-                nullable: true);
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[RentalApplications]', N'U') IS NOT NULL
+   AND COL_LENGTH(N'[dbo].[RentalApplications]', N'AttestationProvidedInfoIsCorrect') IS NULL
+BEGIN
+    ALTER TABLE [dbo].[RentalApplications] ADD [AttestationProvidedInfoIsCorrect] bit NULL;
+END
+");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "AttestationProvidedInfoIsCorrect",
-                table: "RentalApplications");
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[RentalApplications]', N'U') IS NOT NULL
+   AND COL_LENGTH(N'[dbo].[RentalApplications]', N'AttestationProvidedInfoIsCorrect') IS NOT NULL
+BEGIN
+    ALTER TABLE [dbo].[RentalApplications] DROP COLUMN [AttestationProvidedInfoIsCorrect];
+END
+");
         }
     }
 }

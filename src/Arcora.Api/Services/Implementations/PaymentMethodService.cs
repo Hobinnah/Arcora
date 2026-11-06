@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class PaymentMethodService : IPaymentMethodService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<PaymentMethodService> logger;
         private readonly IPaymentMethodRepository paymentmethodRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public PaymentMethodService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<PaymentMethodService> logger, IPaymentMethodRepository paymentmethodRepository)
+        public PaymentMethodService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<PaymentMethodService> logger, IPaymentMethodRepository paymentmethodRepository)
         {
             this.cache = cache;
             this.logger = logger;

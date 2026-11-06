@@ -7,6 +7,7 @@ namespace Arcora.Api.Entities;
 /// Stores messages exchanged in conversations between users, tenants, or organization members.
 /// </summary>
 [Table("ConversationMessage")]
+[Microsoft.EntityFrameworkCore.Index(nameof(ConversationID), nameof(AttachmentSenderScope), nameof(AttachmentSendKey), IsUnique = true)]
 public class ConversationMessage
 {
     /// <summary>
@@ -37,7 +38,6 @@ public class ConversationMessage
     /// Message content
     /// </summary>
     [Required]
-    [MaxLength(256)]
     public string? Message { get; set; }
 
     /// <summary>
@@ -50,6 +50,14 @@ public class ConversationMessage
     /// FK to ConversationMessage (reply)
     /// </summary>
     public Guid? ReplyToMessageID { get; set; }
+
+    public Guid? AttachmentSendKey { get; set; }
+
+    [MaxLength(48)]
+    public string? AttachmentSenderScope { get; set; }
+
+    [MaxLength(64)]
+    public string? AttachmentPayloadHash { get; set; }
 
     /// <summary>
     /// Message sent timestamp

@@ -123,6 +123,23 @@ public class Listing
     [MaxLength(50)]
     public string? Status { get; set; } = "DRAFT";
     /// <summary>
+    /// Date the host submitted this listing for Customer Rep review.
+    /// </summary>
+    public DateTime? ReviewSubmittedAt { get; set; }
+    /// <summary>
+    /// Date the latest review decision was made.
+    /// </summary>
+    public DateTime? ReviewedAt { get; set; }
+    /// <summary>
+    /// User who made the latest review decision.
+    /// </summary>
+    public long? ReviewedByUserID { get; set; }
+    /// <summary>
+    /// Customer Rep feedback for the latest rejected submission.
+    /// </summary>
+    [MaxLength(2000)]
+    public string? ReviewMessage { get; set; }
+    /// <summary>
     /// Date when listing was published
     /// </summary>
     public DateTime? PublishedAt { get; set; }

@@ -8,7 +8,7 @@ using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -17,12 +17,12 @@ namespace Arcora.Api.Services.Implementations
     public class PayoutService : IPayoutService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<PayoutService> logger;
         private readonly IPayoutRepository payoutRepository;
         private readonly ArcoraDbContext dbContext;
         private readonly IOptions<CacheConfiguration> _options;
-        public PayoutService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<PayoutService> logger, IPayoutRepository payoutRepository, ArcoraDbContext dbContext)
+        public PayoutService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<PayoutService> logger, IPayoutRepository payoutRepository, ArcoraDbContext dbContext)
         {
             this.cache = cache;
             this.logger = logger;
@@ -92,18 +92,24 @@ namespace Arcora.Api.Services.Implementations
         {
             var (periodStart, periodEndExclusive, normalizedPeriod) = ResolvePeriod(period);
 
-            var ledgerPaymentIdsQuery = this.dbContext.LedgerTransactions
-                .AsNoTracking()
-                .Where(x => x.OrganizationID == organizationID && x.PaymentID.HasValue);
-
+            var allocations = await AccountingQuery(organizationID, periodStart, periodEndExclusive).ToListAsync();
+            var rentCollected = allocations.Sum(x => x.RentAmount);
+            var placementFees = allocations.Sum(x => x.HostPlacementFee);
+            var monthlyFees = allocations.Sum(x => x.HostMonthlyFee);
+            var paymentIds = allocations.Select(x => x.PaymentID).ToList();
+            var unallocatedQuery = from payment in dbContext.Payments.AsNoTracking()
+                                   join intent in dbContext.PaymentIntents.AsNoTracking() on payment.PaymentIntentID equals intent.PaymentIntentID
+                                   join lease in dbContext.Leases.AsNoTracking() on intent.LeaseID equals lease.LeaseID
+                                   where lease.OrganizationID == organizationID && payment.Status == "PAID" &&
+                                       !dbContext.RentPaymentAccountings.Any(x =>
+                                           x.PaymentID == payment.PaymentID && x.SettledAt != null)
+                                   select payment;
             if (periodStart.HasValue && periodEndExclusive.HasValue)
-                ledgerPaymentIdsQuery = ledgerPaymentIdsQuery.Where(x => x.TransactionDate >= periodStart.Value && x.TransactionDate < periodEndExclusive.Value);
-
-            var paymentIdsQuery = ledgerPaymentIdsQuery.Select(x => x.PaymentID!.Value).Distinct();
-            var paymentsQuery = this.dbContext.Payments.AsNoTracking().Where(x => paymentIdsQuery.Contains(x.PaymentID));
-
-            var rentCollected = await paymentsQuery.SumAsync(x => (decimal?)x.GrossAmount) ?? 0m;
-            var serviceFees = await paymentsQuery.SumAsync(x => (decimal?)(x.PlatformFeeAmount + x.ProcessorFeeAmount)) ?? 0m;
+                unallocatedQuery = unallocatedQuery.Where(x => x.PaidAt >= periodStart && x.PaidAt < periodEndExclusive);
+            var refundReviewRequired = await dbContext.Payments.AsNoTracking().AnyAsync(
+                x => paymentIds.Contains(x.PaymentID) && x.RefundedAmount > 0m) ||
+                await dbContext.Refunds.AsNoTracking().AnyAsync(
+                    x => paymentIds.Contains(x.PaymentID) && x.Status != "FAILED" && x.Status != "CANCELLED");
 
             var pastDueQuery = this.dbContext.InvoiceMasters
                 .AsNoTracking()
@@ -112,7 +118,7 @@ namespace Arcora.Api.Services.Implementations
             if (periodStart.HasValue && periodEndExclusive.HasValue)
                 pastDueQuery = pastDueQuery.Where(x => x.DueDate >= periodStart.Value && x.DueDate < periodEndExclusive.Value);
 
-            var pastDue = await pastDueQuery.SumAsync(x => (decimal?)x.BalanceDue) ?? 0m;
+            var pastDue = (await pastDueQuery.Select(x => x.BalanceDue).ToListAsync()).Sum();
 
             return new EarningsSummaryDto
             {
@@ -121,9 +127,13 @@ namespace Arcora.Api.Services.Implementations
                 PeriodStart = periodStart,
                 PeriodEnd = periodEndExclusive?.AddTicks(-1),
                 RentCollected = rentCollected,
-                ServiceFees = serviceFees,
+                ServiceFees = placementFees + monthlyFees,
+                HostPlacementFees = placementFees,
+                HostMonthlyFees = monthlyFees,
+                RefundReviewRequired = refundReviewRequired,
+                UnallocatedPaymentCount = await unallocatedQuery.CountAsync(),
                 PastDue = pastDue,
-                NetEarnings = rentCollected - serviceFees
+                NetEarnings = allocations.Sum(x => x.HostNetAmount)
             };
         }
 
@@ -132,43 +142,50 @@ namespace Arcora.Api.Services.Implementations
         {
             var (periodStart, periodEndExclusive, _) = ResolvePeriod(period);
 
-            var query = from payment in this.dbContext.Payments.AsNoTracking()
-                        join paymentIntent in this.dbContext.PaymentIntents.AsNoTracking() on payment.PaymentIntentID equals paymentIntent.PaymentIntentID
-                        join lease in this.dbContext.Leases.AsNoTracking() on paymentIntent.LeaseID equals lease.LeaseID
-                        join listing in this.dbContext.Listings.AsNoTracking() on lease.ListingID equals listing.ListingID
-                        where lease.OrganizationID == organizationID
+            var query = from allocation in AccountingQuery(organizationID, periodStart, periodEndExclusive)
+                        join listing in this.dbContext.Listings.AsNoTracking() on allocation.ListingID equals listing.ListingID
                         select new
                         {
                             listing.ListingID,
                             ListingName = listing.Title,
-                            PaymentDate = payment.PaidAt ?? payment.SettledAt ?? payment.CapturedDate,
-                            payment.GrossAmount,
-                            Fees = payment.PlatformFeeAmount + payment.ProcessorFeeAmount
+                            allocation.RentAmount,
+                            allocation.HostPlacementFee,
+                            allocation.HostMonthlyFee,
+                            allocation.HostNetAmount
                         };
 
-            if (periodStart.HasValue && periodEndExclusive.HasValue)
-            {
-                query = query.Where(x => x.PaymentDate.HasValue && x.PaymentDate.Value >= periodStart.Value && x.PaymentDate.Value < periodEndExclusive.Value);
-            }
-
-            return await query
+            return (await query.ToListAsync())
                 .GroupBy(x => new { x.ListingID, x.ListingName })
                 .Select(g => new ListingEarningsBreakdownDto
                 {
                     ListingID = g.Key.ListingID,
                     ListingName = g.Key.ListingName ?? string.Empty,
-                    RentCollected = g.Sum(x => x.GrossAmount),
-                    ServiceFees = g.Sum(x => x.Fees),
-                    NetEarnings = g.Sum(x => x.GrossAmount - x.Fees)
+                    RentCollected = g.Sum(x => x.RentAmount),
+                    ServiceFees = g.Sum(x => x.HostPlacementFee + x.HostMonthlyFee),
+                    HostPlacementFees = g.Sum(x => x.HostPlacementFee),
+                    HostMonthlyFees = g.Sum(x => x.HostMonthlyFee),
+                    NetEarnings = g.Sum(x => x.HostNetAmount)
                 })
                 .OrderByDescending(x => x.NetEarnings)
-                .ToListAsync();
+                .ToList();
+        }
+
+        private IQueryable<RentPaymentAccounting> AccountingQuery(Guid organizationID, DateTime? start, DateTime? end)
+        {
+            var query = dbContext.RentPaymentAccountings.AsNoTracking()
+                .Where(x => x.OrganizationID == organizationID && x.SettledAt != null);
+            if (start.HasValue && end.HasValue)
+                query = query.Where(x => x.SettledAt >= start.Value && x.SettledAt < end.Value);
+            return query;
         }
 
         /// <inheritdoc/>
         public async Task<IEnumerable<EarningsTransactionDto>> GetStatementTransactions(Guid organizationID, string? period)
         {
             var (periodStart, periodEndExclusive, _) = ResolvePeriod(period);
+            var allocatedPaymentIds = dbContext.RentPaymentAccountings.AsNoTracking()
+                .Where(x => x.OrganizationID == organizationID && x.SettledAt != null)
+                .Select(x => x.PaymentID);
 
             var query = from transaction in this.dbContext.LedgerTransactions.AsNoTracking()
                         join payment in this.dbContext.Payments.AsNoTracking() on transaction.PaymentID equals payment.PaymentID into paymentJoin
@@ -177,7 +194,9 @@ namespace Arcora.Api.Services.Implementations
                         from payout in payoutJoin.DefaultIfEmpty()
                         join invoice in this.dbContext.InvoiceMasters.AsNoTracking() on transaction.InvoiceMasterID equals invoice.InvoiceMasterID into invoiceJoin
                         from invoice in invoiceJoin.DefaultIfEmpty()
-                        where transaction.OrganizationID == organizationID
+                        where transaction.OrganizationID == organizationID &&
+                            (transaction.PaymentID == null || transaction.RefundID != null || transaction.PayoutID != null ||
+                                !allocatedPaymentIds.Contains(transaction.PaymentID))
                         select new EarningsTransactionDto
                         {
                             TransactionDate = transaction.TransactionDate,
@@ -207,10 +226,28 @@ namespace Arcora.Api.Services.Implementations
             if (periodStart.HasValue && periodEndExclusive.HasValue)
                 query = query.Where(x => x.TransactionDate >= periodStart.Value && x.TransactionDate < periodEndExclusive.Value);
 
-            return await query
+            var rows = await query
                 .OrderByDescending(x => x.TransactionDate)
                 .ToListAsync();
+            var allocations = await AccountingQuery(organizationID, periodStart, periodEndExclusive).ToListAsync();
+            foreach (var allocation in allocations)
+            {
+                rows.Add(AccountingRow(allocation, "RENT_COLLECTED", allocation.RentAmount, "Rent collected (excludes deposit and tenant fees)"));
+                if (allocation.HostPlacementFee != 0m)
+                    rows.Add(AccountingRow(allocation, "HOST_PLACEMENT_FEE", -allocation.HostPlacementFee, "One-time host placement deduction"));
+                if (allocation.HostMonthlyFee != 0m)
+                    rows.Add(AccountingRow(allocation, "HOST_MONTHLY_FEE", -allocation.HostMonthlyFee, "Monthly active-unit deduction"));
+            }
+            return rows.OrderByDescending(x => x.TransactionDate).ToList();
         }
+
+        private static EarningsTransactionDto AccountingRow(RentPaymentAccounting allocation, string type, decimal amount, string description) =>
+            new()
+            {
+                TransactionDate = allocation.SettledAt!.Value, TransactionType = type, Status = "POSTED",
+                Amount = amount, Currency = allocation.Currency, Description = description,
+                PaymentID = allocation.PaymentID, ReferenceNumber = allocation.PaymentIntentID.ToString()
+            };
 
         private static (DateTime? PeriodStart, DateTime? PeriodEndExclusive, string NormalizedPeriod) ResolvePeriod(string? period)
         {
@@ -284,6 +321,7 @@ namespace Arcora.Api.Services.Implementations
         /// <inheritdoc/>
         public async Task<PayoutDto?> UpdatePayout(long id, PayoutDto payoutDto)
         {
+            await EnsureNotProviderManaged(id);
             try
             {
                 var existing = await this.payoutRepository.GetByID(id);
@@ -307,6 +345,7 @@ namespace Arcora.Api.Services.Implementations
         /// <inheritdoc/>
         public async Task DeletePayout(long ID)
         {
+            await EnsureNotProviderManaged(ID);
             try
             {
                 var payout = await this.payoutRepository.GetByID(ID);
@@ -326,6 +365,7 @@ namespace Arcora.Api.Services.Implementations
         /// <inheritdoc/>
         public async Task<PayoutDto?> UpdatePayoutStatus(long id, string status)
         {
+            await EnsureNotProviderManaged(id);
             var payout = await payoutRepository.GetByID(id);
             if (payout == null)
                 return null;
@@ -342,6 +382,12 @@ namespace Arcora.Api.Services.Implementations
             await payoutRepository.Save();
             cache.Remove(Cache.PAYOUTS.ToString());
             return this.mapper.Map<PayoutDto>(payout);
+        }
+
+        private async Task EnsureNotProviderManaged(long id)
+        {
+            if (await dbContext.RentDisbursements.AnyAsync(x => x.PayoutID == id))
+                throw new InvalidOperationException("Provider-backed rent payouts must be reconciled with Stripe, not edited manually.");
         }
     }
 }

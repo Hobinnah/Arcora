@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class RentalUnitService : IRentalUnitService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<RentalUnitService> logger;
         private readonly IRentalUnitRepository rentalunitRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public RentalUnitService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<RentalUnitService> logger, IRentalUnitRepository rentalunitRepository)
+        public RentalUnitService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<RentalUnitService> logger, IRentalUnitRepository rentalunitRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -104,8 +104,15 @@ namespace Arcora.Api.Services.Implementations
             try
             {
                 var normalizedUnitNumber = rentalunitDto.UnitNumber?.ToLower().Trim();
-                checkEntity = await this.rentalunitRepository.Find(x => x.UnitNumber != null && x.UnitNumber.ToLower().Trim() == normalizedUnitNumber);
-                if (checkEntity == null || !checkEntity.Any())
+                checkEntity = await this.rentalunitRepository.Find(x => x.PropertyID == rentalunitDto.PropertyID
+                    && x.UnitNumber != null
+                    && x.UnitNumber.ToLower().Trim() == normalizedUnitNumber);
+                var existing = checkEntity?.FirstOrDefault();
+                if (existing != null)
+                {
+                    rentalUnit = existing;
+                }
+                else
                 {
                     rentalUnit = this.mapper.Map<RentalUnit>(rentalunitDto);
                     rentalUnit.RentalUnitID = Guid.NewGuid();

@@ -1,9 +1,11 @@
 // ===================================THIS FILE WAS AUTO GENERATED===================================
 using Arcora.Api.DTOs;
 using Arcora.Api.Models;
+using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Arcora.Api.Controllers
 {
@@ -25,10 +27,16 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "PublishListing")]
-        public async Task<IActionResult> PublishListing([FromServices] IListingService listingService, [FromBody] ListingImportDto payload)
+        public async Task<IActionResult> PublishListing([FromServices] IListingService listingService, [FromServices] IOrganizationMemberRepository organizationMemberRepository, [FromBody] ListingImportDto payload)
         {
             if (payload == null)
                 return BadRequest(new { message = "Payload is required." });
+            if (!User.IsInRole("Admin"))
+            {
+                var accessDenied = await RequireOrganizationAccessAsync(payload.Property?.OrganizationID, organizationMemberRepository);
+                if (accessDenied != null)
+                    return accessDenied;
+            }
             var result = await listingService.ImportListingPayload(payload);
             return Ok(result);
         }
@@ -42,12 +50,24 @@ namespace Arcora.Api.Controllers
             return Ok(await listingService.SearchListings(criteria));
         }
 
+        [AllowAnonymous]
+        [HttpGet]
+        public async Task<IActionResult> MapSearch([FromServices] IListingRepository repository,
+            [FromQuery] ListingSearchCriteria criteria, CancellationToken cancellationToken)
+        {
+            return Ok(await repository.SearchMapAsync(criteria, cancellationToken));
+        }
+
         // GET: api/<ListingController>/GetByOrganization/{organizationId}
         [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet("{organizationId}", Name = "GetListingsByOrganization")]
-        public async Task<IActionResult> GetByOrganization([FromServices] IListingService listingService, Guid organizationId, [FromQuery] Paging paging)
+        public async Task<IActionResult> GetByOrganization([FromServices] IListingService listingService, [FromServices] IOrganizationMemberRepository organizationMemberRepository, Guid organizationId, [FromQuery] Paging paging)
         {
+            var accessDenied = await RequireOrganizationAccessAsync(organizationId, organizationMemberRepository);
+            if (accessDenied != null)
+                return accessDenied;
+
             return Ok(await listingService.GetListingsByOrganization(organizationId, paging));
         }
 
@@ -55,8 +75,12 @@ namespace Arcora.Api.Controllers
         [Authorize(Roles = "User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet("{organizationId}", Name = "CountListingsByOrganization")]
-        public async Task<IActionResult> CountByOrganization([FromServices] IListingService listingService, Guid organizationId)
+        public async Task<IActionResult> CountByOrganization([FromServices] IListingService listingService, [FromServices] IOrganizationMemberRepository organizationMemberRepository, Guid organizationId)
         {
+            var accessDenied = await RequireOrganizationAccessAsync(organizationId, organizationMemberRepository);
+            if (accessDenied != null)
+                return accessDenied;
+
             return Ok(await listingService.GetListingsCountByOrganization(organizationId));
         }
 
@@ -65,11 +89,19 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}", Name = "GetListingByID")]
-        public async Task<IActionResult> GetListingByID([FromServices] IListingService listingService, Guid id)
+        public async Task<IActionResult> GetListingByID([FromServices] IListingService listingService, [FromServices] IOrganizationMemberRepository organizationMemberRepository, Guid id)
         {
             var result = await listingService.GetID(id);
             if (result == null)
                 return NotFound(new { message = "Listing with the specified ID was not found." });
+
+            if (!IsMarketplaceVisible(result.Status))
+            {
+                var accessDenied = await RequireOrganizationAccessAsync(result.OrganizationID, organizationMemberRepository);
+                if (accessDenied != null)
+                    return NotFound(new { message = "Listing with the specified ID was not found." });
+            }
+
             return Ok(result);
         }
 
@@ -78,10 +110,20 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateListing")]
-        public async Task<IActionResult> CreateListing([FromServices] IListingService listingService, [FromBody] ListingDto listingDto)
+        public async Task<IActionResult> CreateListing([FromServices] IListingService listingService, [FromServices] IOrganizationMemberRepository organizationMemberRepository, [FromBody] ListingDto listingDto)
         {
-            // var displayName = User.Identity?.Name ?? string.Empty;
-            // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
+            if (!User.IsInRole("Admin"))
+            {
+                var accessDenied = await RequireOrganizationAccessAsync(listingDto.OrganizationID, organizationMemberRepository);
+                if (accessDenied != null)
+                    return accessDenied;
+                listingDto.Status = "DRAFT";
+                listingDto.PublishedAt = null;
+                listingDto.ReviewSubmittedAt = null;
+                listingDto.ReviewedAt = null;
+                listingDto.ReviewedByUserID = null;
+                listingDto.ReviewMessage = null;
+            }
             var result = await listingService.CreateListing(listingDto);
             if (result.ListingID != null && result.ListingID != Guid.Empty)
                 return CreatedAtRoute("GetListingByID", new { id = result.ListingID }, result);
@@ -93,10 +135,27 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateListing")]
-        public async Task<IActionResult> UpdateListing([FromServices] IListingService listingService, Guid id, [FromBody] ListingDto listingDto)
+        public async Task<IActionResult> UpdateListing([FromServices] IListingService listingService, [FromServices] IOrganizationMemberRepository organizationMemberRepository, Guid id, [FromBody] ListingDto listingDto)
         {
-            // var displayName = User.Identity?.Name ?? string.Empty;
-            // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
+            var existing = await listingService.GetID(id);
+            if (existing == null)
+                return NotFound(new { message = "Listing with the specified ID was not found." });
+
+            if (!User.IsInRole("Admin"))
+            {
+                var accessDenied = await RequireOrganizationAccessAsync(existing.OrganizationID, organizationMemberRepository);
+                if (accessDenied != null)
+                    return accessDenied;
+                if (listingDto.OrganizationID != existing.OrganizationID)
+                    return Forbid();
+                if (!string.Equals(listingDto.Status, existing.Status, StringComparison.OrdinalIgnoreCase))
+                    return Forbid();
+                listingDto.ReviewSubmittedAt = existing.ReviewSubmittedAt;
+                listingDto.ReviewedAt = existing.ReviewedAt;
+                listingDto.ReviewedByUserID = existing.ReviewedByUserID;
+                listingDto.ReviewMessage = existing.ReviewMessage;
+                listingDto.PublishedAt = existing.PublishedAt;
+            }
             var result = await listingService.UpdateListing(id, listingDto);
             if (result == null)
                 return NotFound(new { message = "Listing with the specified ID was not found." });
@@ -124,8 +183,19 @@ namespace Arcora.Api.Controllers
         // POST: api/listing/{id}/{status}
         [Authorize(Roles = "User, LandLord, Admin")]
         [HttpPost("{id}/{status}", Name = "UpdateListingStatus")]
-        public async Task<ActionResult> UpdateListingStatus([FromServices] IListingService listingService, [FromRoute] Guid id, [FromRoute] string status)
+        public async Task<IActionResult> UpdateListingStatus([FromServices] IListingService listingService, [FromServices] IOrganizationMemberRepository organizationMemberRepository, [FromRoute] Guid id, [FromRoute] string status)
         {
+            if (IsReviewControlledStatus(status) && !User.IsInRole("Admin"))
+                return Forbid();
+
+            var existing = await listingService.GetID(id);
+            if (existing == null)
+                return NotFound($"Listing with ID {id} not found.");
+
+            var accessDenied = await RequireOrganizationAccessAsync(existing.OrganizationID, organizationMemberRepository);
+            if (accessDenied != null)
+                return accessDenied;
+
             var listing = await listingService.UpdateListingStatus(id, status);
             if (listing == null)
                 return NotFound($"Listing with ID {id} not found.");
@@ -137,10 +207,14 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpGet("/api/listing/available", Name = "GetAvailableListingsForRequestedTerm")]
-        public async Task<IActionResult> GetAvailable([FromServices] IListingService listingService, [FromQuery] Guid organizationId, [FromQuery] DateTime startDate, [FromQuery] short leaseTermMonths)
+        public async Task<IActionResult> GetAvailable([FromServices] IListingService listingService, [FromServices] IOrganizationMemberRepository organizationMemberRepository, [FromQuery] Guid organizationId, [FromQuery] DateTime startDate, [FromQuery] short leaseTermMonths)
         {
             if (organizationId == Guid.Empty || leaseTermMonths <= 0)
                 return BadRequest(new { message = "organizationId and a positive leaseTermMonths are required." });
+
+            var accessDenied = await RequireOrganizationAccessAsync(organizationId, organizationMemberRepository);
+            if (accessDenied != null)
+                return accessDenied;
 
             var result = await listingService.GetAvailableListings(organizationId, startDate, leaseTermMonths);
             return Ok(result);
@@ -152,16 +226,53 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpGet("/api/listing/{listingId}/availability", Name = "GetListingAvailabilityForRequestedTerm")]
-        public async Task<IActionResult> GetAvailability([FromServices] IListingService listingService, [FromRoute] Guid listingId, [FromQuery] Guid organizationId, [FromQuery] DateTime startDate, [FromQuery] short leaseTermMonths)
+        public async Task<IActionResult> GetAvailability([FromServices] IListingService listingService, [FromServices] IOrganizationMemberRepository organizationMemberRepository, [FromRoute] Guid listingId, [FromQuery] Guid organizationId, [FromQuery] DateTime startDate, [FromQuery] short leaseTermMonths)
         {
             if (listingId == Guid.Empty || organizationId == Guid.Empty || leaseTermMonths <= 0)
                 return BadRequest(new { message = "listingId, organizationId and a positive leaseTermMonths are required." });
+
+            var accessDenied = await RequireOrganizationAccessAsync(organizationId, organizationMemberRepository);
+            if (accessDenied != null)
+                return accessDenied;
 
             var result = await listingService.GetListingAvailability(organizationId, listingId, startDate, leaseTermMonths);
             if (result == null)
                 return NotFound(new { message = "Listing was not found for the provided organization." });
 
             return Ok(result);
+        }
+
+        private async Task<IActionResult?> RequireOrganizationAccessAsync(Guid? organizationID, IOrganizationMemberRepository organizationMemberRepository)
+        {
+            if (!organizationID.HasValue || organizationID.Value == Guid.Empty)
+                return NotFound();
+
+            if (User.IsInRole("Admin"))
+                return null;
+
+            var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!long.TryParse(userIdClaim, out var userId) || userId <= 0)
+                return Unauthorized();
+
+            var memberships = await organizationMemberRepository.GetMemberOrganizationsAsync(userId);
+            return memberships.Any(member =>
+                    member.OrganizationID == organizationID.Value &&
+                    string.Equals(member.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase))
+                ? null
+                : Forbid();
+        }
+
+        private static bool IsMarketplaceVisible(string? status)
+        {
+            return string.Equals(status, "APPROVED", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(status, "PUBLISHED", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsReviewControlledStatus(string? status)
+        {
+            return IsMarketplaceVisible(status)
+                || string.Equals(status, "PENDING_REVIEW", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(status, "REJECTED", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class ListingTypeService : IListingTypeService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<ListingTypeService> logger;
         private readonly IListingTypeRepository listingtypeRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public ListingTypeService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<ListingTypeService> logger, IListingTypeRepository listingtypeRepository)
+        public ListingTypeService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<ListingTypeService> logger, IListingTypeRepository listingtypeRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,38 +37,26 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<ListingType> entities;
             try
             {
-                entities = cache.Get<IEnumerable<ListingType>>(Cache.LISTINGTYPES.ToString()) ?? new List<ListingType>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.listingtypeRepository.GetAll())?.Where(x => x != null).Cast<ListingType>().ToList() ?? new List<ListingType>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<ListingType>>(Cache.LISTINGTYPES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.LISTINGTYPES.ToString(),
+                    async cancel =>
+                        (await this.listingtypeRepository.GetAll())?.Where(x => x != null).Cast<ListingType>().ToList() ?? new List<ListingType>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
                 logger.LogError(er, "An error occurred while fetching ListingType by ID. Timestamp: {Timestamp}", DateTime.UtcNow);
-                return new PagedResult<ListingTypeDto>
-                {
-                    Data = new List<ListingTypeDto>(),
-                    TotalCount = 0
-                };
+                return new PagedResult<ListingTypeDto> { Data = new List<ListingTypeDto>(), TotalCount = 0 };
             }
 
             IEnumerable<ListingType> filteredEntities = entities!;
             if (!string.IsNullOrEmpty(paging?.Search))
-            {
                 filteredEntities = entities!.Where(x => !string.IsNullOrEmpty(x.Name) && x.Name.Contains(paging.Search, StringComparison.OrdinalIgnoreCase));
-            }
 
             int totalCount = filteredEntities.Count();
             var pagedEntities = filteredEntities.OrderByDescending(x => x.ListingTypeID).Skip((paging!.PageNumber - 1) * paging.PageSize).Take(paging.PageSize).ToList();
             var pagedDtos = this.mapper.Map<IEnumerable<ListingTypeDto>>(pagedEntities);
-            return new PagedResult<ListingTypeDto>
-            {
-                Data = pagedDtos,
-                TotalCount = totalCount
-            };
+            return new PagedResult<ListingTypeDto> { Data = pagedDtos, TotalCount = totalCount };
         }
 
         /// <inheritdoc/>
@@ -76,16 +64,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<ListingType> entities = cache.Get<IEnumerable<ListingType>>(Cache.LISTINGTYPES.ToString()) ?? new List<ListingType>();
-                ListingType? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.ListingTypeID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.LISTINGTYPES.ToString(),
+                    async cancel =>
+                        (await this.listingtypeRepository.GetAll())?.Where(x => x != null).Cast<ListingType>().ToList() ?? new List<ListingType>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.ListingTypeID == ID);
+                if (match == null)
                     match = await this.listingtypeRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<ListingTypeDto>(match);
             }
@@ -112,7 +99,7 @@ namespace Arcora.Api.Services.Implementations
                     listingType.CapturedDate = DateTime.UtcNow;
                     listingType = await listingtypeRepository.Create(listingType) ?? new ListingType();
                     await listingtypeRepository.Save();
-                    cache.Remove(Cache.LISTINGTYPES.ToString());
+                    await cache.RemoveAsync(Cache.LISTINGTYPES.ToString());
                 }
             }
             catch (Exception er)
@@ -135,7 +122,7 @@ namespace Arcora.Api.Services.Implementations
                 ListingType listingType = this.mapper.Map<ListingType>(listingtypeDto);
                 listingType = await listingtypeRepository.Update(listingType) ?? new ListingType();
                 await listingtypeRepository.Save();
-                cache.Remove(Cache.LISTINGTYPES.ToString());
+                await cache.RemoveAsync(Cache.LISTINGTYPES.ToString());
                 listingtypeDto = this.mapper.Map<ListingTypeDto>(listingType);
             }
             catch (Exception er)
@@ -157,7 +144,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("ListingType with the specified ID was not found.");
                 await listingtypeRepository.Delete(listingType);
                 await listingtypeRepository.Save();
-                cache.Remove(Cache.LISTINGTYPES.ToString());
+                await cache.RemoveAsync(Cache.LISTINGTYPES.ToString());
             }
             catch (Exception er)
             {

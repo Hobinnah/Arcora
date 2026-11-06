@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
@@ -25,7 +25,7 @@ namespace Arcora.Api.Services.Implementations
     public class TenantInvitationService : ITenantInvitationService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<TenantInvitationService> logger;
         private readonly ITenantInvitationRepository tenantinvitationRepository;
         private readonly IOptions<CacheConfiguration> _options;
@@ -38,7 +38,7 @@ namespace Arcora.Api.Services.Implementations
         private readonly IDataProtector emailProtector;
         private const int TenantInvitationTokenValidDays = 3;
 
-        public TenantInvitationService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<TenantInvitationService> logger, ITenantInvitationRepository tenantinvitationRepository, ArcoraDbContext dbContext, IListingService listingService, IEmailQueue emailQueue, IPreferenceService preferenceService, IConfiguration configuration, IPaymentOnboardingService paymentOnboardingService, IDataProtectionProvider dataProtection)
+        public TenantInvitationService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<TenantInvitationService> logger, ITenantInvitationRepository tenantinvitationRepository, ArcoraDbContext dbContext, IListingService listingService, IEmailQueue emailQueue, IPreferenceService preferenceService, IConfiguration configuration, IPaymentOnboardingService paymentOnboardingService, IDataProtectionProvider dataProtection)
         {
             this.cache = cache;
             this.logger = logger;
@@ -1085,7 +1085,10 @@ namespace Arcora.Api.Services.Implementations
 
         private string SignTokenPayload(string payload)
         {
-            var key = this.configuration["JwtSettings:Key"] ?? "arcora-default-signing-key";
+            var key = this.configuration["Authentication:JwtSettings:Key"]
+                ?? this.configuration["JwtSettings:Key"];
+            if (string.IsNullOrWhiteSpace(key))
+                throw new InvalidOperationException("Authentication:JwtSettings:Key must be configured to sign tenant invitation tokens.");
             using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(key));
             var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes($"tenant-invite:{payload}"));
             return Convert.ToBase64String(hash).Replace("+", "-").Replace("/", "_").TrimEnd('=');

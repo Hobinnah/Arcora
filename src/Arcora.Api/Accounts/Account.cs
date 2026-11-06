@@ -5,7 +5,7 @@ using Arcora.Api.DTOs;
 
 namespace Arcora.Api.Accounts
 {
-    public record RegisterRequest(string UserName, string FirstName, string LastName, string Password, string? PhoneNumber, string EmailAddress, DateTime? DateOfBirth, string Status, string? CapturedBy, DateTime? CapturedDate, List<string> Roles);
+    public record RegisterRequest(string UserName, string FirstName, string LastName, string Password, string? PhoneNumber, string EmailAddress, DateTime? DateOfBirth, string Status, string? CapturedBy, DateTime? CapturedDate, List<string> Roles, string? EmailVerificationToken = null);
     public record LoginRequest(string UserName, string Password);
     public record ChangePasswordRequest(string UserName, string CurrentPassword, string NewPassword);
     public record ResetPasswordRequest(string UserName, string Token, string NewPassword);

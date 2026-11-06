@@ -200,6 +200,38 @@ namespace Arcora.Api
                 .Replace("{{SupportLine}}", supportLine);
         }
 
+        public static string BuildListingReviewDecisionEmail(
+            string hostName,
+            string listingTitle,
+            string decision,
+            string? reviewMessage,
+            string companyName,
+            string? supportEmail = null)
+        {
+            var approved = string.Equals(decision, "APPROVED", StringComparison.OrdinalIgnoreCase);
+            var brand = string.IsNullOrWhiteSpace(companyName) ? "Arcora" : companyName;
+            var supportLine = string.IsNullOrWhiteSpace(supportEmail)
+                ? string.Empty
+                : $"<p style=\"margin:0 0 8px;font-family:Arial,sans-serif;font-size:13px;line-height:20px;color:#6b7280;\">Need help? Contact us at <a href=\"mailto:{System.Net.WebUtility.HtmlEncode(supportEmail)}\" style=\"color:#0d9488;text-decoration:none;\">{System.Net.WebUtility.HtmlEncode(supportEmail)}</a>.</p>";
+            var messageBlock = approved || string.IsNullOrWhiteSpace(reviewMessage)
+                ? string.Empty
+                : $"<tr><td style=\"padding:0 40px 24px;\"><div style=\"padding:16px;background:#f9f8f4;border:1px solid #eae4d7;border-radius:8px;font-family:Arial,sans-serif;font-size:14px;line-height:22px;color:#374151;white-space:pre-wrap;\">{System.Net.WebUtility.HtmlEncode(reviewMessage.Trim())}</div></td></tr>";
+            var template = LoadTemplate("ListingReviewDecision.html");
+
+            return template
+                .Replace("{{Brand}}", System.Net.WebUtility.HtmlEncode(brand))
+                .Replace("{{HostName}}", System.Net.WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(hostName) ? "Host" : hostName))
+                .Replace("{{ListingTitle}}", System.Net.WebUtility.HtmlEncode(listingTitle))
+                .Replace("{{Eyebrow}}", approved ? "Listing approved" : "Listing review")
+                .Replace("{{Headline}}", approved ? "Your listing is approved" : "Changes are needed before your listing can be published")
+                .Replace("{{Intro}}", approved
+                    ? "Your listing has been approved and is now eligible to appear in the Arcora marketplace."
+                    : "A Customer Rep reviewed your listing. Please read the message below and update your listing before resubmitting it.")
+                .Replace("{{ReviewMessageBlock}}", messageBlock)
+                .Replace("{{Year}}", DateTime.UtcNow.Year.ToString())
+                .Replace("{{SupportLine}}", supportLine);
+        }
+
         /// <summary>
         /// Builds a branded HTML notification for a new chat message. This template is fully self-contained
         /// (it does not depend on an on-disk HTML file) so it can be dispatched reliably from the messaging service.

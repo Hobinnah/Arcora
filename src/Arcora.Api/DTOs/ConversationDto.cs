@@ -47,6 +47,11 @@ public class ConversationDto
     public Guid? OrganizationID { get; set; }
 
     /// <summary>
+    /// Optional listing scope for direct enquiry threads.
+    /// </summary>
+    public Guid? ListingID { get; set; }
+
+    /// <summary>
     /// Subject of the conversation
     /// </summary>
     [MaxLength(200)]

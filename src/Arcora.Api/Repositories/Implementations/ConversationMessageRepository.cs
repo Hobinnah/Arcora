@@ -13,6 +13,39 @@ namespace Arcora.Api.Repositories.Implementations
             this.context = context;
         }
 
+        public async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginAttachmentSendAsync(
+            Guid conversationID, CancellationToken cancellationToken = default)
+        {
+            var transaction = await context.Database.BeginTransactionAsync(
+                context.Database.IsSqlServer() ? System.Data.IsolationLevel.ReadCommitted : System.Data.IsolationLevel.Serializable,
+                cancellationToken);
+            try
+            {
+                if (context.Database.IsSqlServer())
+                {
+                    // A database-owned lock serializes uploads across API instances, before any blob is written.
+                    // Serialize the thread's attachment transactions as they also update its last-message row.
+                    var resource = $"attachment:{conversationID:N}";
+                    await context.Database.ExecuteSqlInterpolatedAsync($@"
+DECLARE @result int;
+EXEC @result = sys.sp_getapplock @Resource={resource}, @LockMode='Exclusive',
+    @LockOwner='Transaction', @LockTimeout=60000;
+IF @result < 0 THROW 51000, 'Could not acquire attachment send lock. Retry with the same key.', 1;",
+                        cancellationToken);
+                }
+                return transaction;
+            }
+            catch
+            {
+                await transaction.DisposeAsync();
+                throw;
+            }
+        }
+
+        public Task<ConversationMessage?> GetAttachmentSendAsync(Guid conversationID, string senderScope, Guid sendKey) =>
+            context.ConversationMessages.AsNoTracking().SingleOrDefaultAsync(x =>
+                x.ConversationID == conversationID && x.AttachmentSenderScope == senderScope && x.AttachmentSendKey == sendKey);
+
         public async Task<List<ConversationMessage>> GetConversationMessageAsync()
         {
             return await ApplyDefaultOrder(this.context.ConversationMessages.AsNoTracking().Include(x => x.Conversation).Include(x => x.SenderUser) // FK to User
@@ -28,21 +61,26 @@ namespace Arcora.Api.Repositories.Implementations
         }
 
         public async Task<(List<ConversationMessage> Items, int TotalCount)> GetThreadMessagesAsync(
-            Guid conversationId, int pageNumber, int pageSize)
+            Guid conversationId, int pageNumber, int pageSize, DateTime? before = null)
         {
             var query = this.context.ConversationMessages.AsNoTracking()
                 .Include(x => x.SenderUser)
                 .Include(x => x.SenderTenant)!.ThenInclude(t => t!.User)
                 .Include(x => x.SenderOrganizationMember)!.ThenInclude(m => m!.User)
                 .Where(x => x.ConversationID == conversationId && x.DeletedAt == null);
+            if (before.HasValue)
+                query = query.Where(x => x.SentAt < before.Value);
 
             var total = await query.CountAsync();
 
+            // Newest first so page 1 is what the reader sees on open; flipped back to reading order below.
             var items = await query
-                .OrderBy(x => x.SentAt)
-                .Skip((pageNumber - 1) * pageSize)
+                .OrderByDescending(x => x.SentAt)
+                .ThenByDescending(x => x.CapturedDate)
+                .Skip((Math.Max(pageNumber, 1) - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
+            items.Reverse();
 
             return (items, total);
         }
@@ -55,14 +93,14 @@ namespace Arcora.Api.Repositories.Implementations
                 .FirstOrDefaultAsync();
         }
 
-        public async Task<int> CountUnreadAsync(Guid conversationId, DateTime? lastReadAt, long? excludeSenderUserId)
+        public async Task<int> CountUnreadAsync(Guid conversationId, DateTime? lastReadAt, bool fromOrganization)
         {
             var since = lastReadAt ?? DateTime.MinValue;
             return await this.context.ConversationMessages.AsNoTracking()
                 .CountAsync(x => x.ConversationID == conversationId
                                  && x.DeletedAt == null
                                  && x.SentAt > since
-                                 && (excludeSenderUserId == null || x.SenderUserID != excludeSenderUserId));
+                                 && (x.SenderOrganizationMemberID != null) == fromOrganization);
         }
     }
 }

@@ -4,3 +4,47 @@ GET {{Arcora.Api_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+### Start or resume a saved listing enquiry (set token from your own authenticated session)
+POST {{Arcora.Api_HostAddress}}/api/Messaging/StartThread
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "listingID": "faaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  "message": "Hi, is this home available for these dates?",
+  "proposedStartDate": "2026-12-01",
+  "proposedEndDate": "2027-06-01"
+}
+
+### Invalid listing ID returns 400
+POST {{Arcora.Api_HostAddress}}/api/Messaging/StartThread
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "listingID": "00000000-0000-0000-0000-000000000000",
+  "message": "Hi",
+  "proposedStartDate": "2026-12-01",
+  "proposedEndDate": "2027-06-01"
+}
+
+### Edit your own text message (sender only, within 5 minutes of sending)
+PUT {{Arcora.Api_HostAddress}}/api/Messaging/EditMessage/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "message": "Hi, is this home available from December?",
+  "actor": { "tenantID": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" }
+}
+
+### Toggle a reaction (same emoji removes it, a different emoji replaces it)
+POST {{Arcora.Api_HostAddress}}/api/Messaging/ReactToMessage/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "emoji": "👍",
+  "actor": { "organizationMemberID": "cccccccc-cccc-cccc-cccc-cccccccccccc" }
+}

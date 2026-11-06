@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Hosting;
@@ -18,7 +18,7 @@ namespace Arcora.Api.Services.Implementations
     public class LeaseService : ILeaseService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<LeaseService> logger;
         private readonly ILeaseRepository leaseRepository;
         private readonly IListingPhotoService listingPhotoService;
@@ -29,7 +29,7 @@ namespace Arcora.Api.Services.Implementations
 
         public LeaseService(
             IMapper mapper,
-            IMemoryCache cache,
+            HybridCache cache,
             IOptions<CacheConfiguration> options,
             ILogger<LeaseService> logger,
             ILeaseRepository leaseRepository,

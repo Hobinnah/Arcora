@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class RatingService : IRatingService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<RatingService> logger;
         private readonly IRatingRepository ratingRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public RatingService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<RatingService> logger, IRatingRepository ratingRepository)
+        public RatingService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<RatingService> logger, IRatingRepository ratingRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<Rating> entities;
             try
             {
-                entities = cache.Get<IEnumerable<Rating>>(Cache.RATINGS.ToString()) ?? new List<Rating>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.ratingRepository.GetRatingAsync())?.Where(x => x != null) ?? new List<Rating>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<Rating>>(Cache.RATINGS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.RATINGS.ToString(),
+                    async cancel =>
+                        (await this.ratingRepository.GetRatingAsync())?.Where(x => x != null).ToList() ?? new List<Rating>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
@@ -85,16 +83,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<Rating> entities = cache.Get<IEnumerable<Rating>>(Cache.RATINGS.ToString()) ?? new List<Rating>();
-                Rating? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.RatingID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.RATINGS.ToString(),
+                    async cancel =>
+                        (await this.ratingRepository.GetRatingAsync())?.Where(x => x != null).ToList() ?? new List<Rating>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.RatingID == ID);
+                if (match == null)
                     match = await this.ratingRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<RatingDto>(match);
             }
@@ -120,8 +117,8 @@ namespace Arcora.Api.Services.Implementations
                     rating.CapturedDate = DateTime.UtcNow;
                     rating = await ratingRepository.Create(rating) ?? new Rating();
                     await ratingRepository.Save();
-                    cache.Remove(Cache.RATINGS.ToString());
-                    cache.Remove(Cache.LISTINGRATINGAGGREGATES.ToString());
+                    await cache.RemoveAsync(Cache.RATINGS.ToString());
+                    await cache.RemoveAsync(Cache.LISTINGRATINGAGGREGATES.ToString());
                 }
             }
             catch (Exception er)
@@ -144,8 +141,8 @@ namespace Arcora.Api.Services.Implementations
                 Rating rating = this.mapper.Map<Rating>(ratingDto);
                 rating = await ratingRepository.Update(rating) ?? new Rating();
                 await ratingRepository.Save();
-                cache.Remove(Cache.RATINGS.ToString());
-                cache.Remove(Cache.LISTINGRATINGAGGREGATES.ToString());
+                await cache.RemoveAsync(Cache.RATINGS.ToString());
+                await cache.RemoveAsync(Cache.LISTINGRATINGAGGREGATES.ToString());
                 ratingDto = this.mapper.Map<RatingDto>(rating);
             }
             catch (Exception er)
@@ -167,8 +164,8 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("Rating with the specified ID was not found.");
                 await ratingRepository.Delete(rating);
                 await ratingRepository.Save();
-                cache.Remove(Cache.RATINGS.ToString());
-                cache.Remove(Cache.LISTINGRATINGAGGREGATES.ToString());
+                await cache.RemoveAsync(Cache.RATINGS.ToString());
+                await cache.RemoveAsync(Cache.LISTINGRATINGAGGREGATES.ToString());
             }
             catch (Exception er)
             {

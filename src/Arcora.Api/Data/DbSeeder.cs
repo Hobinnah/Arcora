@@ -23,6 +23,8 @@ public static class DbSeeder
     {
         try
         {
+            await EnsureCustomerRepRoleAsync(context, logger);
+
             if (forceReseed)
             {
                 await ClearSeededDataAsync(context, logger);
@@ -73,6 +75,21 @@ public static class DbSeeder
         {
             logger.LogError(ex, "An error occurred while seeding the database.");
         }
+    }
+
+    private static async Task EnsureCustomerRepRoleAsync(ArcoraDbContext context, ILogger logger)
+    {
+        if (await context.Roles.AnyAsync(role => role.Name != null && role.Name.ToUpper() == "CUSTOMERREP"))
+            return;
+
+        context.Roles.Add(new Role
+        {
+            Name = "CustomerRep",
+            NormalizedName = "CUSTOMERREP",
+            Enabled = true
+        });
+        await context.SaveChangesAsync();
+        logger.LogInformation("Seeded the CustomerRep role. No users were assigned to it.");
     }
 
     /// <summary>

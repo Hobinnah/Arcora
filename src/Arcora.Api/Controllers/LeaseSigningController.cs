@@ -292,16 +292,21 @@ namespace Arcora.Api.Controllers
                     {
                         providerStatus = await _signwellClient.GetDocumentStatusAsync(providerDocumentId!, cancellationToken);
                         ApplyProviderStatus(leaseDocument, signatories, providerStatus);
+                        if (leaseDocument.DocumentStatus == "FULLY_SIGNED")
+                            await LeaseSigningCompletion.ReconcileAsync(_dbContext, lease,
+                                leaseDocument.FullySignedAt!.Value, "SIGNWELL_STATUS_REFRESH", cancellationToken);
                         await _dbContext.SaveChangesAsync(cancellationToken);
                     }
-                    catch (Exception ex)
+                    catch (HttpRequestException ex)
                     {
                         _logger.LogError(ex, "Failed to refresh Signwell status for lease {LeaseId} and document {ProviderDocumentId}", leaseId, providerDocumentId);
+                        return Problem(statusCode: StatusCodes.Status502BadGateway,
+                            detail: "Unable to refresh the signing provider status. Please try again.");
                     }
                 }
             }
 
-            return Ok(BuildSigningStatusResponse(signingRequestId, leaseId, leaseDocument, signatories, providerStatus, refreshFromProvider));
+            return Ok(BuildSigningStatusResponse(signingRequestId, leaseId, leaseDocument, signatories, providerStatus, providerStatus != null));
         }
 
         private static SigningRequestStatusDto BuildSigningStatusResponse(
@@ -324,7 +329,7 @@ namespace Arcora.Api.Controllers
                 ProviderRequestId = providerStatus?.ProviderRequestId ?? providerRequestId,
                 ProviderDocumentId = providerStatus?.ProviderDocumentId ?? providerDocumentId,
                 ProviderStatus = providerStatus?.Status,
-                DocumentUrl = leaseDocument.Url,
+                DocumentUrl = leaseDocument.DocumentStatus == "FULLY_SIGNED" ? providerStatus?.DocumentUrl : leaseDocument.Url,
                 SentForSignatureAt = leaseDocument.SentForSignatureAt,
                 FullySignedAt = leaseDocument.FullySignedAt,
                 RefreshedFromProvider = refreshedFromProvider,

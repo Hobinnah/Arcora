@@ -8,7 +8,7 @@ using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -20,7 +20,7 @@ namespace Arcora.Api.Services.Implementations
     public class OrganizationMemberService : IOrganizationMemberService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<OrganizationMemberService> logger;
         private readonly IOrganizationMemberRepository organizationmemberRepository;
         private readonly ICohostInvitationRepository cohostInvitationRepository;
@@ -33,7 +33,7 @@ namespace Arcora.Api.Services.Implementations
         private readonly IOptions<CacheConfiguration> _options;
         public OrganizationMemberService(
             IMapper mapper,
-            IMemoryCache cache,
+            HybridCache cache,
             IOptions<CacheConfiguration> options,
             ILogger<OrganizationMemberService> logger,
             IOrganizationMemberRepository organizationmemberRepository,

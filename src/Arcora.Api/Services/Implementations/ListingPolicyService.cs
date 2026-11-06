@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class ListingPolicyService : IListingPolicyService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<ListingPolicyService> logger;
         private readonly IListingPolicyRepository listingpolicyRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public ListingPolicyService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<ListingPolicyService> logger, IListingPolicyRepository listingpolicyRepository)
+        public ListingPolicyService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<ListingPolicyService> logger, IListingPolicyRepository listingpolicyRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,38 +37,26 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<ListingPolicy> entities;
             try
             {
-                entities = cache.Get<IEnumerable<ListingPolicy>>(Cache.LISTINGPOLICIES.ToString()) ?? new List<ListingPolicy>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.listingpolicyRepository.GetListingPolicyAsync())?.Where(x => x != null) ?? new List<ListingPolicy>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<ListingPolicy>>(Cache.LISTINGPOLICIES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.LISTINGPOLICIES.ToString(),
+                    async cancel =>
+                        (await this.listingpolicyRepository.GetListingPolicyAsync())?.Where(x => x != null).ToList() ?? new List<ListingPolicy>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
                 logger.LogError(er, "An error occurred while fetching ListingPolicy by ID. Timestamp: {Timestamp}", DateTime.UtcNow);
-                return new PagedResult<ListingPolicyDto>
-                {
-                    Data = new List<ListingPolicyDto>(),
-                    TotalCount = 0
-                };
+                return new PagedResult<ListingPolicyDto> { Data = new List<ListingPolicyDto>(), TotalCount = 0 };
             }
 
             IEnumerable<ListingPolicy> filteredEntities = entities!;
             if (!string.IsNullOrEmpty(paging?.Search))
-            {
                 filteredEntities = entities!.Where(x => !string.IsNullOrEmpty(x.ApplicationInstructions) && x.ApplicationInstructions.Contains(paging.Search, StringComparison.OrdinalIgnoreCase));
-            }
 
             int totalCount = filteredEntities.Count();
             var pagedEntities = filteredEntities.OrderByDescending(x => x.ListingPolicyID).Skip((paging!.PageNumber - 1) * paging.PageSize).Take(paging.PageSize).ToList();
             var pagedDtos = this.mapper.Map<IEnumerable<ListingPolicyDto>>(pagedEntities);
-            return new PagedResult<ListingPolicyDto>
-            {
-                Data = pagedDtos,
-                TotalCount = totalCount
-            };
+            return new PagedResult<ListingPolicyDto> { Data = pagedDtos, TotalCount = totalCount };
         }
 
         /// <inheritdoc/>
@@ -76,16 +64,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<ListingPolicy> entities = cache.Get<IEnumerable<ListingPolicy>>(Cache.LISTINGPOLICIES.ToString()) ?? new List<ListingPolicy>();
-                ListingPolicy? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.ListingPolicyID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.LISTINGPOLICIES.ToString(),
+                    async cancel =>
+                        (await this.listingpolicyRepository.GetListingPolicyAsync())?.Where(x => x != null).ToList() ?? new List<ListingPolicy>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.ListingPolicyID == ID);
+                if (match == null)
                     match = await this.listingpolicyRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<ListingPolicyDto>(match);
             }
@@ -111,7 +98,7 @@ namespace Arcora.Api.Services.Implementations
                     listingPolicy.CapturedDate = DateTime.UtcNow;
                     listingPolicy = await listingpolicyRepository.Create(listingPolicy) ?? new ListingPolicy();
                     await listingpolicyRepository.Save();
-                    cache.Remove(Cache.LISTINGPOLICIES.ToString());
+                    await cache.RemoveAsync(Cache.LISTINGPOLICIES.ToString());
                 }
             }
             catch (Exception er)
@@ -134,7 +121,7 @@ namespace Arcora.Api.Services.Implementations
                 ListingPolicy listingPolicy = this.mapper.Map<ListingPolicy>(listingpolicyDto);
                 listingPolicy = await listingpolicyRepository.Update(listingPolicy) ?? new ListingPolicy();
                 await listingpolicyRepository.Save();
-                cache.Remove(Cache.LISTINGPOLICIES.ToString());
+                await cache.RemoveAsync(Cache.LISTINGPOLICIES.ToString());
                 listingpolicyDto = this.mapper.Map<ListingPolicyDto>(listingPolicy);
             }
             catch (Exception er)
@@ -156,7 +143,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("ListingPolicy with the specified ID was not found.");
                 await listingpolicyRepository.Delete(listingPolicy);
                 await listingpolicyRepository.Save();
-                cache.Remove(Cache.LISTINGPOLICIES.ToString());
+                await cache.RemoveAsync(Cache.LISTINGPOLICIES.ToString());
             }
             catch (Exception er)
             {

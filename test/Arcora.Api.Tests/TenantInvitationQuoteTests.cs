@@ -13,8 +13,9 @@ using AutoMapper;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -23,6 +24,7 @@ namespace Arcora.Api.Tests;
 public sealed class TenantInvitationQuoteTests : IAsyncLifetime
 {
     private readonly SqliteConnection connection = new("Data Source=:memory:;Foreign Keys=False");
+    private readonly ServiceProvider cacheProvider = CreateCacheProvider();
     private readonly IDataProtectionProvider protection = new EphemeralDataProtectionProvider();
     private ArcoraDbContext db = null!;
     private TenantInvitationService service = null!;
@@ -37,7 +39,7 @@ public sealed class TenantInvitationQuoteTests : IAsyncLifetime
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["FrontendUrl"] = "https://arcora.example.test",
-            ["JwtSettings:Key"] = "test-only-signing-key"
+            ["Authentication:JwtSettings:Key"] = "test-only-signing-key"
         }).Build();
         db = new TestContext(new DbContextOptionsBuilder<ArcoraDbContext>().UseSqlite(connection).Options, config);
         await db.Database.EnsureCreatedAsync();
@@ -52,7 +54,7 @@ public sealed class TenantInvitationQuoteTests : IAsyncLifetime
             ? Task.FromResult(new PaymentOnboardingStatusResponse { HasVerifiedCard = true, HasVerifiedPad = true, PadMandateActive = true })
             : throw new InvalidOperationException($"Unexpected payment call: {method.Name}"));
         var preference = Proxy<IPreferenceService>(_ => Task.FromResult<Preference?>(null));
-        service = new TenantInvitationService(mapper, new MemoryCache(new MemoryCacheOptions()),
+        service = new TenantInvitationService(mapper, cacheProvider.GetRequiredService<HybridCache>(),
             Options.Create(new CacheConfiguration()), NullLogger<TenantInvitationService>.Instance,
             null!, db, listingService, null!, preference, config, payments, protection);
 
@@ -77,6 +79,7 @@ public sealed class TenantInvitationQuoteTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
+        await cacheProvider.DisposeAsync();
         await db.DisposeAsync();
         await connection.DisposeAsync();
     }
@@ -91,6 +94,27 @@ public sealed class TenantInvitationQuoteTests : IAsyncLifetime
         }, 7);
         Assert.True(result.Success);
         return await db.TenantInvitations.SingleAsync();
+    }
+
+    [Fact]
+    public async Task CreatedInvitationEmailContainsAValidAcceptToken()
+    {
+        var invitation = await CreateAsync();
+        var email = await db.TenantInvitationEmails.SingleAsync();
+        var message = JsonSerializer.Deserialize<EmailMessage>(
+            protection.CreateProtector(TenantInvitationEmailWorker.ProtectionPurpose).Unprotect(email.ProtectedMessage))!;
+        var tokenStart = message.HtmlBody.IndexOf("token=", StringComparison.Ordinal);
+        Assert.True(tokenStart >= 0, "The invitation email must contain its generated response token.");
+        tokenStart += "token=".Length;
+        var tokenEnd = message.HtmlBody.IndexOf('&', tokenStart);
+        Assert.True(tokenEnd > tokenStart, "The invitation email response URL must include a token value.");
+        var token = Uri.UnescapeDataString(message.HtmlBody[tokenStart..tokenEnd]);
+
+        var response = await service.RespondToTenantInvitationAsync(token, "ACCEPT");
+
+        Assert.True(response.Success, response.Message);
+        Assert.Equal(invitation.TenantInvitationID, response.TenantInvitationID);
+        Assert.Equal("ACCEPTED", (await db.TenantInvitations.SingleAsync()).Status);
     }
 
     [Theory]
@@ -156,7 +180,7 @@ public sealed class TenantInvitationQuoteTests : IAsyncLifetime
         {
             HtmlContent = "{{Listing.BaseMonthlyRentAmount}}|{{Listing.SecurityDepositAmount}}|{{Listing.Currency}}|{{Lease.BaseRentAmount}}"
         }));
-        var contractService = new LeaseContractTemplateService(mapper, new MemoryCache(new MemoryCacheOptions()),
+        var contractService = new LeaseContractTemplateService(mapper, cacheProvider.GetRequiredService<HybridCache>(),
             Options.Create(new CacheConfiguration()), NullLogger<LeaseContractTemplateService>.Instance,
             templateRepository, leaseRepository, null!, db);
         var contract = await contractService.RenderContract(new LeaseContractRenderRequestDto
@@ -286,6 +310,15 @@ public sealed class TenantInvitationQuoteTests : IAsyncLifetime
     {
         public Func<MethodInfo, object?> Handler { get; set; } = null!;
         protected override object? Invoke(MethodInfo? method, object?[]? args) => Handler(method!);
+    }
+
+    private static ServiceProvider CreateCacheProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddMemoryCache();
+        services.AddHybridCache();
+        return services.BuildServiceProvider();
     }
 
     private sealed class TestContext(DbContextOptions<ArcoraDbContext> options, IConfiguration config) : ArcoraDbContext(options, config)

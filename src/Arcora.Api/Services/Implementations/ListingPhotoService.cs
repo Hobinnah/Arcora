@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.IO;
@@ -21,12 +21,12 @@ namespace Arcora.Api.Services.Implementations
     public class ListingPhotoService : IListingPhotoService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<ListingPhotoService> logger;
         private readonly IListingPhotoRepository listingphotoRepository;
         private readonly IFileStorageService fileStorageService;
         private readonly IOptions<CacheConfiguration> _options;
-        public ListingPhotoService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<ListingPhotoService> logger, IListingPhotoRepository listingphotoRepository, IFileStorageService fileStorageService)
+        public ListingPhotoService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<ListingPhotoService> logger, IListingPhotoRepository listingphotoRepository, IFileStorageService fileStorageService)
         {
             this.cache = cache;
             this.logger = logger;

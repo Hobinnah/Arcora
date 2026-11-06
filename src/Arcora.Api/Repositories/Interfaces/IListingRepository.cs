@@ -1,6 +1,7 @@
 // ===================================THIS FILE WAS AUTO GENERATED===================================
 using Arcora.Api.Entities;
 using Arcora.Api.Models;
+using Arcora.Api.DTOs;
 
 namespace Arcora.Api.Repositories.Interfaces
 {
@@ -34,5 +35,6 @@ namespace Arcora.Api.Repositories.Interfaces
         /// <param name="criteria">The search criteria.</param>
         /// <returns>The matching page of listings and the total match count.</returns>
         Task<(List<Listing> Items, int TotalCount)> SearchListingsAsync(ListingSearchCriteria criteria);
+        Task<ListingMapResultDto> SearchMapAsync(ListingSearchCriteria criteria, CancellationToken cancellationToken);
     }
 }

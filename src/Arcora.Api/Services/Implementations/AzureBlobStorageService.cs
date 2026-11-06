@@ -99,7 +99,7 @@ namespace Arcora.Api.Services.Implementations
             // Account-key based SAS (works with connection string and Azurite).
             if (blob.CanGenerateSasUri)
             {
-                var sasUri = blob.GenerateSasUri(builder).ToString();
+                var sasUri = ApplyPublicEndpoint(blob.GenerateSasUri(builder).ToString());
                 try
                 {
                     logger.LogInformation("Generated blob SAS (masked): {Sas}", MaskSasInUrl(sasUri));
@@ -117,7 +117,7 @@ namespace Arcora.Api.Services.Implementations
                 var start = DateTimeOffset.UtcNow.AddMinutes(-5);
                 var userDelegationKey = await blobServiceClient.GetUserDelegationKeyAsync(start, expiresOn, cancellationToken);
                 var sas = builder.ToSasQueryParameters(userDelegationKey.Value, blobServiceClient.AccountName).ToString();
-                var full = $"{blob.Uri}?{sas}";
+                var full = ApplyPublicEndpoint($"{blob.Uri}?{sas}");
                 try
                 {
                     logger.LogInformation("Generated user-delegation blob SAS (masked): {Sas}", MaskSasInUrl(full));
@@ -133,6 +133,21 @@ namespace Arcora.Api.Services.Implementations
                 logger.LogError(er, "Failed to generate a user delegation SAS for blob {BlobName}. Timestamp: {Timestamp}", blobName, DateTime.UtcNow);
                 return null;
             }
+        }
+
+        private string ApplyPublicEndpoint(string sasUrl)
+        {
+            if (!Uri.TryCreate(options.PublicEndpoint, UriKind.Absolute, out var publicEndpoint)
+                || !Uri.TryCreate(sasUrl, UriKind.Absolute, out var sasUri))
+                return sasUrl;
+
+            var uriBuilder = new UriBuilder(sasUri)
+            {
+                Scheme = publicEndpoint.Scheme,
+                Host = publicEndpoint.Host,
+                Port = publicEndpoint.Port
+            };
+            return uriBuilder.Uri.ToString();
         }
 
         private static string MaskSasInUrl(string url)

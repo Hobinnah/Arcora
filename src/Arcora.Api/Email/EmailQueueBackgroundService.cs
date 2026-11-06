@@ -1,3 +1,5 @@
+using Arcora.Api.Operations;
+
 namespace Arcora.Api.Email
 {
     /// <summary>
@@ -10,32 +12,40 @@ namespace Arcora.Api.Email
         private readonly IEmailQueue _queue;
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<EmailQueueBackgroundService> _logger;
+        private readonly OperationsRegistry? health;
 
         public EmailQueueBackgroundService(
             IEmailQueue queue,
             IServiceProvider serviceProvider,
-            ILogger<EmailQueueBackgroundService> logger)
+            ILogger<EmailQueueBackgroundService> logger,
+            OperationsRegistry? health = null)
         {
             _queue = queue;
             _serviceProvider = serviceProvider;
             _logger = logger;
+            this.health = health;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.LogInformation("Email queue dispatcher started.");
+            health?.Started(WorkerIds.Email);
 
             await foreach (var message in _queue.Reader.ReadAllAsync(stoppingToken))
             {
+                using var run = health?.Begin(WorkerIds.Email);
                 try
                 {
                     // IEmailSender is registered as transient/scoped, so resolve it per message.
                     using var scope = _serviceProvider.CreateScope();
                     var sender = scope.ServiceProvider.GetRequiredService<IEmailSender>();
                     await sender.SendEmailAsync(message.To, message.Subject, message.HtmlBody);
+                    run?.Count();
                 }
                 catch (Exception ex)
                 {
+                    if (stoppingToken.IsCancellationRequested) { run?.Cancel(); break; }
+                    run?.Fail();
                     _logger.LogError(ex, "Failed to deliver queued email to {Recipient} with subject '{Subject}'.", message.To, message.Subject);
                 }
             }

@@ -34,7 +34,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST api/<PaymentController>
-        [Authorize(Roles = "User, LandLord, Admin")]
+        [Authorize(Roles = "Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreatePayment")]
@@ -49,7 +49,7 @@ namespace Arcora.Api.Controllers
         }
 
         // PUT api/<PaymentController>/5
-        [Authorize(Roles = "User, LandLord, Admin")]
+        [Authorize(Roles = "Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdatePayment")]
@@ -82,7 +82,7 @@ namespace Arcora.Api.Controllers
         }
 
         // POST: api/payment/{id}/{status}
-        [Authorize(Roles = "User, LandLord, Admin")]
+        [Authorize(Roles = "Admin")]
         [HttpPost("{id}/{status}", Name = "UpdatePaymentStatus")]
         public async Task<ActionResult> UpdatePaymentStatus([FromServices] IPaymentService paymentService, [FromRoute] Guid id, [FromRoute] string status)
         {

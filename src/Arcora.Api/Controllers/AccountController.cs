@@ -14,6 +14,7 @@ using Arcora.Api.Accounts;
 using Arcora.Api.DTOs;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Arcora.Api.Services.Interfaces;
 
 namespace Arcora.Api
 {
@@ -89,7 +90,10 @@ namespace Arcora.Api
         [Route("/api/account/changePassword")]
         public async Task<IActionResult> ChangePassword([FromServices] IAccountService accountService, [FromServices] UserManager<User> userManager, [FromBody] ChangePasswordRequest request, CancellationToken ct)
         {
-            var currentUser = await userManager.GetUserAsync(User);
+            if (!TryGetCurrentUserId(out var userId))
+                return Unauthorized();
+
+            var currentUser = await userManager.FindByIdAsync(userId.ToString());
             if (currentUser is null)
                 return Unauthorized();
             var result = await accountService.ChangePasswordAsync(currentUser.Id.ToString(), request, ct);
@@ -102,9 +106,13 @@ namespace Arcora.Api
         [HttpGet("/api/account/profile")]
         public async Task<IActionResult> GetProfile([FromServices] UserManager<User> userManager)
         {
-            var user = await userManager.GetUserAsync(User);
+            if (!TryGetCurrentUserId(out var userId))
+                return Unauthorized();
+
+            var user = await userManager.FindByIdAsync(userId.ToString());
             if (user is null)
                 return Unauthorized();
+
             return Ok(new
             {
                 success = true,
@@ -126,7 +134,10 @@ namespace Arcora.Api
         [HttpPut("/api/account/profile")]
         public async Task<IActionResult> UpdateProfile([FromServices] UserManager<User> userManager, [FromBody] AccountProfileUpdateDto request)
         {
-            var user = await userManager.GetUserAsync(User);
+            if (!TryGetCurrentUserId(out var userId))
+                return Unauthorized();
+
+            var user = await userManager.FindByIdAsync(userId.ToString());
             if (user is null)
                 return Unauthorized();
 
@@ -136,8 +147,10 @@ namespace Arcora.Api
                 user.LastName = request.LastName.Trim();
             if (request.Phone is not null)
             {
+                var phoneChanged = false;
                 if (string.IsNullOrWhiteSpace(request.Phone))
                 {
+                    phoneChanged = !string.IsNullOrWhiteSpace(user.PhoneNumber);
                     user.PhoneNumber = null;
                 }
                 else if (!PhoneNumberNormalizer.TryNormalize(request.Phone, out var normalizedPhoneNumber))
@@ -150,7 +163,18 @@ namespace Arcora.Api
                         otherUser => otherUser.Id != user.Id && otherUser.PhoneNumber == normalizedPhoneNumber))
                         return Conflict(new[] { PhoneNumberNormalizer.DuplicatePhoneNumberError });
 
-                    user.PhoneNumber = normalizedPhoneNumber;
+                    if (!string.Equals(user.PhoneNumber, normalizedPhoneNumber, StringComparison.Ordinal))
+                    {
+                        user.PhoneNumber = normalizedPhoneNumber;
+                        phoneChanged = true;
+                    }
+                }
+
+                if (phoneChanged)
+                {
+                    user.PhoneNumberConfirmed = false;
+                    user.SmsCode = null;
+                    user.SmsCodeExpiresAt = null;
                 }
             }
             user.DisplayName = $"{user.FirstName} {user.LastName}".Trim();
@@ -185,10 +209,53 @@ namespace Arcora.Api
         }
 
         [Authorize]
+        [HttpPost("/api/account/phone-verification/request")]
+        [EnableRateLimiting("AuthPolicy")]
+        public async Task<IActionResult> RequestPhoneVerification([FromServices] IPhoneVerificationService phoneVerificationService, CancellationToken ct)
+        {
+            if (!TryGetCurrentUserId(out var userId))
+                return Unauthorized();
+
+            var result = await phoneVerificationService.SendVerificationCodeAsync(userId, ct);
+            if (!result.Succeeded)
+                return BadRequest(result.Errors);
+
+            return Ok(new
+            {
+                success = true,
+                message = result.Value!.Message,
+                data = result.Value
+            });
+        }
+
+        [Authorize]
+        [HttpPost("/api/account/phone-verification/confirm")]
+        [EnableRateLimiting("AuthPolicy")]
+        public async Task<IActionResult> ConfirmPhoneVerification([FromServices] IPhoneVerificationService phoneVerificationService, [FromBody] ConfirmPhoneNumberRequest request, CancellationToken ct)
+        {
+            if (!TryGetCurrentUserId(out var userId))
+                return Unauthorized();
+
+            var result = await phoneVerificationService.ConfirmPhoneNumberAsync(userId, request.Code, ct);
+            if (!result.Succeeded)
+                return BadRequest(result.Errors);
+
+            return Ok(new
+            {
+                success = true,
+                message = result.Value!.Message,
+                data = result.Value
+            });
+        }
+
+        [Authorize]
         [HttpGet("/api/account/settings")]
         public async Task<IActionResult> GetSettings([FromServices] ArcoraDbContext db, [FromServices] UserManager<User> userManager)
         {
-            var user = await userManager.GetUserAsync(User);
+            if (!TryGetCurrentUserId(out var userId))
+                return Unauthorized();
+
+            var user = await userManager.FindByIdAsync(userId.ToString());
             if (user is null)
                 return Unauthorized();
 
@@ -200,13 +267,13 @@ namespace Arcora.Api
                 data = settings is null
                     ? new AccountSettingsDto()
                     : new AccountSettingsDto
-                {
-                    EmailNotifications = settings.EmailNotifications,
-                    SmsNotifications = settings.SmsNotifications,
-                    Language = settings.Language,
-                    Timezone = settings.Timezone,
-                    Currency = settings.Currency
-                }
+                    {
+                        EmailNotifications = settings.EmailNotifications,
+                        SmsNotifications = settings.SmsNotifications,
+                        Language = settings.Language,
+                        Timezone = settings.Timezone,
+                        Currency = settings.Currency
+                    }
             });
         }
 
@@ -214,7 +281,10 @@ namespace Arcora.Api
         [HttpPut("/api/account/settings")]
         public async Task<IActionResult> UpdateSettings([FromServices] ArcoraDbContext db, [FromServices] UserManager<User> userManager, [FromBody] AccountSettingsDto request)
         {
-            var user = await userManager.GetUserAsync(User);
+            if (!TryGetCurrentUserId(out var userId))
+                return Unauthorized();
+
+            var user = await userManager.FindByIdAsync(userId.ToString());
             if (user is null)
                 return Unauthorized();
 
@@ -372,6 +442,17 @@ namespace Arcora.Api
             var encoded = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(json));
             var frontendUrlSuccess = HttpContext.RequestServices.GetRequiredService<IConfiguration>()["FrontendUrl"] ?? "http://localhost:5173";
             return Redirect($"{frontendUrlSuccess}/auth/callback?response={encoded}");
+        }
+
+        private bool TryGetCurrentUserId(out long userId)
+        {
+            userId = 0;
+
+            var claimValue = User.FindFirst("UserId")?.Value
+                ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? User.FindFirst("sub")?.Value;
+
+            return long.TryParse(claimValue, out userId) && userId > 0;
         }
     }
 }

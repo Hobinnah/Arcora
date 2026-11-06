@@ -19,6 +19,11 @@ namespace Arcora.Api.Configurations
         public string? AccountName { get; set; }
 
         /// <summary>
+        /// Optional browser-reachable endpoint used when returning SAS URLs.
+        /// </summary>
+        public string? PublicEndpoint { get; set; }
+
+        /// <summary>
         /// Container used for image blobs.
         /// </summary>
         public string ImagesContainer { get; set; } = "images";

@@ -1,8 +1,10 @@
-using System.Security.Claims;
 using Arcora.Api;
 using Arcora.Api.Accounts;
+using Arcora.Api.Configurations;
 using Arcora.Api.DTOs;
 using Arcora.Api.Entities;
+using Arcora.Api.Services.Implementations;
+using Arcora.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
@@ -12,6 +14,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Security.Claims;
 
 namespace Arcora.Api.Tests;
 
@@ -160,6 +163,155 @@ public sealed class PhoneNumberTests : IAsyncLifetime
         Assert.Null(await db.Users.Where(user => user.Id == 32).Select(user => user.PhoneNumber).SingleAsync());
     }
 
+    [Fact]
+    public async Task ProfileUpdate_ChangingPhone_ResetsPhoneConfirmation()
+    {
+        var user = NewUser(41, "+14155552671");
+        user.PhoneNumberConfirmed = true;
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var userManager = CreateUserManager(db);
+        var controller = new AccountController
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                        new[] { new Claim(ClaimTypes.NameIdentifier, "41") }, "Test"))
+                }
+            }
+        };
+
+        var response = await controller.UpdateProfile(userManager, new AccountProfileUpdateDto
+        {
+            Phone = "+1 (306) 555-0100"
+        });
+
+        Assert.IsType<OkObjectResult>(response);
+        var updatedUser = await db.Users.SingleAsync(item => item.Id == 41);
+        Assert.Equal("+13065550100", updatedUser.PhoneNumber);
+        Assert.False(updatedUser.PhoneNumberConfirmed);
+    }
+
+    [Theory]
+    [InlineData("+1 (306) 555-0100", "+13065550100")]
+    [InlineData("", null)]
+    public async Task ProfileUpdate_ChangingPhone_InvalidatesPendingInfobipCode(string newPhone, string? expectedPhone)
+    {
+        db.Users.Add(NewUser(45, "+14155552671"));
+        await db.SaveChangesAsync();
+
+        var userManager = CreateUserManager(db);
+        var smsClient = new FakeInfobipSmsClient();
+        var phoneVerificationService = new PhoneVerificationService(
+            userManager,
+            new FakeTwilioVerifyClient(),
+            smsClient,
+            Options.Create(new PhoneVerificationOptions { Provider = "INFOBIP" }),
+            Options.Create(new TwilioVerifyOptions()),
+            Options.Create(new InfobipOptions()));
+        var sendResult = await phoneVerificationService.SendVerificationCodeAsync(45);
+
+        Assert.True(sendResult.Succeeded);
+        Assert.Equal("+14155552671", smsClient.LastPhoneNumber);
+        var sentCode = await db.Users.Where(user => user.Id == 45).Select(user => user.SmsCode).SingleAsync();
+        Assert.False(string.IsNullOrWhiteSpace(sentCode));
+
+        var controller = CreateAccountController(45);
+        var response = await controller.UpdateProfile(userManager, new AccountProfileUpdateDto
+        {
+            Phone = newPhone
+        });
+
+        Assert.IsType<OkObjectResult>(response);
+        var updatedUser = await db.Users.SingleAsync(user => user.Id == 45);
+        Assert.Equal(expectedPhone, updatedUser.PhoneNumber);
+        Assert.False(updatedUser.PhoneNumberConfirmed);
+        Assert.Null(updatedUser.SmsCode);
+        Assert.Null(updatedUser.SmsCodeExpiresAt);
+
+        var confirmResult = await phoneVerificationService.ConfirmPhoneNumberAsync(45, sentCode!);
+
+        Assert.False(confirmResult.Succeeded);
+        Assert.False((await db.Users.SingleAsync(user => user.Id == 45)).PhoneNumberConfirmed);
+    }
+
+    [Fact]
+    public async Task ConfirmPhoneNumberAsync_WhenPhoneChangesDuringTwilioCheck_DoesNotConfirmNewNumber()
+    {
+        db.Users.Add(NewUser(46, "+14155552671"));
+        await db.SaveChangesAsync();
+
+        var userManager = CreateUserManager(db);
+        var twilioVerifyClient = new FakeTwilioVerifyClient();
+        twilioVerifyClient.CheckHandler = async (phoneNumber, _, cancellationToken) =>
+        {
+            Assert.Equal("+14155552671", phoneNumber);
+            await using var concurrentDb = new PhoneTestDbContext(
+                new DbContextOptionsBuilder<ArcoraDbContext>().UseSqlite(connection).Options,
+                new ConfigurationBuilder().Build());
+            var concurrentUserManager = CreateUserManager(concurrentDb);
+            var concurrentUser = await concurrentUserManager.FindByIdAsync("46");
+            Assert.NotNull(concurrentUser);
+            concurrentUser!.PhoneNumber = "+13065550100";
+            concurrentUser.PhoneNumberConfirmed = false;
+            concurrentUser.SmsCode = null;
+            concurrentUser.SmsCodeExpiresAt = null;
+            var updateResult = await concurrentUserManager.UpdateAsync(concurrentUser);
+            Assert.True(updateResult.Succeeded);
+            return TwilioVerifyResult.Success("approved", "VE123", true);
+        };
+        var service = new PhoneVerificationService(userManager, twilioVerifyClient);
+
+        var result = await service.ConfirmPhoneNumberAsync(46, "123456");
+
+        Assert.False(result.Succeeded);
+        var savedUser = await db.Users.AsNoTracking().SingleAsync(user => user.Id == 46);
+        Assert.Equal("+13065550100", savedUser.PhoneNumber);
+        Assert.False(savedUser.PhoneNumberConfirmed);
+    }
+
+    [Fact]
+    public async Task ConfirmPhoneNumberAsync_ApprovedCode_MarksPhoneAsConfirmed()
+    {
+        db.Users.Add(NewUser(51, "+14155552671"));
+        await db.SaveChangesAsync();
+
+        var userManager = CreateUserManager(db);
+        var twilioVerifyClient = new FakeTwilioVerifyClient
+        {
+            CheckResult = TwilioVerifyResult.Success("approved", "VE123", true)
+        };
+        var service = new PhoneVerificationService(userManager, twilioVerifyClient);
+
+        var result = await service.ConfirmPhoneNumberAsync(51, "123456");
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Value!.PhoneNumberConfirmed);
+        Assert.True(await db.Users.Where(user => user.Id == 51).Select(user => user.PhoneNumberConfirmed).SingleAsync());
+    }
+
+    [Fact]
+    public async Task SendVerificationCodeAsync_AlreadyConfirmed_SkipsTwilioRequest()
+    {
+        var user = NewUser(61, "+14155552671");
+        user.PhoneNumberConfirmed = true;
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var userManager = CreateUserManager(db);
+        var twilioVerifyClient = new FakeTwilioVerifyClient();
+        var service = new PhoneVerificationService(userManager, twilioVerifyClient);
+
+        var result = await service.SendVerificationCodeAsync(61);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(0, twilioVerifyClient.StartCalls);
+        Assert.True(result.Value!.PhoneNumberConfirmed);
+    }
+
     private static string Normalize(string input)
     {
         Assert.True(PhoneNumberNormalizer.TryNormalize(input, out var normalized));
@@ -176,7 +328,21 @@ public sealed class PhoneNumberTests : IAsyncLifetime
         FirstName = "Test",
         LastName = $"User{id}",
         DisplayName = $"Test User{id}",
+        SecurityStamp = Guid.NewGuid().ToString("N"),
+        ConcurrencyStamp = Guid.NewGuid().ToString("N"),
         PhoneNumber = phoneNumber
+    };
+
+    private static AccountController CreateAccountController(long userId) => new()
+    {
+        ControllerContext = new ControllerContext
+        {
+            HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                    new[] { new Claim(ClaimTypes.NameIdentifier, userId.ToString()) }, "Test"))
+            }
+        }
     };
 
     private static UserManager<User> CreateUserManager(ArcoraDbContext context)
@@ -192,6 +358,40 @@ public sealed class PhoneNumberTests : IAsyncLifetime
             new IdentityErrorDescriber(),
             new ServiceCollection().BuildServiceProvider(),
             NullLogger<UserManager<User>>.Instance);
+    }
+
+    private sealed class FakeTwilioVerifyClient : ITwilioVerifyClient
+    {
+        public int StartCalls { get; private set; }
+        public int CheckCalls { get; private set; }
+        public TwilioVerifyResult StartResult { get; set; } = TwilioVerifyResult.Success("pending", "VE123");
+        public TwilioVerifyResult CheckResult { get; set; } = TwilioVerifyResult.Success("approved", "VE123", true);
+        public Func<string, string, CancellationToken, Task<TwilioVerifyResult>>? CheckHandler { get; set; }
+
+        public Task<TwilioVerifyResult> StartVerificationAsync(string phoneNumber, CancellationToken cancellationToken = default)
+        {
+            StartCalls++;
+            return Task.FromResult(StartResult);
+        }
+
+        public Task<TwilioVerifyResult> CheckVerificationAsync(string phoneNumber, string code, CancellationToken cancellationToken = default)
+        {
+            CheckCalls++;
+            return CheckHandler is null
+                ? Task.FromResult(CheckResult)
+                : CheckHandler(phoneNumber, code, cancellationToken);
+        }
+    }
+
+    private sealed class FakeInfobipSmsClient : IInfobipSmsClient
+    {
+        public string? LastPhoneNumber { get; private set; }
+
+        public Task<InfobipSmsResult> SendAsync(string phoneNumber, string message, CancellationToken cancellationToken = default)
+        {
+            LastPhoneNumber = phoneNumber;
+            return Task.FromResult(InfobipSmsResult.Success());
+        }
     }
 
     private sealed class PhoneTestDbContext(DbContextOptions<ArcoraDbContext> options, IConfiguration configuration)

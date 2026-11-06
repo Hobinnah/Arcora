@@ -86,6 +86,7 @@ namespace Arcora.Api.DTOs
         public bool HasVerifiedPad { get; set; }
         public bool HasVerifiedCard { get; set; }
         public bool PadMandateActive { get; set; }
+        public string? HostedBankVerificationUrl { get; set; }
 
         /// <summary>
         /// True only when the tenant has a verified PAD, an active mandate and a verified backup credit card.

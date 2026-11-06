@@ -9,63 +9,54 @@ namespace Arcora.Api.Migrations
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "AgreementUrl",
-                table: "Lease",
-                type: "nvarchar(1000)",
-                maxLength: 1000,
-                nullable: true);
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[Lease]', N'U') IS NOT NULL
+   AND COL_LENGTH(N'[dbo].[Lease]', N'AgreementUrl') IS NULL
+BEGIN
+    ALTER TABLE [dbo].[Lease] ADD [AgreementUrl] nvarchar(1000) NULL;
+END
 
-            migrationBuilder.AddColumn<string>(
-                name: "ProviderRequestID",
-                table: "LeaseSignatory",
-                type: "nvarchar(255)",
-                maxLength: 255,
-                nullable: true);
+IF OBJECT_ID(N'[dbo].[LeaseSignatory]', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH(N'[dbo].[LeaseSignatory]', N'ProviderRequestID') IS NULL
+        ALTER TABLE [dbo].[LeaseSignatory] ADD [ProviderRequestID] nvarchar(255) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "ProviderDocumentID",
-                table: "LeaseSignatory",
-                type: "nvarchar(255)",
-                maxLength: 255,
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[LeaseSignatory]', N'ProviderDocumentID') IS NULL
+        ALTER TABLE [dbo].[LeaseSignatory] ADD [ProviderDocumentID] nvarchar(255) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "ProviderDocumentUrl",
-                table: "LeaseSignatory",
-                type: "nvarchar(1000)",
-                maxLength: 1000,
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[LeaseSignatory]', N'ProviderDocumentUrl') IS NULL
+        ALTER TABLE [dbo].[LeaseSignatory] ADD [ProviderDocumentUrl] nvarchar(1000) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "SignatureImageUrl",
-                table: "LeaseSignatory",
-                type: "nvarchar(1000)",
-                maxLength: 1000,
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[LeaseSignatory]', N'SignatureImageUrl') IS NULL
+        ALTER TABLE [dbo].[LeaseSignatory] ADD [SignatureImageUrl] nvarchar(1000) NULL;
+END
+");
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "AgreementUrl",
-                table: "Lease");
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[Lease]', N'U') IS NOT NULL
+   AND COL_LENGTH(N'[dbo].[Lease]', N'AgreementUrl') IS NOT NULL
+BEGIN
+    ALTER TABLE [dbo].[Lease] DROP COLUMN [AgreementUrl];
+END
 
-            migrationBuilder.DropColumn(
-                name: "ProviderRequestID",
-                table: "LeaseSignatory");
+IF OBJECT_ID(N'[dbo].[LeaseSignatory]', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH(N'[dbo].[LeaseSignatory]', N'ProviderRequestID') IS NOT NULL
+        ALTER TABLE [dbo].[LeaseSignatory] DROP COLUMN [ProviderRequestID];
 
-            migrationBuilder.DropColumn(
-                name: "ProviderDocumentID",
-                table: "LeaseSignatory");
+    IF COL_LENGTH(N'[dbo].[LeaseSignatory]', N'ProviderDocumentID') IS NOT NULL
+        ALTER TABLE [dbo].[LeaseSignatory] DROP COLUMN [ProviderDocumentID];
 
-            migrationBuilder.DropColumn(
-                name: "ProviderDocumentUrl",
-                table: "LeaseSignatory");
+    IF COL_LENGTH(N'[dbo].[LeaseSignatory]', N'ProviderDocumentUrl') IS NOT NULL
+        ALTER TABLE [dbo].[LeaseSignatory] DROP COLUMN [ProviderDocumentUrl];
 
-            migrationBuilder.DropColumn(
-                name: "SignatureImageUrl",
-                table: "LeaseSignatory");
+    IF COL_LENGTH(N'[dbo].[LeaseSignatory]', N'SignatureImageUrl') IS NOT NULL
+        ALTER TABLE [dbo].[LeaseSignatory] DROP COLUMN [SignatureImageUrl];
+END
+");
         }
     }
 }

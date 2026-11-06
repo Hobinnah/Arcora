@@ -13,7 +13,7 @@ using AutoMapper;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -24,6 +24,7 @@ namespace Arcora.Api.Tests;
 public sealed class TenantInvitationSafetyTests : IAsyncLifetime
 {
     private readonly SqliteConnection connection = new("Data Source=:memory:;Foreign Keys=False");
+    private readonly ServiceProvider cacheProvider = CreateCacheProvider();
     private readonly IDataProtectionProvider protection = new EphemeralDataProtectionProvider();
     private ArcoraDbContext db = null!;
     private TenantInvitationService service = null!;
@@ -40,13 +41,14 @@ public sealed class TenantInvitationSafetyTests : IAsyncLifetime
         await db.Database.EnsureCreatedAsync();
         var mapper = new MapperConfiguration(c => c.CreateMap<TenantInvitation, TenantInvitationDto>(MemberList.None),
             NullLoggerFactory.Instance).CreateMapper();
-        service = new TenantInvitationService(mapper, new MemoryCache(new MemoryCacheOptions()),
+        service = new TenantInvitationService(mapper, cacheProvider.GetRequiredService<HybridCache>(),
             Options.Create(new CacheConfiguration()), NullLogger<TenantInvitationService>.Instance,
             null!, db, null!, null!, null!, config, null!, protection);
     }
 
     public async Task DisposeAsync()
     {
+        await cacheProvider.DisposeAsync();
         await db.DisposeAsync();
         await connection.DisposeAsync();
     }
@@ -240,7 +242,7 @@ public sealed class TenantInvitationSafetyTests : IAsyncLifetime
                 await using var second = new ArcoraDbContext(options, config);
                 var mapper = new MapperConfiguration(c => c.CreateMap<TenantInvitation, TenantInvitationDto>(MemberList.None),
                     NullLoggerFactory.Instance).CreateMapper();
-                var secondService = new TenantInvitationService(mapper, new MemoryCache(new MemoryCacheOptions()),
+                var secondService = new TenantInvitationService(mapper, cacheProvider.GetRequiredService<HybridCache>(),
                     Options.Create(new CacheConfiguration()), NullLogger<TenantInvitationService>.Instance,
                     null!, second, null!, null!, null!, config, null!, protection);
                 return await secondService.RespondToTenantInvitationAsync(token, "ACCEPT");
@@ -310,6 +312,15 @@ public sealed class TenantInvitationSafetyTests : IAsyncLifetime
         {
             await setup.Database.EnsureDeletedAsync();
         }
+    }
+
+    private static ServiceProvider CreateCacheProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddMemoryCache();
+        services.AddHybridCache();
+        return services.BuildServiceProvider();
     }
 
     private async Task<ReservationHold> SeedHoldAsync(TenantInvitation invitation)

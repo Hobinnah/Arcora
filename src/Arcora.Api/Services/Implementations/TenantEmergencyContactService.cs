@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class TenantEmergencyContactService : ITenantEmergencyContactService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<TenantEmergencyContactService> logger;
         private readonly ITenantEmergencyContactRepository tenantemergencycontactRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public TenantEmergencyContactService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<TenantEmergencyContactService> logger, ITenantEmergencyContactRepository tenantemergencycontactRepository)
+        public TenantEmergencyContactService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<TenantEmergencyContactService> logger, ITenantEmergencyContactRepository tenantemergencycontactRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<TenantEmergencyContact> entities;
             try
             {
-                entities = cache.Get<IEnumerable<TenantEmergencyContact>>(Cache.TENANTEMERGENCYCONTACTS.ToString()) ?? new List<TenantEmergencyContact>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.tenantemergencycontactRepository.GetTenantEmergencyContactAsync())?.Where(x => x != null) ?? new List<TenantEmergencyContact>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<TenantEmergencyContact>>(Cache.TENANTEMERGENCYCONTACTS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.TENANTEMERGENCYCONTACTS.ToString(),
+                    async cancel =>
+                        (await this.tenantemergencycontactRepository.GetTenantEmergencyContactAsync())?.Where(x => x != null).ToList() ?? new List<TenantEmergencyContact>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
@@ -76,16 +74,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<TenantEmergencyContact> entities = cache.Get<IEnumerable<TenantEmergencyContact>>(Cache.TENANTEMERGENCYCONTACTS.ToString()) ?? new List<TenantEmergencyContact>();
-                TenantEmergencyContact? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.TenantEmergencyContactID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.TENANTEMERGENCYCONTACTS.ToString(),
+                    async cancel =>
+                        (await this.tenantemergencycontactRepository.GetTenantEmergencyContactAsync())?.Where(x => x != null).ToList() ?? new List<TenantEmergencyContact>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.TenantEmergencyContactID == ID);
+                if (match == null)
                     match = await this.tenantemergencycontactRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<TenantEmergencyContactDto>(match);
             }
@@ -111,7 +108,7 @@ namespace Arcora.Api.Services.Implementations
                     tenantEmergencyContact.CapturedDate = DateTime.UtcNow;
                     tenantEmergencyContact = await tenantemergencycontactRepository.Create(tenantEmergencyContact) ?? new TenantEmergencyContact();
                     await tenantemergencycontactRepository.Save();
-                    cache.Remove(Cache.TENANTEMERGENCYCONTACTS.ToString());
+                    await cache.RemoveAsync(Cache.TENANTEMERGENCYCONTACTS.ToString());
                 }
             }
             catch (Exception er)
@@ -134,7 +131,7 @@ namespace Arcora.Api.Services.Implementations
                 TenantEmergencyContact tenantEmergencyContact = this.mapper.Map<TenantEmergencyContact>(tenantemergencycontactDto);
                 tenantEmergencyContact = await tenantemergencycontactRepository.Update(tenantEmergencyContact) ?? new TenantEmergencyContact();
                 await tenantemergencycontactRepository.Save();
-                cache.Remove(Cache.TENANTEMERGENCYCONTACTS.ToString());
+                await cache.RemoveAsync(Cache.TENANTEMERGENCYCONTACTS.ToString());
                 tenantemergencycontactDto = this.mapper.Map<TenantEmergencyContactDto>(tenantEmergencyContact);
             }
             catch (Exception er)
@@ -156,7 +153,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("TenantEmergencyContact with the specified ID was not found.");
                 await tenantemergencycontactRepository.Delete(tenantEmergencyContact);
                 await tenantemergencycontactRepository.Save();
-                cache.Remove(Cache.TENANTEMERGENCYCONTACTS.ToString());
+                await cache.RemoveAsync(Cache.TENANTEMERGENCYCONTACTS.ToString());
             }
             catch (Exception er)
             {

@@ -48,6 +48,7 @@ namespace Arcora.Api.Models
     // Internal queue work item
     public class SigningWorkItem
     {
+        public DateTime EnqueuedAt { get; set; } = DateTime.UtcNow;
         public Guid SigningRequestId { get; set; }
         public Guid LeaseId { get; set; }
         public Guid? LeaseDocumentId { get; set; }

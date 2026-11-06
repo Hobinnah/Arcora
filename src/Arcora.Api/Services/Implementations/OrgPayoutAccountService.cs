@@ -8,11 +8,12 @@ using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
 using Arcora.Payments.Configuration;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Stripe;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using LocalPayout = Arcora.Api.Entities.Payout;
 using StripePayout = Stripe.Payout;
 
@@ -21,7 +22,7 @@ namespace Arcora.Api.Services.Implementations
     public class OrgPayoutAccountService : IOrgPayoutAccountService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<OrgPayoutAccountService> logger;
         private readonly IOrgPayoutAccountRepository orgpayoutaccountRepository;
         private readonly IOrganizationMemberRepository organizationMemberRepository;
@@ -32,7 +33,7 @@ namespace Arcora.Api.Services.Implementations
         private readonly IOptions<CacheConfiguration> _options;
         public OrgPayoutAccountService(
             IMapper mapper,
-            IMemoryCache cache,
+            HybridCache cache,
             IOptions<CacheConfiguration> options,
             ILogger<OrgPayoutAccountService> logger,
             IOrgPayoutAccountRepository orgpayoutaccountRepository,
@@ -308,7 +309,30 @@ namespace Arcora.Api.Services.Implementations
             if (stripeEvent.Data.Object is not StripePayout payout)
                 return;
 
-            var existing = this.dbContext.Payouts.FirstOrDefault(x => x.ProviderPayoutID == payout.Id);
+            // Read current provider state so late or duplicate webhook deliveries cannot regress it.
+            payout = await new Stripe.PayoutService(new StripeClient(stripeOptions.SecretKey)).GetAsync(
+                payout.Id, requestOptions: new RequestOptions { StripeAccount = stripeAccountID });
+            var reference = payout.Metadata.GetValueOrDefault("arcora_rent_reference");
+            RentDisbursement? rentDisbursement = null;
+            if (reference?.StartsWith("arcora_rent_", StringComparison.Ordinal) == true &&
+                Guid.TryParseExact(reference["arcora_rent_".Length..], "N", out var paymentId))
+            {
+                rentDisbursement = await dbContext.RentDisbursements.SingleOrDefaultAsync(
+                    x => x.PaymentID == paymentId && x.AccountReference == stripeAccountID);
+            }
+            var existing = rentDisbursement == null
+                ? this.dbContext.Payouts.FirstOrDefault(x => x.ProviderPayoutID == payout.Id && x.OrganizationID == account.OrganizationID)
+                : this.dbContext.Payouts.Single(x => x.PayoutID == rentDisbursement.PayoutID);
+            if (rentDisbursement != null)
+            {
+                if (payout.Livemode || payout.Amount / 100m != rentDisbursement.Amount ||
+                    !string.Equals(payout.Currency, rentDisbursement.Currency, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Stripe payout does not match the saved rent disbursement.");
+                rentDisbursement.BankPayoutReference = payout.Id;
+                rentDisbursement.Status = payout.Status.ToUpperInvariant();
+                rentDisbursement.FailureReason = payout.FailureMessage;
+                rentDisbursement.LastCheckedAt = DateTime.UtcNow;
+            }
             var payoutDate = payout.ArrivalDate != DateTime.MinValue ? payout.ArrivalDate : (DateTime?)null;
             var requestedAt = payout.Created != DateTime.MinValue ? payout.Created : DateTime.UtcNow;
             var normalizedStatus = payout.Status?.ToString()?.ToUpperInvariant() ?? string.Empty;
@@ -335,6 +359,7 @@ namespace Arcora.Api.Services.Implementations
             }
             else
             {
+                existing.ProviderPayoutID = payout.Id;
                 existing.Status = normalizedStatus;
                 existing.ScheduledAt = payoutDate ?? existing.ScheduledAt;
                 existing.PaidAt = normalizedStatus == "PAID" ? DateTime.UtcNow : existing.PaidAt;

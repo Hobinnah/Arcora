@@ -19,11 +19,11 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPost(Name = "StartPaymentOnboarding")]
-        public async Task<IActionResult> Start([FromServices] IPaymentOnboardingService onboardingService, [FromBody] PaymentOnboardingStartRequest request)
+        public async Task<IActionResult> Start([FromServices] IPaymentOnboardingService onboardingService, [FromBody] PaymentOnboardingStartRequest request, CancellationToken cancellationToken)
         {
             try
             {
-                var result = await onboardingService.StartAsync(request.TenantID);
+                var result = await onboardingService.StartAsync(request.TenantID, cancellationToken);
                 return Ok(result);
             }
             catch (KeyNotFoundException ex)
@@ -38,11 +38,11 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPost(Name = "CreateSetupIntent")]
-        public async Task<IActionResult> CreateSetupIntent([FromServices] IPaymentOnboardingService onboardingService, [FromBody] CreateSetupIntentRequest request)
+        public async Task<IActionResult> CreateSetupIntent([FromServices] IPaymentOnboardingService onboardingService, [FromBody] CreateSetupIntentRequest request, CancellationToken cancellationToken)
         {
             try
             {
-                var result = await onboardingService.CreateSetupIntentAsync(request);
+                var result = await onboardingService.CreateSetupIntentAsync(request, cancellationToken);
                 return Ok(result);
             }
             catch (KeyNotFoundException ex)
@@ -61,11 +61,11 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPost(Name = "SavePaymentMethod")]
-        public async Task<IActionResult> SavePaymentMethod([FromServices] IPaymentOnboardingService onboardingService, [FromBody] SavePaymentMethodRequest request)
+        public async Task<IActionResult> SavePaymentMethod([FromServices] IPaymentOnboardingService onboardingService, [FromBody] SavePaymentMethodRequest request, CancellationToken cancellationToken)
         {
             try
             {
-                var result = await onboardingService.SavePaymentMethodAsync(request);
+                var result = await onboardingService.SavePaymentMethodAsync(request, cancellationToken);
                 return CreatedAtRoute("GetPaymentMethodByID", new { id = result.PaymentMethodID }, result);
             }
             catch (KeyNotFoundException ex)
@@ -82,9 +82,9 @@ namespace Arcora.Api.Controllers
         [Authorize(Roles = "Viewer, User, LandLord, Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [HttpGet("{tenantId}", Name = "GetPaymentOnboardingStatus")]
-        public async Task<IActionResult> Status([FromServices] IPaymentOnboardingService onboardingService, Guid tenantId)
+        public async Task<IActionResult> Status([FromServices] IPaymentOnboardingService onboardingService, Guid tenantId, CancellationToken cancellationToken)
         {
-            var result = await onboardingService.GetStatusAsync(tenantId);
+            var result = await onboardingService.GetStatusAsync(tenantId, cancellationToken);
             return Ok(result);
         }
     }

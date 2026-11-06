@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class LedgerEntryService : ILedgerEntryService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<LedgerEntryService> logger;
         private readonly ILedgerEntryRepository ledgerentryRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public LedgerEntryService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<LedgerEntryService> logger, ILedgerEntryRepository ledgerentryRepository)
+        public LedgerEntryService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<LedgerEntryService> logger, ILedgerEntryRepository ledgerentryRepository)
         {
             this.cache = cache;
             this.logger = logger;

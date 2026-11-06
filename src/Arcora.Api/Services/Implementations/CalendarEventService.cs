@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class CalendarEventService : ICalendarEventService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<CalendarEventService> logger;
         private readonly ICalendarEventRepository calendareventRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public CalendarEventService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<CalendarEventService> logger, ICalendarEventRepository calendareventRepository)
+        public CalendarEventService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<CalendarEventService> logger, ICalendarEventRepository calendareventRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,38 +37,26 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<CalendarEvent> entities;
             try
             {
-                entities = cache.Get<IEnumerable<CalendarEvent>>(Cache.CALENDAREVENTS.ToString()) ?? new List<CalendarEvent>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.calendareventRepository.GetCalendarEventAsync())?.Where(x => x != null) ?? new List<CalendarEvent>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<CalendarEvent>>(Cache.CALENDAREVENTS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.CALENDAREVENTS.ToString(),
+                    async cancel =>
+                        (await this.calendareventRepository.GetCalendarEventAsync())?.Where(x => x != null).ToList() ?? new List<CalendarEvent>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
                 logger.LogError(er, "An error occurred while fetching CalendarEvent by ID. Timestamp: {Timestamp}", DateTime.UtcNow);
-                return new PagedResult<CalendarEventDto>
-                {
-                    Data = new List<CalendarEventDto>(),
-                    TotalCount = 0
-                };
+                return new PagedResult<CalendarEventDto> { Data = new List<CalendarEventDto>(), TotalCount = 0 };
             }
 
             IEnumerable<CalendarEvent> filteredEntities = entities!;
             if (!string.IsNullOrEmpty(paging?.Search))
-            {
                 filteredEntities = entities!.Where(x => !string.IsNullOrEmpty(x.Title) && x.Title.Contains(paging.Search, StringComparison.OrdinalIgnoreCase));
-            }
 
             int totalCount = filteredEntities.Count();
             var pagedEntities = filteredEntities.OrderByDescending(x => x.CalendarEventID).Skip((paging!.PageNumber - 1) * paging.PageSize).Take(paging.PageSize).ToList();
             var pagedDtos = this.mapper.Map<IEnumerable<CalendarEventDto>>(pagedEntities);
-            return new PagedResult<CalendarEventDto>
-            {
-                Data = pagedDtos,
-                TotalCount = totalCount
-            };
+            return new PagedResult<CalendarEventDto> { Data = pagedDtos, TotalCount = totalCount };
         }
 
         /// <inheritdoc/>
@@ -76,16 +64,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<CalendarEvent> entities = cache.Get<IEnumerable<CalendarEvent>>(Cache.CALENDAREVENTS.ToString()) ?? new List<CalendarEvent>();
-                CalendarEvent? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.CalendarEventID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.CALENDAREVENTS.ToString(),
+                    async cancel =>
+                        (await this.calendareventRepository.GetCalendarEventAsync())?.Where(x => x != null).ToList() ?? new List<CalendarEvent>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.CalendarEventID == ID);
+                if (match == null)
                     match = await this.calendareventRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<CalendarEventDto>(match);
             }
@@ -117,7 +104,7 @@ namespace Arcora.Api.Services.Implementations
                     calendarEvent.CapturedDate = DateTime.UtcNow;
                     calendarEvent = await calendareventRepository.Create(calendarEvent) ?? new CalendarEvent();
                     await calendareventRepository.Save();
-                    cache.Remove(Cache.CALENDAREVENTS.ToString());
+                    await cache.RemoveAsync(Cache.CALENDAREVENTS.ToString());
                 }
             }
             catch (Exception er)
@@ -140,7 +127,7 @@ namespace Arcora.Api.Services.Implementations
                 CalendarEvent calendarEvent = this.mapper.Map<CalendarEvent>(calendareventDto);
                 calendarEvent = await calendareventRepository.Update(calendarEvent) ?? new CalendarEvent();
                 await calendareventRepository.Save();
-                cache.Remove(Cache.CALENDAREVENTS.ToString());
+                await cache.RemoveAsync(Cache.CALENDAREVENTS.ToString());
                 calendareventDto = this.mapper.Map<CalendarEventDto>(calendarEvent);
             }
             catch (Exception er)
@@ -162,7 +149,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("CalendarEvent with the specified ID was not found.");
                 await calendareventRepository.Delete(calendarEvent);
                 await calendareventRepository.Save();
-                cache.Remove(Cache.CALENDAREVENTS.ToString());
+                await cache.RemoveAsync(Cache.CALENDAREVENTS.ToString());
             }
             catch (Exception er)
             {
@@ -188,7 +175,7 @@ namespace Arcora.Api.Services.Implementations
 
             await calendareventRepository.Update(calendarEvent);
             await calendareventRepository.Save();
-            cache.Remove(Cache.CALENDAREVENTS.ToString());
+            await cache.RemoveAsync(Cache.CALENDAREVENTS.ToString());
             return this.mapper.Map<CalendarEventDto>(calendarEvent);
         }
     }

@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class PropertyService : IPropertyService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<PropertyService> logger;
         private readonly IPropertyRepository propertyRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public PropertyService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<PropertyService> logger, IPropertyRepository propertyRepository)
+        public PropertyService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<PropertyService> logger, IPropertyRepository propertyRepository)
         {
             this.cache = cache;
             this.logger = logger;

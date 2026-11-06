@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class ListingRuleService : IListingRuleService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<ListingRuleService> logger;
         private readonly IListingRuleRepository listingruleRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public ListingRuleService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<ListingRuleService> logger, IListingRuleRepository listingruleRepository)
+        public ListingRuleService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<ListingRuleService> logger, IListingRuleRepository listingruleRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,38 +37,26 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<ListingRule> entities;
             try
             {
-                entities = cache.Get<IEnumerable<ListingRule>>(Cache.LISTINGRULES.ToString()) ?? new List<ListingRule>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.listingruleRepository.GetListingRuleAsync())?.Where(x => x != null) ?? new List<ListingRule>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<ListingRule>>(Cache.LISTINGRULES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.LISTINGRULES.ToString(),
+                    async cancel =>
+                        (await this.listingruleRepository.GetListingRuleAsync())?.Where(x => x != null).ToList() ?? new List<ListingRule>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
                 logger.LogError(er, "An error occurred while fetching ListingRule by ID. Timestamp: {Timestamp}", DateTime.UtcNow);
-                return new PagedResult<ListingRuleDto>
-                {
-                    Data = new List<ListingRuleDto>(),
-                    TotalCount = 0
-                };
+                return new PagedResult<ListingRuleDto> { Data = new List<ListingRuleDto>(), TotalCount = 0 };
             }
 
             IEnumerable<ListingRule> filteredEntities = entities!;
             if (!string.IsNullOrEmpty(paging?.Search))
-            {
                 filteredEntities = entities!.Where(x => !string.IsNullOrEmpty(x.RuleTitle) && x.RuleTitle.Contains(paging.Search, StringComparison.OrdinalIgnoreCase));
-            }
 
             int totalCount = filteredEntities.Count();
             var pagedEntities = filteredEntities.OrderByDescending(x => x.ListingRuleID).Skip((paging!.PageNumber - 1) * paging.PageSize).Take(paging.PageSize).ToList();
             var pagedDtos = this.mapper.Map<IEnumerable<ListingRuleDto>>(pagedEntities);
-            return new PagedResult<ListingRuleDto>
-            {
-                Data = pagedDtos,
-                TotalCount = totalCount
-            };
+            return new PagedResult<ListingRuleDto> { Data = pagedDtos, TotalCount = totalCount };
         }
 
         /// <inheritdoc/>
@@ -76,16 +64,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<ListingRule> entities = cache.Get<IEnumerable<ListingRule>>(Cache.LISTINGRULES.ToString()) ?? new List<ListingRule>();
-                ListingRule? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.ListingRuleID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.LISTINGRULES.ToString(),
+                    async cancel =>
+                        (await this.listingruleRepository.GetListingRuleAsync())?.Where(x => x != null).ToList() ?? new List<ListingRule>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.ListingRuleID == ID);
+                if (match == null)
                     match = await this.listingruleRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<ListingRuleDto>(match);
             }
@@ -101,13 +88,11 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<ListingRule> entities = cache.Get<IEnumerable<ListingRule>>(Cache.LISTINGRULES.ToString()) ?? new List<ListingRule>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.listingruleRepository.GetListingRuleAsync())?.Where(x => x != null) ?? new List<ListingRule>();
-                    if (entities.Any())
-                        cache.Set<IEnumerable<ListingRule>>(Cache.LISTINGRULES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.LISTINGRULES.ToString(),
+                    async cancel =>
+                        (await this.listingruleRepository.GetListingRuleAsync())?.Where(x => x != null).ToList() ?? new List<ListingRule>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
 
                 var matches = entities.Where(x => x.ListingID == listingID)
                                      .OrderByDescending(x => x.ListingRuleID)
@@ -137,7 +122,7 @@ namespace Arcora.Api.Services.Implementations
                     listingRule.CapturedDate = DateTime.UtcNow;
                     listingRule = await listingruleRepository.Create(listingRule) ?? new ListingRule();
                     await listingruleRepository.Save();
-                    cache.Remove(Cache.LISTINGRULES.ToString());
+                    await cache.RemoveAsync(Cache.LISTINGRULES.ToString());
                 }
             }
             catch (Exception er)
@@ -160,7 +145,7 @@ namespace Arcora.Api.Services.Implementations
                 ListingRule listingRule = this.mapper.Map<ListingRule>(listingruleDto);
                 listingRule = await listingruleRepository.Update(listingRule) ?? new ListingRule();
                 await listingruleRepository.Save();
-                cache.Remove(Cache.LISTINGRULES.ToString());
+                await cache.RemoveAsync(Cache.LISTINGRULES.ToString());
                 listingruleDto = this.mapper.Map<ListingRuleDto>(listingRule);
             }
             catch (Exception er)
@@ -182,7 +167,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("ListingRule with the specified ID was not found.");
                 await listingruleRepository.Delete(listingRule);
                 await listingruleRepository.Save();
-                cache.Remove(Cache.LISTINGRULES.ToString());
+                await cache.RemoveAsync(Cache.LISTINGRULES.ToString());
             }
             catch (Exception er)
             {

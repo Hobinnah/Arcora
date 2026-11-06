@@ -67,9 +67,19 @@ namespace Arcora.Payments.Abstractions
             string? idempotencyKey = null,
             CancellationToken cancellationToken = default);
 
+        /// <summary>Reads the existing PAD setup status and optional hosted microdeposit verification URL without creating a new intent.</summary>
+        Task<ProviderMandateResult> GetPadSetupStatusAsync(
+            string customerId,
+            string paymentMethodId,
+            CancellationToken cancellationToken = default);
+
         /// <summary>Charges a saved payment method off-session (PAD primary or card fallback).</summary>
         Task<ProviderChargeResult> CreateChargeAsync(
             CreateChargeRequest request,
+            CancellationToken cancellationToken = default);
+
+        Task<ProviderChargeResult> GetChargeStatusAsync(
+            string paymentIntentId,
             CancellationToken cancellationToken = default);
 
         /// <summary>Verifies the webhook signature and returns a normalized event.</summary>

@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class AutopayConsentAuditService : IAutopayConsentAuditService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<AutopayConsentAuditService> logger;
         private readonly IAutopayConsentAuditRepository autopayconsentauditRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public AutopayConsentAuditService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<AutopayConsentAuditService> logger, IAutopayConsentAuditRepository autopayconsentauditRepository)
+        public AutopayConsentAuditService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<AutopayConsentAuditService> logger, IAutopayConsentAuditRepository autopayconsentauditRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<AutopayConsentAudit> entities;
             try
             {
-                entities = cache.Get<IEnumerable<AutopayConsentAudit>>(Cache.AUTOPAYCONSENTAUDITS.ToString()) ?? new List<AutopayConsentAudit>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.autopayconsentauditRepository.GetAutopayConsentAuditAsync())?.Where(x => x != null) ?? new List<AutopayConsentAudit>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<AutopayConsentAudit>>(Cache.AUTOPAYCONSENTAUDITS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.AUTOPAYCONSENTAUDITS.ToString(),
+                    async cancel =>
+                        (await this.autopayconsentauditRepository.GetAutopayConsentAuditAsync())?.Where(x => x != null).ToList() ?? new List<AutopayConsentAudit>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
@@ -76,16 +74,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<AutopayConsentAudit> entities = cache.Get<IEnumerable<AutopayConsentAudit>>(Cache.AUTOPAYCONSENTAUDITS.ToString()) ?? new List<AutopayConsentAudit>();
-                AutopayConsentAudit? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.AutopayConsentAuditID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.AUTOPAYCONSENTAUDITS.ToString(),
+                    async cancel =>
+                        (await this.autopayconsentauditRepository.GetAutopayConsentAuditAsync())?.Where(x => x != null).ToList() ?? new List<AutopayConsentAudit>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.AutopayConsentAuditID == ID);
+                if (match == null)
                     match = await this.autopayconsentauditRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<AutopayConsentAuditDto>(match);
             }
@@ -112,7 +109,7 @@ namespace Arcora.Api.Services.Implementations
                     autopayConsentAudit.CapturedDate = DateTime.UtcNow;
                     autopayConsentAudit = await autopayconsentauditRepository.Create(autopayConsentAudit) ?? new AutopayConsentAudit();
                     await autopayconsentauditRepository.Save();
-                    cache.Remove(Cache.AUTOPAYCONSENTAUDITS.ToString());
+                    await cache.RemoveAsync(Cache.AUTOPAYCONSENTAUDITS.ToString());
                 }
             }
             catch (Exception er)
@@ -135,7 +132,7 @@ namespace Arcora.Api.Services.Implementations
                 AutopayConsentAudit autopayConsentAudit = this.mapper.Map<AutopayConsentAudit>(autopayconsentauditDto);
                 autopayConsentAudit = await autopayconsentauditRepository.Update(autopayConsentAudit) ?? new AutopayConsentAudit();
                 await autopayconsentauditRepository.Save();
-                cache.Remove(Cache.AUTOPAYCONSENTAUDITS.ToString());
+                await cache.RemoveAsync(Cache.AUTOPAYCONSENTAUDITS.ToString());
                 autopayconsentauditDto = this.mapper.Map<AutopayConsentAuditDto>(autopayConsentAudit);
             }
             catch (Exception er)
@@ -157,7 +154,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("AutopayConsentAudit with the specified ID was not found.");
                 await autopayconsentauditRepository.Delete(autopayConsentAudit);
                 await autopayconsentauditRepository.Save();
-                cache.Remove(Cache.AUTOPAYCONSENTAUDITS.ToString());
+                await cache.RemoveAsync(Cache.AUTOPAYCONSENTAUDITS.ToString());
             }
             catch (Exception er)
             {

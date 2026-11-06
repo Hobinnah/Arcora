@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class FraudCaseService : IFraudCaseService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<FraudCaseService> logger;
         private readonly IFraudCaseRepository fraudcaseRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public FraudCaseService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<FraudCaseService> logger, IFraudCaseRepository fraudcaseRepository)
+        public FraudCaseService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<FraudCaseService> logger, IFraudCaseRepository fraudcaseRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<FraudCase> entities;
             try
             {
-                entities = cache.Get<IEnumerable<FraudCase>>(Cache.FRAUDCASES.ToString()) ?? new List<FraudCase>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.fraudcaseRepository.GetFraudCaseAsync())?.Where(x => x != null) ?? new List<FraudCase>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<FraudCase>>(Cache.FRAUDCASES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.FRAUDCASES.ToString(),
+                    async cancel =>
+                        (await this.fraudcaseRepository.GetFraudCaseAsync())?.Where(x => x != null).ToList() ?? new List<FraudCase>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
@@ -76,16 +74,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<FraudCase> entities = cache.Get<IEnumerable<FraudCase>>(Cache.FRAUDCASES.ToString()) ?? new List<FraudCase>();
-                FraudCase? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.FraudCaseID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.FRAUDCASES.ToString(),
+                    async cancel =>
+                        (await this.fraudcaseRepository.GetFraudCaseAsync())?.Where(x => x != null).ToList() ?? new List<FraudCase>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.FraudCaseID == ID);
+                if (match == null)
                     match = await this.fraudcaseRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<FraudCaseDto>(match);
             }
@@ -118,7 +115,7 @@ namespace Arcora.Api.Services.Implementations
                     fraudCase.CapturedDate = DateTime.UtcNow;
                     fraudCase = await fraudcaseRepository.Create(fraudCase) ?? new FraudCase();
                     await fraudcaseRepository.Save();
-                    cache.Remove(Cache.FRAUDCASES.ToString());
+                    await cache.RemoveAsync(Cache.FRAUDCASES.ToString());
                 }
             }
             catch (Exception er)
@@ -141,7 +138,7 @@ namespace Arcora.Api.Services.Implementations
                 FraudCase fraudCase = this.mapper.Map<FraudCase>(fraudcaseDto);
                 fraudCase = await fraudcaseRepository.Update(fraudCase) ?? new FraudCase();
                 await fraudcaseRepository.Save();
-                cache.Remove(Cache.FRAUDCASES.ToString());
+                await cache.RemoveAsync(Cache.FRAUDCASES.ToString());
                 fraudcaseDto = this.mapper.Map<FraudCaseDto>(fraudCase);
             }
             catch (Exception er)
@@ -163,7 +160,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("FraudCase with the specified ID was not found.");
                 await fraudcaseRepository.Delete(fraudCase);
                 await fraudcaseRepository.Save();
-                cache.Remove(Cache.FRAUDCASES.ToString());
+                await cache.RemoveAsync(Cache.FRAUDCASES.ToString());
             }
             catch (Exception er)
             {
@@ -189,7 +186,7 @@ namespace Arcora.Api.Services.Implementations
 
             await fraudcaseRepository.Update(fraudCase);
             await fraudcaseRepository.Save();
-            cache.Remove(Cache.FRAUDCASES.ToString());
+            await cache.RemoveAsync(Cache.FRAUDCASES.ToString());
             return this.mapper.Map<FraudCaseDto>(fraudCase);
         }
     }

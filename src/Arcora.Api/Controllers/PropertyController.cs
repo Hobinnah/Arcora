@@ -4,6 +4,7 @@ using Arcora.Api.Models;
 using Arcora.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Arcora.Api.Services.Implementations;
 
 namespace Arcora.Api.Controllers
 {
@@ -38,8 +39,12 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [HttpPost(Name = "CreateProperty")]
-        public async Task<IActionResult> CreateProperty([FromServices] IPropertyService propertyService, [FromBody] PropertyDto propertyDto)
+        public async Task<IActionResult> CreateProperty([FromServices] IPropertyService propertyService,
+            [FromServices] PropertyLocationAccess access, [FromBody] PropertyDto propertyDto)
         {
+            if (!await access.CanManageOrganizationAsync(User, propertyDto.OrganizationID, HttpContext.RequestAborted) ||
+                !await access.CanManageAddressAsync(User, propertyDto.AddressID, HttpContext.RequestAborted))
+                return Forbid();
             // var displayName = User.Identity?.Name ?? string.Empty;
             // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
             var result = await propertyService.CreateProperty(propertyDto);
@@ -53,8 +58,13 @@ namespace Arcora.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("{id}", Name = "UpdateProperty")]
-        public async Task<IActionResult> UpdateProperty([FromServices] IPropertyService propertyService, Guid id, [FromBody] PropertyDto propertyDto)
+        public async Task<IActionResult> UpdateProperty([FromServices] IPropertyService propertyService,
+            [FromServices] PropertyLocationAccess access, Guid id, [FromBody] PropertyDto propertyDto)
         {
+            if (!await access.CanManagePropertyAsync(User, id, HttpContext.RequestAborted) ||
+                !await access.CanManageOrganizationAsync(User, propertyDto.OrganizationID, HttpContext.RequestAborted) ||
+                !await access.CanManageAddressAsync(User, propertyDto.AddressID, HttpContext.RequestAborted))
+                return Forbid();
             // var displayName = User.Identity?.Name ?? string.Empty;
             // var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
             var result = await propertyService.UpdateProperty(id, propertyDto);
@@ -84,8 +94,10 @@ namespace Arcora.Api.Controllers
         // POST: api/property/{id}/{status}
         [Authorize(Roles = "User, LandLord, Admin")]
         [HttpPost("{id}/{status}", Name = "UpdatePropertyStatus")]
-        public async Task<ActionResult> UpdatePropertyStatus([FromServices] IPropertyService propertyService, [FromRoute] Guid id, [FromRoute] string status)
+        public async Task<ActionResult> UpdatePropertyStatus([FromServices] IPropertyService propertyService,
+            [FromServices] PropertyLocationAccess access, [FromRoute] Guid id, [FromRoute] string status)
         {
+            if (!await access.CanManagePropertyAsync(User, id, HttpContext.RequestAborted)) return Forbid();
             var @property = await propertyService.UpdatePropertyStatus(id, status);
             if (@property == null)
                 return NotFound($"Property with ID {id} not found.");

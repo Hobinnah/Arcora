@@ -3,6 +3,8 @@ using Arcora.Api.Entities;
 using Arcora.Api.Models;
 using Arcora.Api.Repositories.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Arcora.Api.DTOs;
+using Arcora.Api.Helpers;
 
 namespace Arcora.Api.Repositories.Implementations
 {
@@ -80,14 +82,62 @@ namespace Arcora.Api.Repositories.Implementations
         public async Task<(List<Listing> Items, int TotalCount)> SearchListingsAsync(ListingSearchCriteria criteria)
         {
             criteria ??= new ListingSearchCriteria();
+            var query = BuildSearchQuery(criteria);
+            var totalCount = await query.CountAsync();
+            query = criteria.SortBy?.ToLowerInvariant() switch
+            {
+                "price_asc" => query.OrderBy(x => x.BaseMonthlyRentAmount).ThenBy(x => x.ListingID),
+                "price_desc" => query.OrderByDescending(x => x.BaseMonthlyRentAmount).ThenBy(x => x.ListingID),
+                _ => query.OrderByDescending(x => x.PublishedAt).ThenBy(x => x.ListingID)
+            };
+            var pageNumber = Math.Max(criteria.PageNumber, 1);
+            var pageSize = criteria.PageSize < 1 ? 10 : Math.Min(criteria.PageSize, MaxPageSize);
+            var items = await query
+                .Include(x => x.RentalUnit)!.ThenInclude(u => u!.Property)!.ThenInclude(p => p!.Address)
+                .Include(x => x.RentalUnit)!.ThenInclude(u => u!.UnitType)
+                .Include(x => x.ListingType)
+                .Include(x => x.Organization)
+                .Include(x => x.ListingPhotos)
+                .Skip((pageNumber - 1) * pageSize).Take(pageSize).ToListAsync();
+            return (items, totalCount);
+        }
+
+        public async Task<ListingMapResultDto> SearchMapAsync(ListingSearchCriteria criteria, CancellationToken cancellationToken)
+        {
+            var query = BuildSearchQuery(criteria);
+            var rows = await query.OrderBy(x => x.ListingID)
+                .Select(x => new
+                {
+                    x.ListingID, x.Title, x.BaseMonthlyRentAmount, x.Currency,
+                    Latitude = x.RentalUnit == null || x.RentalUnit.Property == null || x.RentalUnit.Property.Address == null ? null : x.RentalUnit.Property.Address.Latitude,
+                    Longitude = x.RentalUnit == null || x.RentalUnit.Property == null || x.RentalUnit.Property.Address == null ? null : x.RentalUnit.Property.Address.Longitude
+                }).ToListAsync(cancellationToken);
+            var pins = new List<ListingMapPinDto>();
+            foreach (var row in rows)
+            {
+                var location = PublicMapLocation.From(row.Latitude, row.Longitude);
+                if (location != null)
+                    pins.Add(new(row.ListingID, row.Title, location.Latitude, location.Longitude, row.BaseMonthlyRentAmount, row.Currency));
+            }
+            return new(pins, rows.Count, rows.Count - pins.Count);
+        }
+
+        private static IQueryable<Listing> WithValidCoordinates(IQueryable<Listing> query) =>
+            query.Where(x => x.RentalUnit != null && x.RentalUnit.Property != null && x.RentalUnit.Property.Address != null &&
+                x.RentalUnit.Property.Address.Latitude >= -90 && x.RentalUnit.Property.Address.Latitude <= 90 &&
+                x.RentalUnit.Property.Address.Longitude >= -180 && x.RentalUnit.Property.Address.Longitude <= 180);
+
+        private IQueryable<Listing> BuildSearchQuery(ListingSearchCriteria criteria)
+        {
 
             // Start from a composable, no-tracking query. Every filter below is applied on the
             // IQueryable so the whole search (including availability and paging) is translated to
             // a single SQL statement and executed server-side.
             IQueryable<Listing> query = this.context.Listings.AsNoTracking();
 
-            // Only published listings that are still accepting applications are searchable.
-            query = query.Where(x => x.Status == "PUBLISHED");
+            // Only approved listings are visible through the public marketplace search.
+            query = query.Where(x => x.Status != null &&
+                (x.Status.ToUpper() == "APPROVED" || x.Status.ToUpper() == "PUBLISHED"));
 
             // "Where": match city, address lines, postal code, province (code or full name) or title.
             if (!string.IsNullOrWhiteSpace(criteria.Where))
@@ -102,9 +152,6 @@ namespace Arcora.Api.Repositories.Implementations
                     (x.Title != null && x.Title.Contains(term)) ||
                     (x.RentalUnit != null && x.RentalUnit.Property != null && x.RentalUnit.Property.Address != null &&
                         ((x.RentalUnit.Property.Address.City != null && x.RentalUnit.Property.Address.City.Contains(term)) ||
-                         (x.RentalUnit.Property.Address.Line1 != null && x.RentalUnit.Property.Address.Line1.Contains(term)) ||
-                         (x.RentalUnit.Property.Address.Line2 != null && x.RentalUnit.Property.Address.Line2.Contains(term)) ||
-                         (x.RentalUnit.Property.Address.PostalCode != null && x.RentalUnit.Property.Address.PostalCode.Contains(term)) ||
                          (x.RentalUnit.Property.Address.ProvinceCode != null &&
                             (x.RentalUnit.Property.Address.ProvinceCode.Contains(term) ||
                              provinceCodes.Contains(x.RentalUnit.Property.Address.ProvinceCode))))));
@@ -118,7 +165,7 @@ namespace Arcora.Api.Repositories.Implementations
 
                 // The occupancy window is [moveIn, moveIn + stay). If the listing has an
                 // AvailableTo, the requested window must fit inside it.
-                var stayMonths = criteria.StayLengthMonths ?? criteria.StayLengthMonths ?? 0;
+                var stayMonths = criteria.StayLengthMonths ?? criteria.LeaseLengthMonths ?? 1;
                 if (stayMonths > 0)
                 {
                     var moveOut = moveIn.AddMonths(stayMonths);
@@ -130,8 +177,16 @@ namespace Arcora.Api.Repositories.Implementations
                     // second open DataReader on the connection).
                     query = query.Where(x => !x.CalendarEvents!.Any(ce =>
                         ce.BlocksAvailability &&
+                        !ArcoraDbContext.NonBlockingCalendarEventStatuses.Contains((ce.Status ?? "").ToUpper()) &&
                         ce.StartAt < moveOut &&
                         ce.EndAt > moveIn));
+                    query = query.Where(x => !context.Leases.Any(lease => (lease.ListingID == x.ListingID || lease.RentalUnitID == x.RentalUnitID) &&
+                        !ArcoraDbContext.NonBlockingLeaseStatuses.Contains((lease.Status ?? "").ToUpper()) &&
+                        lease.StartDate < moveOut && (lease.EndDate == null || lease.EndDate > moveIn)));
+                    var now = DateTime.UtcNow;
+                    query = query.Where(x => !context.ReservationHolds.Any(hold => hold.ListingID == x.ListingID &&
+                        !ArcoraDbContext.NonBlockingHoldStatuses.Contains((hold.Status ?? "").ToUpper()) &&
+                        hold.ReleasedAt == null && hold.ExpiresAt > now && hold.StartDate < moveOut && hold.EndDate > moveIn));
                 }
             }
 
@@ -161,34 +216,24 @@ namespace Arcora.Api.Repositories.Implementations
             if (criteria.IsPetFriendly.HasValue)
                 query = query.Where(x => x.IsPetFriendly == criteria.IsPetFriendly.Value);
 
-            // Total count of matches before paging (single SQL COUNT).
-            var totalCount = await query.CountAsync();
-
-            // Ordering.
-            query = criteria.SortBy?.ToLowerInvariant() switch
+            if (criteria.UnitTypeID.HasValue)
+                query = query.Where(x => x.RentalUnit != null && x.RentalUnit.UnitTypeID == criteria.UnitTypeID);
+            if (criteria.South.HasValue && criteria.North.HasValue && criteria.West.HasValue && criteria.East.HasValue)
             {
-                "price_asc" => query.OrderBy(x => x.BaseMonthlyRentAmount),
-                "price_desc" => query.OrderByDescending(x => x.BaseMonthlyRentAmount),
-                _ => query.OrderByDescending(x => x.PublishedAt)
-            };
-
-            var pageNumber = criteria.PageNumber < 1 ? 1 : criteria.PageNumber;
-            var pageSize = criteria.PageSize < 1 ? 10 : (criteria.PageSize > MaxPageSize ? MaxPageSize : criteria.PageSize);
-
-            // Project the card-level navigation data only (photos + location) and page in SQL.
-            // A single query (not split) is used so the whole page loads with one reader,
-            // which avoids relying on MARS for this hot search path.
-            var items = await query
-                .Include(x => x.RentalUnit)!.ThenInclude(u => u!.Property)!.ThenInclude(p => p!.Address)
-                .Include(x => x.RentalUnit)!.ThenInclude(u => u!.UnitType)
-                .Include(x => x.ListingType)
-                .Include(x => x.Organization)
-                .Include(x => x.ListingPhotos)
-                .Skip((pageNumber - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();
-
-            return (items, totalCount);
+                // Filter on the same public cell centers, never on the private coordinates.
+                var projected = WithValidCoordinates(query).Select(x => new
+                {
+                    Listing = x,
+                    Lat = Math.Floor((x.RentalUnit!.Property!.Address!.Latitude == 90 ? 89.999 : (double)x.RentalUnit.Property.Address.Latitude!.Value) * 100) / 100 + 0.005,
+                    Lon = Math.Floor((x.RentalUnit.Property.Address.Longitude == 180 ? 179.999 : (double)x.RentalUnit.Property.Address.Longitude!.Value) * 100) / 100 + 0.005
+                });
+                projected = projected.Where(x => x.Lat >= criteria.South && x.Lat <= criteria.North &&
+                    (criteria.West < criteria.East
+                        ? x.Lon >= criteria.West && x.Lon <= criteria.East
+                        : x.Lon >= criteria.West || x.Lon <= criteria.East));
+                query = projected.Select(x => x.Listing);
+            }
+            return query;
         }
 
         /// <summary>

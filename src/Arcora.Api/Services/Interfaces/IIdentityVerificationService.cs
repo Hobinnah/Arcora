@@ -12,6 +12,7 @@ namespace Arcora.Api.Services.Interfaces
         /// <param name = "paging"></param>
         /// <returns></returns>
         Task<PagedResult<IdentityVerificationDto>> GetAll(Paging paging);
+        Task<PagedResult<IdentityVerificationDto>> GetForUser(long userID, Paging paging);
         /// <summary>
         /// Retrieves a identity verification by its ID.
         /// </summary>
@@ -24,6 +25,10 @@ namespace Arcora.Api.Services.Interfaces
         /// <param name = "identityVerificationDto"></param>
         /// <returns></returns>
         Task<IdentityVerificationDto> CreateIdentityVerification(IdentityVerificationDto identityVerificationDto);
+        /// <summary>
+        /// Starts a provider-backed identity verification session using the selected or default provider.
+        /// </summary>
+        Task<StartIdentityVerificationResponseDto> StartIdentityVerificationAsync(StartIdentityVerificationRequestDto request, CancellationToken cancellationToken = default);
         /// <summary>
         /// Updates an existing identity verification entry by its ID.
         /// </summary>
@@ -46,5 +51,21 @@ namespace Arcora.Api.Services.Interfaces
         /// Returns <see cref = "IdentityVerificationDto"/> with the updated identityverification if successful, or null if not found.
         /// </returns>
         Task<IdentityVerificationDto?> UpdateIdentityVerificationStatus(Guid id, string status);
+        Task<IdentityVerificationDto?> RefreshVerificationStatusAsync(
+            long userId,
+            Guid identityVerificationId,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Updates a verification record by provider and provider reference identifier.
+        /// Used by external provider webhook callbacks.
+        /// </summary>
+        Task<IdentityVerificationDto?> UpdateProviderVerificationStatusAsync(
+            string providerName,
+            string providerReferenceId,
+            string status,
+            string? failureReason,
+            string? updatedBy = null,
+            CancellationToken cancellationToken = default);
     }
 }

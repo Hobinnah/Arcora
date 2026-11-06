@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -20,7 +20,7 @@ namespace Arcora.Api.Services.Implementations
     public class TenantGuarantorService : ITenantGuarantorService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<TenantGuarantorService> logger;
         private readonly ITenantGuarantorRepository tenantguarantorRepository;
         private readonly ITenantRepository tenantRepository;
@@ -31,7 +31,7 @@ namespace Arcora.Api.Services.Implementations
         private readonly IEmailSender? emailSender;
         private readonly IConfiguration configuration;
         private readonly IOptions<CacheConfiguration> _options;
-        public TenantGuarantorService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<TenantGuarantorService> logger, ITenantGuarantorRepository tenantguarantorRepository, ITenantRepository tenantRepository, IListingRepository listingRepository, IListingPhotoRepository listingPhotoRepository, IRentalApplicationRepository rentalApplicationRepository, IPreferenceService preferenceService, IConfiguration configuration, IEmailSender? emailSender = null)
+        public TenantGuarantorService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<TenantGuarantorService> logger, ITenantGuarantorRepository tenantguarantorRepository, ITenantRepository tenantRepository, IListingRepository listingRepository, IListingPhotoRepository listingPhotoRepository, IRentalApplicationRepository rentalApplicationRepository, IPreferenceService preferenceService, IConfiguration configuration, IEmailSender? emailSender = null)
         {
             this.cache = cache;
             this.logger = logger;
@@ -55,13 +55,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<TenantGuarantor> entities;
             try
             {
-                entities = cache.Get<IEnumerable<TenantGuarantor>>(Cache.TENANTGUARANTORS.ToString()) ?? new List<TenantGuarantor>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.tenantguarantorRepository.GetTenantGuarantorAsync())?.Where(x => x != null) ?? new List<TenantGuarantor>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<TenantGuarantor>>(Cache.TENANTGUARANTORS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.TENANTGUARANTORS.ToString(),
+                    async cancel =>
+                        (await this.tenantguarantorRepository.GetTenantGuarantorAsync())?.Where(x => x != null).ToList() ?? new List<TenantGuarantor>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
 
                 if (entities is not null && paging.UserID > 0)
                 {
@@ -99,16 +97,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<TenantGuarantor> entities = cache.Get<IEnumerable<TenantGuarantor>>(Cache.TENANTGUARANTORS.ToString()) ?? new List<TenantGuarantor>();
-                TenantGuarantor? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.TenantGuarantorID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.TENANTGUARANTORS.ToString(),
+                    async cancel =>
+                        (await this.tenantguarantorRepository.GetTenantGuarantorAsync())?.Where(x => x != null).ToList() ?? new List<TenantGuarantor>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.TenantGuarantorID == ID);
+                if (match == null)
                     match = await this.tenantguarantorRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<TenantGuarantorDto>(match);
             }
@@ -137,7 +134,7 @@ namespace Arcora.Api.Services.Implementations
                     tenantGuarantor.CapturedDate = DateTime.UtcNow;
                     tenantGuarantor = await tenantguarantorRepository.Create(tenantGuarantor) ?? new TenantGuarantor();
                     await tenantguarantorRepository.Save();
-                    cache.Remove(Cache.TENANTGUARANTORS.ToString());
+                    await cache.RemoveAsync(Cache.TENANTGUARANTORS.ToString());
 
                     // The invitation email is intentionally NOT sent here. Guarantors are captured before
                     // the rental application exists, so the listing/rent/deposit details aren't yet linked.
@@ -164,7 +161,7 @@ namespace Arcora.Api.Services.Implementations
                 TenantGuarantor tenantGuarantor = this.mapper.Map<TenantGuarantor>(tenantguarantorDto);
                 tenantGuarantor = await tenantguarantorRepository.Update(tenantGuarantor) ?? new TenantGuarantor();
                 await tenantguarantorRepository.Save();
-                cache.Remove(Cache.TENANTGUARANTORS.ToString());
+                await cache.RemoveAsync(Cache.TENANTGUARANTORS.ToString());
                 tenantguarantorDto = this.mapper.Map<TenantGuarantorDto>(tenantGuarantor);
             }
             catch (Exception er)
@@ -186,7 +183,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("TenantGuarantor with the specified ID was not found.");
                 await tenantguarantorRepository.Delete(tenantGuarantor);
                 await tenantguarantorRepository.Save();
-                cache.Remove(Cache.TENANTGUARANTORS.ToString());
+                await cache.RemoveAsync(Cache.TENANTGUARANTORS.ToString());
             }
             catch (Exception er)
             {
@@ -212,7 +209,7 @@ namespace Arcora.Api.Services.Implementations
 
             await tenantguarantorRepository.Update(tenantGuarantor);
             await tenantguarantorRepository.Save();
-            cache.Remove(Cache.TENANTGUARANTORS.ToString());
+            await cache.RemoveAsync(Cache.TENANTGUARANTORS.ToString());
             return this.mapper.Map<TenantGuarantorDto>(tenantGuarantor);
         }
 
@@ -250,7 +247,7 @@ namespace Arcora.Api.Services.Implementations
             tenantGuarantor.UpdatedDate = DateTime.UtcNow;
             await tenantguarantorRepository.Update(tenantGuarantor);
             await tenantguarantorRepository.Save();
-            cache.Remove(Cache.TENANTGUARANTORS.ToString());
+            await cache.RemoveAsync(Cache.TENANTGUARANTORS.ToString());
             return this.mapper.Map<TenantGuarantorDto>(tenantGuarantor);
         }
 
@@ -287,7 +284,7 @@ namespace Arcora.Api.Services.Implementations
                     await SendGuarantorInvitationEmailAsync(guarantor, listing);
                 }
 
-                cache.Remove(Cache.TENANTGUARANTORS.ToString());
+                await cache.RemoveAsync(Cache.TENANTGUARANTORS.ToString());
             }
             catch (Exception er)
             {

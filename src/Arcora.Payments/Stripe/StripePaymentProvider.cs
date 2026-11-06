@@ -59,7 +59,10 @@ namespace Arcora.Payments.Stripe
                 Metadata = new Dictionary<string, string> { ["tenant_reference"] = tenantReference }
             };
 
-            var customer = await _customers.CreateAsync(options, cancellationToken: cancellationToken);
+            var customer = await _customers.CreateAsync(
+                options,
+                new RequestOptions { IdempotencyKey = $"tenant-customer:{tenantReference}" },
+                cancellationToken);
             _logger.LogInformation("Created Stripe customer {CustomerId} for tenant {TenantRef}", customer.Id, tenantReference);
             return new ProviderCustomer(customer.Id);
         }
@@ -107,16 +110,13 @@ namespace Arcora.Payments.Stripe
             SetupPaymentMethodRequest request,
             CancellationToken cancellationToken = default)
         {
-            // ACSS debit (PAD) payment methods are attached to the customer and verified when the client
-            // confirms the SetupIntent created during onboarding (mandate collection happens there). By the
-            // time we reach this point the PAD method is already attached/verified, so we must NOT attach it
-            // again or create a second server-side SetupIntent - doing so throws "must attach it to a
-            // Customer first". We simply retrieve the already-verified payment method.
+            // Reuse the client-confirmed PAD setup. Attachment alone does not prove verification:
+            // Stripe may still require microdeposits. Do not create another SetupIntent.
             if (request.Kind == PaymentMethodKind.Pad)
             {
                 var padPm = await _paymentMethods.GetAsync(request.PaymentMethodId, cancellationToken: cancellationToken);
-                var verificationStatus = padPm.Customer != null ? "succeeded" : "requires_action";
-                return MapPaymentMethod(request.Kind, padPm, verificationStatus);
+                var setup = await GetPadSetupStatusAsync(request.CustomerId, request.PaymentMethodId, cancellationToken);
+                return MapPaymentMethod(request.Kind, padPm, setup.Status);
             }
 
             // Attach the (already client-tokenized) card to the customer for off-session reuse.
@@ -150,6 +150,13 @@ namespace Arcora.Payments.Stripe
             string paymentMethodId,
             string? idempotencyKey = null,
             CancellationToken cancellationToken = default)
+            => await GetPadSetupStatusAsync(customerId, paymentMethodId, cancellationToken);
+
+        /// <inheritdoc/>
+        public async Task<ProviderMandateResult> GetPadSetupStatusAsync(
+            string customerId,
+            string paymentMethodId,
+            CancellationToken cancellationToken = default)
         {
             // For ACSS/PAD the mandate is created (and the payment method attached to the customer)
             // when the CLIENT confirms the onboarding SetupIntent - not here. The payment method has
@@ -179,7 +186,8 @@ namespace Arcora.Payments.Stripe
             return new ProviderMandateResult(
                 setupIntent.MandateId ?? setupIntent.Id,
                 paymentMethodId,
-                setupIntent.Status);
+                setupIntent.Status,
+                setupIntent.NextAction?.VerifyWithMicrodeposits?.HostedVerificationUrl);
         }
 
         /// <inheritdoc/>
@@ -228,14 +236,27 @@ namespace Arcora.Payments.Stripe
             {
                 var code = ex.StripeError?.Code ?? ex.StripeError?.DeclineCode;
                 _logger.LogWarning(ex, "Stripe charge failed for customer {CustomerId} with code {Code}", request.CustomerId, code);
+                var uncertain = ex.StripeError?.PaymentIntent == null &&
+                    (ex.StripeError?.Type is null or "api_error" or "api_connection_error" ||
+                     (int)ex.HttpStatusCode >= 500);
                 return new ProviderChargeResult(
                     ex.StripeError?.PaymentIntent?.Id ?? string.Empty,
                     null,
-                    ex.StripeError?.PaymentIntent?.Status ?? "failed",
-                    FailureClassifier.Classify(ex.StripeError?.PaymentIntent?.Status, code),
+                    ex.StripeError?.PaymentIntent?.Status ?? (uncertain ? "processing" : "failed"),
+                    uncertain ? FailureCategory.Pending : FailureClassifier.Classify(ex.StripeError?.PaymentIntent?.Status, code),
                     code,
                     ex.StripeError?.Message ?? ex.Message);
             }
+        }
+
+        public async Task<ProviderChargeResult> GetChargeStatusAsync(
+            string paymentIntentId, CancellationToken cancellationToken = default)
+        {
+            var intent = await _paymentIntents.GetAsync(paymentIntentId, cancellationToken: cancellationToken);
+            var error = intent.LastPaymentError;
+            var code = error?.Code ?? error?.DeclineCode;
+            return new ProviderChargeResult(intent.Id, intent.LatestChargeId, intent.Status,
+                FailureClassifier.Classify(intent.Status, code), code, error?.Message);
         }
 
         /// <inheritdoc/>

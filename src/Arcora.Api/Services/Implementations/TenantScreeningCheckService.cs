@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class TenantScreeningCheckService : ITenantScreeningCheckService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<TenantScreeningCheckService> logger;
         private readonly ITenantScreeningCheckRepository tenantscreeningcheckRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public TenantScreeningCheckService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<TenantScreeningCheckService> logger, ITenantScreeningCheckRepository tenantscreeningcheckRepository)
+        public TenantScreeningCheckService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<TenantScreeningCheckService> logger, ITenantScreeningCheckRepository tenantscreeningcheckRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,13 +37,11 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<TenantScreeningCheck> entities;
             try
             {
-                entities = cache.Get<IEnumerable<TenantScreeningCheck>>(Cache.TENANTSCREENINGCHECKS.ToString()) ?? new List<TenantScreeningCheck>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.tenantscreeningcheckRepository.GetTenantScreeningCheckAsync())?.Where(x => x != null) ?? new List<TenantScreeningCheck>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<TenantScreeningCheck>>(Cache.TENANTSCREENINGCHECKS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.TENANTSCREENINGCHECKS.ToString(),
+                    async cancel =>
+                        (await this.tenantscreeningcheckRepository.GetTenantScreeningCheckAsync())?.Where(x => x != null).ToList() ?? new List<TenantScreeningCheck>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
@@ -76,16 +74,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<TenantScreeningCheck> entities = cache.Get<IEnumerable<TenantScreeningCheck>>(Cache.TENANTSCREENINGCHECKS.ToString()) ?? new List<TenantScreeningCheck>();
-                TenantScreeningCheck? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.TenantScreeningCheckID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.TENANTSCREENINGCHECKS.ToString(),
+                    async cancel =>
+                        (await this.tenantscreeningcheckRepository.GetTenantScreeningCheckAsync())?.Where(x => x != null).ToList() ?? new List<TenantScreeningCheck>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.TenantScreeningCheckID == ID);
+                if (match == null)
                     match = await this.tenantscreeningcheckRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<TenantScreeningCheckDto>(match);
             }
@@ -114,7 +111,7 @@ namespace Arcora.Api.Services.Implementations
                     tenantScreeningCheck.CapturedDate = DateTime.UtcNow;
                     tenantScreeningCheck = await tenantscreeningcheckRepository.Create(tenantScreeningCheck) ?? new TenantScreeningCheck();
                     await tenantscreeningcheckRepository.Save();
-                    cache.Remove(Cache.TENANTSCREENINGCHECKS.ToString());
+                    await cache.RemoveAsync(Cache.TENANTSCREENINGCHECKS.ToString());
                 }
             }
             catch (Exception er)
@@ -137,7 +134,7 @@ namespace Arcora.Api.Services.Implementations
                 TenantScreeningCheck tenantScreeningCheck = this.mapper.Map<TenantScreeningCheck>(tenantscreeningcheckDto);
                 tenantScreeningCheck = await tenantscreeningcheckRepository.Update(tenantScreeningCheck) ?? new TenantScreeningCheck();
                 await tenantscreeningcheckRepository.Save();
-                cache.Remove(Cache.TENANTSCREENINGCHECKS.ToString());
+                await cache.RemoveAsync(Cache.TENANTSCREENINGCHECKS.ToString());
                 tenantscreeningcheckDto = this.mapper.Map<TenantScreeningCheckDto>(tenantScreeningCheck);
             }
             catch (Exception er)
@@ -159,7 +156,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("TenantScreeningCheck with the specified ID was not found.");
                 await tenantscreeningcheckRepository.Delete(tenantScreeningCheck);
                 await tenantscreeningcheckRepository.Save();
-                cache.Remove(Cache.TENANTSCREENINGCHECKS.ToString());
+                await cache.RemoveAsync(Cache.TENANTSCREENINGCHECKS.ToString());
             }
             catch (Exception er)
             {
@@ -185,7 +182,7 @@ namespace Arcora.Api.Services.Implementations
 
             await tenantscreeningcheckRepository.Update(tenantScreeningCheck);
             await tenantscreeningcheckRepository.Save();
-            cache.Remove(Cache.TENANTSCREENINGCHECKS.ToString());
+            await cache.RemoveAsync(Cache.TENANTSCREENINGCHECKS.ToString());
             return this.mapper.Map<TenantScreeningCheckDto>(tenantScreeningCheck);
         }
     }

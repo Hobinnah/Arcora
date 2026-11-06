@@ -45,8 +45,8 @@ namespace Arcora.Api.Middleware
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogWarning(ex, "Configuration or operation error");
-                await WriteErrorResponse(context, HttpStatusCode.BadRequest, ex.Message);
+                _logger.LogError(ex, "Invalid operation encountered while processing request");
+                await WriteErrorResponse(context, HttpStatusCode.InternalServerError, "An unexpected error occurred. Please try again later.");
             }
             catch (ArgumentException ex)
             {

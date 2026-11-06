@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class ListingAmenityService : IListingAmenityService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<ListingAmenityService> logger;
         private readonly IListingAmenityRepository listingamenityRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public ListingAmenityService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<ListingAmenityService> logger, IListingAmenityRepository listingamenityRepository)
+        public ListingAmenityService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<ListingAmenityService> logger, IListingAmenityRepository listingamenityRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,38 +37,26 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<ListingAmenity> entities;
             try
             {
-                entities = cache.Get<IEnumerable<ListingAmenity>>(Cache.LISTINGAMENITIES.ToString()) ?? new List<ListingAmenity>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.listingamenityRepository.GetListingAmenityAsync())?.Where(x => x != null) ?? new List<ListingAmenity>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<ListingAmenity>>(Cache.LISTINGAMENITIES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.LISTINGAMENITIES.ToString(),
+                    async cancel =>
+                        (await this.listingamenityRepository.GetListingAmenityAsync())?.Where(x => x != null).ToList() ?? new List<ListingAmenity>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
                 logger.LogError(er, "An error occurred while fetching ListingAmenity by ID. Timestamp: {Timestamp}", DateTime.UtcNow);
-                return new PagedResult<ListingAmenityDto>
-                {
-                    Data = new List<ListingAmenityDto>(),
-                    TotalCount = 0
-                };
+                return new PagedResult<ListingAmenityDto> { Data = new List<ListingAmenityDto>(), TotalCount = 0 };
             }
 
             IEnumerable<ListingAmenity> filteredEntities = entities!;
             if (!string.IsNullOrEmpty(paging?.Search))
-            {
                 filteredEntities = entities!.Where(x => !string.IsNullOrEmpty(x.Notes) && x.Notes.Contains(paging.Search, StringComparison.OrdinalIgnoreCase));
-            }
 
             int totalCount = filteredEntities.Count();
             var pagedEntities = filteredEntities.OrderByDescending(x => x.ListingAmenityID).Skip((paging!.PageNumber - 1) * paging.PageSize).Take(paging.PageSize).ToList();
             var pagedDtos = this.mapper.Map<IEnumerable<ListingAmenityDto>>(pagedEntities);
-            return new PagedResult<ListingAmenityDto>
-            {
-                Data = pagedDtos,
-                TotalCount = totalCount
-            };
+            return new PagedResult<ListingAmenityDto> { Data = pagedDtos, TotalCount = totalCount };
         }
 
         /// <inheritdoc/>
@@ -76,16 +64,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<ListingAmenity> entities = cache.Get<IEnumerable<ListingAmenity>>(Cache.LISTINGAMENITIES.ToString()) ?? new List<ListingAmenity>();
-                ListingAmenity? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.ListingAmenityID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.LISTINGAMENITIES.ToString(),
+                    async cancel =>
+                        (await this.listingamenityRepository.GetListingAmenityAsync())?.Where(x => x != null).ToList() ?? new List<ListingAmenity>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.ListingAmenityID == ID);
+                if (match == null)
                     match = await this.listingamenityRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<ListingAmenityDto>(match);
             }
@@ -103,7 +90,6 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<ListingAmenity?> checkEntity;
             try
             {
-
                 checkEntity = await this.listingamenityRepository.Find(x => x.AmenityID == listingamenityDto.AmenityID && x.ListingID == listingamenityDto.ListingID);
                 if (checkEntity == null || !checkEntity.Any())
                 {
@@ -112,7 +98,7 @@ namespace Arcora.Api.Services.Implementations
                     listingAmenity.CapturedDate = DateTime.UtcNow;
                     listingAmenity = await listingamenityRepository.Create(listingAmenity) ?? new ListingAmenity();
                     await listingamenityRepository.Save();
-                    cache.Remove(Cache.LISTINGAMENITIES.ToString());
+                    await cache.RemoveAsync(Cache.LISTINGAMENITIES.ToString());
                 }
                 else
                 {
@@ -139,7 +125,7 @@ namespace Arcora.Api.Services.Implementations
                 ListingAmenity listingAmenity = this.mapper.Map<ListingAmenity>(listingamenityDto);
                 listingAmenity = await listingamenityRepository.Update(listingAmenity) ?? new ListingAmenity();
                 await listingamenityRepository.Save();
-                cache.Remove(Cache.LISTINGAMENITIES.ToString());
+                await cache.RemoveAsync(Cache.LISTINGAMENITIES.ToString());
                 listingamenityDto = this.mapper.Map<ListingAmenityDto>(listingAmenity);
             }
             catch (Exception er)
@@ -161,7 +147,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("ListingAmenity with the specified ID was not found.");
                 await listingamenityRepository.Delete(listingAmenity);
                 await listingamenityRepository.Save();
-                cache.Remove(Cache.LISTINGAMENITIES.ToString());
+                await cache.RemoveAsync(Cache.LISTINGAMENITIES.ToString());
             }
             catch (Exception er)
             {

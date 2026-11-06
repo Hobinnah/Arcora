@@ -6,8 +6,9 @@ namespace Arcora.Api.DTOs;
 /// <summary>
 /// Stores address details linked optionally to an organization.
 /// </summary>
-public class AddressDto
+public class AddressDto : IValidatableObject
 {
+    public bool LocationConfirmed { get; set; }
     /// <summary>
     /// Key
     /// </summary>
@@ -64,11 +65,21 @@ public class AddressDto
     /// <summary>
     /// Latitude coordinate
     /// </summary>
+    [Range(-90, 90)]
     public decimal? Latitude { get; set; }
     /// <summary>
     /// Longitude coordinate
     /// </summary>
+    [Range(-180, 180)]
     public decimal? Longitude { get; set; }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (Latitude.HasValue != Longitude.HasValue)
+            yield return new ValidationResult("Latitude and longitude must be supplied together.", new[] { nameof(Latitude), nameof(Longitude) });
+        if (LocationConfirmed && !Latitude.HasValue)
+            yield return new ValidationResult("Confirmed locations require coordinates.", new[] { nameof(LocationConfirmed) });
+    }
 
     /// <summary>
     /// Place provider name

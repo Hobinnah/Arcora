@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class FeeTypeService : IFeeTypeService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<FeeTypeService> logger;
         private readonly IFeeTypeRepository feetypeRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public FeeTypeService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<FeeTypeService> logger, IFeeTypeRepository feetypeRepository)
+        public FeeTypeService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<FeeTypeService> logger, IFeeTypeRepository feetypeRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,38 +37,26 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<FeeType> entities;
             try
             {
-                entities = cache.Get<IEnumerable<FeeType>>(Cache.FEETYPES.ToString()) ?? new List<FeeType>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.feetypeRepository.GetAll())?.Where(x => x != null).Cast<FeeType>().ToList() ?? new List<FeeType>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<FeeType>>(Cache.FEETYPES.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.FEETYPES.ToString(),
+                    async cancel =>
+                        (await this.feetypeRepository.GetAll())?.Where(x => x != null).Cast<FeeType>().ToList() ?? new List<FeeType>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
                 logger.LogError(er, "An error occurred while fetching FeeType by ID. Timestamp: {Timestamp}", DateTime.UtcNow);
-                return new PagedResult<FeeTypeDto>
-                {
-                    Data = new List<FeeTypeDto>(),
-                    TotalCount = 0
-                };
+                return new PagedResult<FeeTypeDto> { Data = new List<FeeTypeDto>(), TotalCount = 0 };
             }
 
             IEnumerable<FeeType> filteredEntities = entities!;
             if (!string.IsNullOrEmpty(paging?.Search))
-            {
                 filteredEntities = entities!.Where(x => !string.IsNullOrEmpty(x.Name) && x.Name.Contains(paging.Search, StringComparison.OrdinalIgnoreCase));
-            }
 
             int totalCount = filteredEntities.Count();
             var pagedEntities = filteredEntities.OrderByDescending(x => x.FeeTypeID).Skip((paging!.PageNumber - 1) * paging.PageSize).Take(paging.PageSize).ToList();
             var pagedDtos = this.mapper.Map<IEnumerable<FeeTypeDto>>(pagedEntities);
-            return new PagedResult<FeeTypeDto>
-            {
-                Data = pagedDtos,
-                TotalCount = totalCount
-            };
+            return new PagedResult<FeeTypeDto> { Data = pagedDtos, TotalCount = totalCount };
         }
 
         /// <inheritdoc/>
@@ -76,16 +64,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<FeeType> entities = cache.Get<IEnumerable<FeeType>>(Cache.FEETYPES.ToString()) ?? new List<FeeType>();
-                FeeType? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.FeeTypeID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.FEETYPES.ToString(),
+                    async cancel =>
+                        (await this.feetypeRepository.GetAll())?.Where(x => x != null).Cast<FeeType>().ToList() ?? new List<FeeType>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.FeeTypeID == ID);
+                if (match == null)
                     match = await this.feetypeRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<FeeTypeDto>(match);
             }
@@ -110,7 +97,7 @@ namespace Arcora.Api.Services.Implementations
                     feeType.CapturedDate = DateTime.UtcNow;
                     feeType = await feetypeRepository.Create(feeType) ?? new FeeType();
                     await feetypeRepository.Save();
-                    cache.Remove(Cache.FEETYPES.ToString());
+                    await cache.RemoveAsync(Cache.FEETYPES.ToString());
                 }
             }
             catch (Exception er)
@@ -133,7 +120,7 @@ namespace Arcora.Api.Services.Implementations
                 FeeType feeType = this.mapper.Map<FeeType>(feetypeDto);
                 feeType = await feetypeRepository.Update(feeType) ?? new FeeType();
                 await feetypeRepository.Save();
-                cache.Remove(Cache.FEETYPES.ToString());
+                await cache.RemoveAsync(Cache.FEETYPES.ToString());
                 feetypeDto = this.mapper.Map<FeeTypeDto>(feeType);
             }
             catch (Exception er)
@@ -155,7 +142,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("FeeType with the specified ID was not found.");
                 await feetypeRepository.Delete(feeType);
                 await feetypeRepository.Save();
-                cache.Remove(Cache.FEETYPES.ToString());
+                await cache.RemoveAsync(Cache.FEETYPES.ToString());
             }
             catch (Exception er)
             {

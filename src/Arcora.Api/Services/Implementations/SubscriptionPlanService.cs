@@ -7,7 +7,7 @@ using Arcora.Api.Entities;
 using Arcora.Api.Repositories.Interfaces;
 using Arcora.Api.Services.Interfaces;
 using Arcora.Api.Configurations;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,11 +16,11 @@ namespace Arcora.Api.Services.Implementations
     public class SubscriptionPlanService : ISubscriptionPlanService
     {
         private readonly IMapper mapper;
-        private readonly IMemoryCache cache;
+        private readonly HybridCache cache;
         private readonly ILogger<SubscriptionPlanService> logger;
         private readonly ISubscriptionPlanRepository subscriptionplanRepository;
         private readonly IOptions<CacheConfiguration> _options;
-        public SubscriptionPlanService(IMapper mapper, IMemoryCache cache, IOptions<CacheConfiguration> options, ILogger<SubscriptionPlanService> logger, ISubscriptionPlanRepository subscriptionplanRepository)
+        public SubscriptionPlanService(IMapper mapper, HybridCache cache, IOptions<CacheConfiguration> options, ILogger<SubscriptionPlanService> logger, ISubscriptionPlanRepository subscriptionplanRepository)
         {
             this.cache = cache;
             this.logger = logger;
@@ -37,38 +37,26 @@ namespace Arcora.Api.Services.Implementations
             IEnumerable<SubscriptionPlan> entities;
             try
             {
-                entities = cache.Get<IEnumerable<SubscriptionPlan>>(Cache.SUBSCRIPTIONPLANS.ToString()) ?? new List<SubscriptionPlan>();
-                if (entities == null || !entities.Any())
-                {
-                    entities = (await this.subscriptionplanRepository.GetAll())?.Where(x => x != null).Cast<SubscriptionPlan>().ToList() ?? new List<SubscriptionPlan>();
-                    if (entities != null && entities.Any())
-                        cache.Set<IEnumerable<SubscriptionPlan>>(Cache.SUBSCRIPTIONPLANS.ToString(), entities, DateTime.UtcNow.AddMinutes(this._options.Value.ExpirationTimeInMinutes));
-                }
+                entities = await cache.GetOrCreateAsync(
+                    Cache.SUBSCRIPTIONPLANS.ToString(),
+                    async cancel =>
+                        (await this.subscriptionplanRepository.GetAll())?.Where(x => x != null).Cast<SubscriptionPlan>().ToList() ?? new List<SubscriptionPlan>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
             }
             catch (Exception er)
             {
                 logger.LogError(er, "An error occurred while fetching SubscriptionPlan by ID. Timestamp: {Timestamp}", DateTime.UtcNow);
-                return new PagedResult<SubscriptionPlanDto>
-                {
-                    Data = new List<SubscriptionPlanDto>(),
-                    TotalCount = 0
-                };
+                return new PagedResult<SubscriptionPlanDto> { Data = new List<SubscriptionPlanDto>(), TotalCount = 0 };
             }
 
             IEnumerable<SubscriptionPlan> filteredEntities = entities!;
             if (!string.IsNullOrEmpty(paging?.Search))
-            {
                 filteredEntities = entities!.Where(x => !string.IsNullOrEmpty(x.Name) && x.Name.Contains(paging.Search, StringComparison.OrdinalIgnoreCase));
-            }
 
             int totalCount = filteredEntities.Count();
             var pagedEntities = filteredEntities.OrderByDescending(x => x.SubscriptionPlanID).Skip((paging!.PageNumber - 1) * paging.PageSize).Take(paging.PageSize).ToList();
             var pagedDtos = this.mapper.Map<IEnumerable<SubscriptionPlanDto>>(pagedEntities);
-            return new PagedResult<SubscriptionPlanDto>
-            {
-                Data = pagedDtos,
-                TotalCount = totalCount
-            };
+            return new PagedResult<SubscriptionPlanDto> { Data = pagedDtos, TotalCount = totalCount };
         }
 
         /// <inheritdoc/>
@@ -76,16 +64,15 @@ namespace Arcora.Api.Services.Implementations
         {
             try
             {
-                IEnumerable<SubscriptionPlan> entities = cache.Get<IEnumerable<SubscriptionPlan>>(Cache.SUBSCRIPTIONPLANS.ToString()) ?? new List<SubscriptionPlan>();
-                SubscriptionPlan? match;
-                if (entities != null && entities.Any())
-                {
-                    match = entities.FirstOrDefault(x => x.SubscriptionPlanID == ID);
-                }
-                else
-                {
+                var entities = await cache.GetOrCreateAsync(
+                    Cache.SUBSCRIPTIONPLANS.ToString(),
+                    async cancel =>
+                        (await this.subscriptionplanRepository.GetAll())?.Where(x => x != null).Cast<SubscriptionPlan>().ToList() ?? new List<SubscriptionPlan>(),
+                    new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(this._options.Value.ExpirationTimeInMinutes) });
+
+                var match = entities.FirstOrDefault(x => x.SubscriptionPlanID == ID);
+                if (match == null)
                     match = await this.subscriptionplanRepository.GetByID(ID);
-                }
 
                 return match == null ? null : this.mapper.Map<SubscriptionPlanDto>(match);
             }
@@ -114,7 +101,7 @@ namespace Arcora.Api.Services.Implementations
                     subscriptionPlan.CapturedDate = DateTime.UtcNow;
                     subscriptionPlan = await subscriptionplanRepository.Create(subscriptionPlan) ?? new SubscriptionPlan();
                     await subscriptionplanRepository.Save();
-                    cache.Remove(Cache.SUBSCRIPTIONPLANS.ToString());
+                    await cache.RemoveAsync(Cache.SUBSCRIPTIONPLANS.ToString());
                 }
             }
             catch (Exception er)
@@ -137,7 +124,7 @@ namespace Arcora.Api.Services.Implementations
                 SubscriptionPlan subscriptionPlan = this.mapper.Map<SubscriptionPlan>(subscriptionplanDto);
                 subscriptionPlan = await subscriptionplanRepository.Update(subscriptionPlan) ?? new SubscriptionPlan();
                 await subscriptionplanRepository.Save();
-                cache.Remove(Cache.SUBSCRIPTIONPLANS.ToString());
+                await cache.RemoveAsync(Cache.SUBSCRIPTIONPLANS.ToString());
                 subscriptionplanDto = this.mapper.Map<SubscriptionPlanDto>(subscriptionPlan);
             }
             catch (Exception er)
@@ -159,7 +146,7 @@ namespace Arcora.Api.Services.Implementations
                     throw new KeyNotFoundException("SubscriptionPlan with the specified ID was not found.");
                 await subscriptionplanRepository.Delete(subscriptionPlan);
                 await subscriptionplanRepository.Save();
-                cache.Remove(Cache.SUBSCRIPTIONPLANS.ToString());
+                await cache.RemoveAsync(Cache.SUBSCRIPTIONPLANS.ToString());
             }
             catch (Exception er)
             {

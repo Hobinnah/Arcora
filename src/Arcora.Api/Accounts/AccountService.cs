@@ -35,6 +35,7 @@ namespace Arcora.Api.Accounts
         private const int LoginCodeExpiryMinutes = 10;
         private const int LoginCodeMaxAttempts = 5;
         private const string LoginCodeCachePrefix = "login-code:";
+        private const string VerifiedSignupCachePrefix = "verified-signup:";
 
         public AccountService(UserManager<User> userManager, RoleManager<Role> roleManager, SignInManager<User> signIn, ITokenService tokenService, IOptions<IdentityOptions> identityOptions, IHttpContextAccessor httpContextAccessor, IEmailSender? email, IConfiguration configuration, IPreferenceService preferenceService, IMemoryCache cache, ITenantService tenantService, IOrganizationMemberService organizationMemberService, IOrganizationService organizationService)
         {
@@ -87,6 +88,15 @@ namespace Arcora.Api.Accounts
         /// <inheritdoc/>
         public async Task<Result> RegisterAsync(RegisterRequest request, IEnumerable<string>? roles = null, bool signIn = false, CancellationToken ct = default)
         {
+            var email = request.EmailAddress.Trim().ToLowerInvariant();
+            var verificationToken = request.EmailVerificationToken?.Trim();
+            if (string.IsNullOrWhiteSpace(verificationToken) ||
+                !_cache.TryGetValue(GetVerifiedSignupKey(email, verificationToken), out bool isEmailVerified) ||
+                !isEmailVerified)
+            {
+                return Result.Fail("Verify your email address before creating an account.");
+            }
+
             if (!PhoneNumberNormalizer.TryNormalize(request.PhoneNumber, out var normalizedPhoneNumber))
                 return Result.Fail(PhoneNumberNormalizer.InvalidPhoneNumberError);
 
@@ -98,11 +108,11 @@ namespace Arcora.Api.Accounts
                 FirstName = request.FirstName,
                 LastName = request.LastName,
                 UserName = request.EmailAddress,
-                Email = request.EmailAddress,
+                Email = email,
                 PhoneNumber = normalizedPhoneNumber,
                 DateOfBirth = request.DateOfBirth,
                 TwoFactorEnabled = false,
-                EmailConfirmed = false,
+                EmailConfirmed = true,
                 PhoneNumberConfirmed = false,
                 LockoutEnabled = false,
                 AccessFailedCount = 3,
@@ -128,6 +138,9 @@ namespace Arcora.Api.Accounts
             }
             if (!created.Succeeded)
                 return Result.FromIdentity(created);
+
+            _cache.Remove(GetVerifiedSignupKey(email, verificationToken));
+
             foreach (var roleName in roles)
             {
                 if (!await _roleManager.RoleExistsAsync(roleName))
@@ -182,8 +195,8 @@ namespace Arcora.Api.Accounts
                 return Result.Ok();
             var token = await _userManager.GeneratePasswordResetTokenAsync(user);
             var encodedToken = WebUtility.UrlEncode(token);
-            var baseUrl = _configuration["ApiHostUrl"]?.TrimEnd('/') ?? throw new InvalidOperationException("ApiHostUrl is not configured in appsettings.");
-            var resetLink = $"{baseUrl}/api/Account/ResetPassword?email={WebUtility.UrlEncode(email)}&token={encodedToken}";
+            var baseUrl = _configuration["FrontendUrl"]?.TrimEnd('/') ?? throw new InvalidOperationException("FrontendUrl is not configured in appsettings.");
+            var resetLink = $"{baseUrl}/reset-password?email={WebUtility.UrlEncode(email)}&token={encodedToken}";
             if (_email is not null)
                 await _email.SendEmailAsync(email, "Reset your password", $"Click the link to reset your password: {WebUtility.HtmlEncode(resetLink)}");
             return Result.Ok();
@@ -235,6 +248,9 @@ namespace Arcora.Api.Accounts
                     EmailExists: true,
                     Message: "An account with this email already exists. Please sign in instead.",
                     VerificationToken: null));
+
+            if (_email is null)
+                return Result<RequestLoginCodeResponse>.Fail("Email delivery is unavailable. Please try again later.");
 
             // Email is not registered: generate and send a short-lived verification code.
             var code = GenerateNumericCode(LoginCodeLength);
@@ -296,11 +312,16 @@ namespace Arcora.Api.Accounts
 
             // Code verified: consume it so it cannot be reused.
             _cache.Remove(cacheKey);
+            _cache.Set(GetVerifiedSignupKey(email, entry.VerificationToken), true, new MemoryCacheEntryOptions
+            {
+                AbsoluteExpiration = entry.ExpiresAt
+            });
                        
             return Result<VerifyLoginCodeResponse>.Ok(new VerifyLoginCodeResponse(IsLoginSuccessful: true));
         }
 
         private static string GetLoginCodeKey(string email) => $"{LoginCodeCachePrefix}{email.ToLowerInvariant()}";
+        private static string GetVerifiedSignupKey(string email, string token) => $"{VerifiedSignupCachePrefix}{email.ToLowerInvariant()}:{token}";
 
         private static string GenerateNumericCode(int length)
         {

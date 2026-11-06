@@ -11,83 +11,65 @@ namespace Arcora.Api.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<bool>(
-                name: "ChargesEnabled",
-                table: "OrgPayoutAccounts",
-                type: "bit",
-                nullable: false,
-                defaultValue: false);
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[OrgPayoutAccounts]', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH(N'[dbo].[OrgPayoutAccounts]', N'ChargesEnabled') IS NULL
+        ALTER TABLE [dbo].[OrgPayoutAccounts] ADD [ChargesEnabled] bit NOT NULL CONSTRAINT [DF_OrgPayoutAccounts_ChargesEnabled] DEFAULT (0);
 
-            migrationBuilder.AddColumn<bool>(
-                name: "DetailsSubmitted",
-                table: "OrgPayoutAccounts",
-                type: "bit",
-                nullable: false,
-                defaultValue: false);
+    IF COL_LENGTH(N'[dbo].[OrgPayoutAccounts]', N'DetailsSubmitted') IS NULL
+        ALTER TABLE [dbo].[OrgPayoutAccounts] ADD [DetailsSubmitted] bit NOT NULL CONSTRAINT [DF_OrgPayoutAccounts_DetailsSubmitted] DEFAULT (0);
 
-            migrationBuilder.AddColumn<DateTime>(
-                name: "LastStripeSyncAt",
-                table: "OrgPayoutAccounts",
-                type: "datetime2",
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[OrgPayoutAccounts]', N'LastStripeSyncAt') IS NULL
+        ALTER TABLE [dbo].[OrgPayoutAccounts] ADD [LastStripeSyncAt] datetime2 NULL;
 
-            migrationBuilder.AddColumn<bool>(
-                name: "PayoutsEnabled",
-                table: "OrgPayoutAccounts",
-                type: "bit",
-                nullable: false,
-                defaultValue: false);
+    IF COL_LENGTH(N'[dbo].[OrgPayoutAccounts]', N'PayoutsEnabled') IS NULL
+        ALTER TABLE [dbo].[OrgPayoutAccounts] ADD [PayoutsEnabled] bit NOT NULL CONSTRAINT [DF_OrgPayoutAccounts_PayoutsEnabled] DEFAULT (0);
 
-            migrationBuilder.AddColumn<string>(
-                name: "RequirementsCurrentlyDue",
-                table: "OrgPayoutAccounts",
-                type: "nvarchar(max)",
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[OrgPayoutAccounts]', N'RequirementsCurrentlyDue') IS NULL
+        ALTER TABLE [dbo].[OrgPayoutAccounts] ADD [RequirementsCurrentlyDue] nvarchar(max) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "RequirementsEventuallyDue",
-                table: "OrgPayoutAccounts",
-                type: "nvarchar(max)",
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[OrgPayoutAccounts]', N'RequirementsEventuallyDue') IS NULL
+        ALTER TABLE [dbo].[OrgPayoutAccounts] ADD [RequirementsEventuallyDue] nvarchar(max) NULL;
 
-            migrationBuilder.AddColumn<string>(
-                name: "StripeAccountID",
-                table: "OrgPayoutAccounts",
-                type: "nvarchar(100)",
-                maxLength: 100,
-                nullable: true);
+    IF COL_LENGTH(N'[dbo].[OrgPayoutAccounts]', N'StripeAccountID') IS NULL
+        ALTER TABLE [dbo].[OrgPayoutAccounts] ADD [StripeAccountID] nvarchar(100) NULL;
+END
+");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "ChargesEnabled",
-                table: "OrgPayoutAccounts");
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[OrgPayoutAccounts]', N'U') IS NOT NULL
+BEGIN
+    ALTER TABLE [dbo].[OrgPayoutAccounts] DROP CONSTRAINT IF EXISTS [DF_OrgPayoutAccounts_ChargesEnabled];
+    ALTER TABLE [dbo].[OrgPayoutAccounts] DROP CONSTRAINT IF EXISTS [DF_OrgPayoutAccounts_DetailsSubmitted];
+    ALTER TABLE [dbo].[OrgPayoutAccounts] DROP CONSTRAINT IF EXISTS [DF_OrgPayoutAccounts_PayoutsEnabled];
 
-            migrationBuilder.DropColumn(
-                name: "DetailsSubmitted",
-                table: "OrgPayoutAccounts");
+    IF COL_LENGTH(N'[dbo].[OrgPayoutAccounts]', N'ChargesEnabled') IS NOT NULL
+        ALTER TABLE [dbo].[OrgPayoutAccounts] DROP COLUMN [ChargesEnabled];
 
-            migrationBuilder.DropColumn(
-                name: "LastStripeSyncAt",
-                table: "OrgPayoutAccounts");
+    IF COL_LENGTH(N'[dbo].[OrgPayoutAccounts]', N'DetailsSubmitted') IS NOT NULL
+        ALTER TABLE [dbo].[OrgPayoutAccounts] DROP COLUMN [DetailsSubmitted];
 
-            migrationBuilder.DropColumn(
-                name: "PayoutsEnabled",
-                table: "OrgPayoutAccounts");
+    IF COL_LENGTH(N'[dbo].[OrgPayoutAccounts]', N'LastStripeSyncAt') IS NOT NULL
+        ALTER TABLE [dbo].[OrgPayoutAccounts] DROP COLUMN [LastStripeSyncAt];
 
-            migrationBuilder.DropColumn(
-                name: "RequirementsCurrentlyDue",
-                table: "OrgPayoutAccounts");
+    IF COL_LENGTH(N'[dbo].[OrgPayoutAccounts]', N'PayoutsEnabled') IS NOT NULL
+        ALTER TABLE [dbo].[OrgPayoutAccounts] DROP COLUMN [PayoutsEnabled];
 
-            migrationBuilder.DropColumn(
-                name: "RequirementsEventuallyDue",
-                table: "OrgPayoutAccounts");
+    IF COL_LENGTH(N'[dbo].[OrgPayoutAccounts]', N'RequirementsCurrentlyDue') IS NOT NULL
+        ALTER TABLE [dbo].[OrgPayoutAccounts] DROP COLUMN [RequirementsCurrentlyDue];
 
-            migrationBuilder.DropColumn(
-                name: "StripeAccountID",
-                table: "OrgPayoutAccounts");
+    IF COL_LENGTH(N'[dbo].[OrgPayoutAccounts]', N'RequirementsEventuallyDue') IS NOT NULL
+        ALTER TABLE [dbo].[OrgPayoutAccounts] DROP COLUMN [RequirementsEventuallyDue];
+
+    IF COL_LENGTH(N'[dbo].[OrgPayoutAccounts]', N'StripeAccountID') IS NOT NULL
+        ALTER TABLE [dbo].[OrgPayoutAccounts] DROP COLUMN [StripeAccountID];
+END
+");
         }
     }
 }

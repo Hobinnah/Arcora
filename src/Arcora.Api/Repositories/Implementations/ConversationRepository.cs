@@ -23,14 +23,34 @@ namespace Arcora.Api.Repositories.Implementations
             return await this.context.Set<Conversation>().AnyAsync();
         }
 
-        public async Task<Conversation?> GetDirectThreadAsync(Guid tenantId, Guid organizationId)
+        public async Task<Conversation?> GetDirectThreadAsync(Guid tenantId, Guid organizationId, Guid? listingId)
         {
             return await this.context.Conversations
                 .Where(c => c.ConversationType == "DIRECT"
                             && c.TenantID == tenantId
-                            && c.OrganizationID == organizationId)
+                            && c.OrganizationID == organizationId
+                            && c.ListingID == listingId)
                 .OrderByDescending(c => c.LastMessageAt)
                 .FirstOrDefaultAsync();
+        }
+
+        public async Task<Conversation> CreateDirectThreadOrGetExistingAsync(Conversation conversation)
+        {
+            await this.context.Conversations.AddAsync(conversation);
+            try
+            {
+                await this.context.SaveChangesAsync();
+                return conversation;
+            }
+            catch (DbUpdateException)
+            {
+                this.context.Entry(conversation).State = EntityState.Detached;
+                var existing = await GetDirectThreadAsync(
+                    conversation.TenantID!.Value, conversation.OrganizationID!.Value, conversation.ListingID);
+                if (existing != null)
+                    return existing;
+                throw;
+            }
         }
 
         public async Task<(List<Conversation> Items, int TotalCount)> GetInboxAsync(
